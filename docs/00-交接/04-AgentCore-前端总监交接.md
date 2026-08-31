@@ -7,8 +7,8 @@
 ## 必读材料
 
 - `D:\Harmess\reference-project\AgentCore\AGENTCORE_EXISTING_FRONTEND_BREAKDOWN.md`
-- `D:\Harmess\Magic\docs\01-产品\会议记录-第一轮-AgentCore架构总监.md`
-- `D:\Harmess\Magic\docs\01-产品\工程组织与会话体系.md`
+- `D:\Magic\archive\product-docs-legacy\99-历史会议\会议记录-第一轮-AgentCore架构总监.md`
+- `D:\Magic\docs\01-产品\\PRD-03-工程组织与协作.md`
 
 ## 已交接结论
 
@@ -27,3 +27,12 @@
 ## 不得外推
 
 跨端资料、测试文件或既有 UI 不等于 Magic 已拥有同等的运行时、权限或恢复保障。
+
+
+
+
+
+
+
+
+

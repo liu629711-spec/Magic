@@ -11,7 +11,7 @@
 - 项目路径：`D:\Harmess\opencode`
 - OpenCode 文档：项目根目录 README、AGENTS、各 package 的 README/spec/docs，以及与当前问题相关的测试和注释
 - 报告路径：默认 `D:\Harmess\opencode\OPENCODE_BACKEND_ARCHITECTURE_BREAKDOWN.md`
-- 关联项目：`D:\Harmess\Magic` 和 `D:\Harmess\reference-project\AgentCore` 只能用于报告末尾的能力映射，不得作为 OpenCode 事实来源
+- 关联项目：`D:\Magic` 和 `D:\Harmess\reference-project\AgentCore` 只能用于报告末尾的能力映射，不得作为 OpenCode 事实来源
 - 不修改 OpenCode 源码、配置、锁文件、迁移和测试；报告写到指定报告路径或由调用方指定的其他报告路径
 
 开始时先输出不超过 20 行的“本次核查基线”：commit、分支、版本、Bun/Node 运行时、包管理器、平台、扫描范围、排除项和已知索引/构建限制。
@@ -146,3 +146,12 @@
 ```
 
 报告最后附“未读取文件和原因”“未执行实验和原因”“敏感信息排除说明”。
+
+
+
+
+
+
+
+
+

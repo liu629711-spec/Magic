@@ -7,8 +7,8 @@
 ## 必读材料
 
 - `D:\Harmess\opencode\OPENCODE_BACKEND_ARCHITECTURE_BREAKDOWN.md`
-- `D:\Harmess\Magic\docs\01-产品\会议记录-第三轮-OpenCode架构总监.md`
-- `D:\Harmess\Magic\docs\02-架构\02-Magic-目标项目\PRODUCT_TECH_ALIGNMENT_BASELINE.md`
+- `D:\Magic\archive\product-docs-legacy\99-历史会议\会议记录-第三轮-OpenCode架构总监.md`
+- `D:\Magic\docs\02-架构\02-Magic-目标项目\PRODUCT_TECH_ALIGNMENT_BASELINE.md`
 
 ## 已交接结论
 
@@ -27,3 +27,12 @@
 ## 不得外推
 
 Session/Run 完成、工具成功、文件写入或 SSE 断开，都不能自动推导 Magic Task 成功。
+
+
+
+
+
+
+
+
+

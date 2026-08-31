@@ -16,7 +16,7 @@
 - OpenCode 架构报告：`D:\Harmess\opencode\OPENCODE_BACKEND_ARCHITECTURE_BREAKDOWN.md`
 - OpenCode 前端报告：`D:\Harmess\opencode\OPENCODE_FRONTEND_ARCHITECTURE_BREAKDOWN.md`
 - AgentCore 前端报告：`D:\Harmess\reference-project\AgentCore\AGENTCORE_EXISTING_FRONTEND_BREAKDOWN.md`
-- Magic 只允许在事实冻结后定向读取：`D:\Harmess\Magic\docs\01-产品\Magic产品一页纸.md`、`D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
+- Magic 只允许在事实冻结后定向读取：`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`、`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
 
 禁止修改 AgentCore、OpenCode 和 Magic 的源码、配置、锁文件、迁移、测试及历史文档。只写指定拆解报告。若关联报告尚不存在，记录前置依赖缺失，不得虚构其结论。
 
@@ -164,3 +164,12 @@ Magic 已裁定的产品不变量高于 AgentCore 既有模型。“AgentCore �
 ```
 
 报告最后必须明确：本报告能降低遗漏概率，但不作“绝对没有遗漏”的保证；哪些结论需要前端报告、OpenCode 报告或产品裁定后才能关闭。
+
+
+
+
+
+
+
+
+

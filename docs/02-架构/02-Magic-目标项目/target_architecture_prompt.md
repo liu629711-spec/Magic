@@ -8,10 +8,10 @@ OpenCode 是待接入的执行底座；AgentCore 是现有项目基线。二者�
 
 ## 输入与读取边界
 
-- Magic 根目录：`D:\Harmess\Magic`
-- 产品入口：只强制读取 `D:\Harmess\Magic\docs\01-产品\Magic产品一页纸.md` 和 `D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
+- Magic 根目录：`D:\Magic`
+- 产品入口：只强制读取 `D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md` 和 `D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
 - 参考项目：`D:\Harmess\reference-project\AgentCore`，仅在某个技术问题需要经验或证据时定向读取，不读取全部历史文档
-- 输出：`<默认：D:\Harmess\Magic\MAGIC_TARGET_BACKEND_ARCHITECTURE.md>`
+- 输出：`<默认：D:\Magic\MAGIC_TARGET_BACKEND_ARCHITECTURE.md>`
 
 产品入口读完先输出不超过 20 行的“Magic 产品约束摘要”。需要补充产品文档时，必须记录文件名、读取原因和改变了哪一条结论。
 
@@ -75,3 +75,12 @@ OpenCode 是待接入的执行底座；AgentCore 是现有项目基线。二者�
 ```
 
 禁止把目标路径写成当前实现，禁止把 AgentCore/OpenCode 的内部对象直接变成 Magic 对象，禁止通读全部产品目录，禁止修改源码、产品文档或配置。
+
+
+
+
+
+
+
+
+

@@ -18,3 +18,12 @@ AI 核心最初提出担任 F-10 单一 DRI，并建议首切片覆盖两名成�
 ## 判定
 
 `Product Go`；`Technical Discovery Go`；`First Development No-Go`。
+
+
+
+
+
+
+
+
+

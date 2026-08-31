@@ -4,10 +4,10 @@ date: 2026-08-30
 type: product-technology-alignment
 authority: architecture-meeting-input
 sources:
-  - docs/01-产品/Magic最终产品裁定与技术会议输入.md
-  - docs/01-产品/会议记录-第一轮-*.md
-  - docs/01-产品/会议记录-第二轮-*.md
-  - docs/01-产品/会议记录-第三轮-*.md
+  - docs/01-产品/PRD-01-Magic产品总览.md
+  - D:/Magic/archive/product-docs-legacy/99-历史会议/会议记录-第一轮-*.md
+  - D:/Magic/archive/product-docs-legacy/99-历史会议/会议记录-第二轮-*.md
+  - D:/Magic/archive/product-docs-legacy/99-历史会议/会议记录-第三轮-*.md
 ---
 
 # Magic 产品-技术对齐共同基线
@@ -83,3 +83,12 @@ OpenCode Session / Message / Event / Tool / Workspace
 ## 六、证据纪律
 
 技术文档必须分别标注：源码存在、测试资产存在、已有报告结论、AgentCore 试运行观察、Magic 产品建议、实机验证结果。前四项均不能替代 F-10 的实机收敛证据。
+
+
+
+
+
+
+
+
+

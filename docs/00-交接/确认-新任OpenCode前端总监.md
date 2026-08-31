@@ -4,11 +4,11 @@
 
 已按指定顺序完整阅读：
 
-1. `D:\Harmess\Magic\docs\00-交接\README.md`
-2. `D:\Harmess\Magic\docs\00-交接\02-OpenCode-前端总监交接.md`
+1. `D:\Magic\docs\00-交接\README.md`
+2. `D:\Magic\docs\00-交接\02-OpenCode-前端总监交接.md`
 3. `D:\Harmess\opencode\OPENCODE_FRONTEND_ARCHITECTURE_BREAKDOWN.md`
-4. `D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
-5. `D:\Harmess\Magic\docs\02-架构\02-Magic-目标项目\PRODUCT_TECH_ALIGNMENT_BASELINE.md`
+4. `D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
+5. `D:\Magic\docs\02-架构\02-Magic-目标项目\PRODUCT_TECH_ALIGNMENT_BASELINE.md`
 
 ## 我确认的三项事实
 
@@ -28,3 +28,12 @@
 ## 接任后的首个工作项
 
 在底座负责人锁定 F-10 的 runtime、commit/tag 和 canonical protocol/client contract 后，提交并评审“F-10 前端最小状态投影契约与收敛验收矩阵”：定义服务端权威快照/事件到前端状态的输入、幂等与缺口处理规则、所有不确定状态的界面表达，以及覆盖断连、重启、重复/乱序/缺失事件、重试、停止、审批和外部副作用的可重复端到端验收用例。在这些用例实际通过前，不宣称前端具备相应恢复或收敛能力。
+
+
+
+
+
+
+
+
+

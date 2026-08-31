@@ -18,3 +18,12 @@
 ## 判定
 
 `Product Go`；`Technical Discovery Go`；`First Development No-Go`。
+
+
+
+
+
+
+
+
+

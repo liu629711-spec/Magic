@@ -28,3 +28,12 @@ OpenCode Adapter 只能依赖本 ADR 锁定的 protocol/client 和公开契约�
 ## 完成条件
 
 锁定栈可从干净环境重复构建和启动；任一 Attempt 记录唯一 `runtime_lock_id`；同一 Attempt 不混用 runtime/client 写路径；五方签署。
+
+
+
+
+
+
+
+
+

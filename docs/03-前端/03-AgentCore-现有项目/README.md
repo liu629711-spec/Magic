@@ -20,3 +20,12 @@
 将本 README、主提示词、工具助手按顺序交给前端总监。按五轮推进：第一轮锁定版本和全部前端表面台账；第二轮深拆 Desktop/Mobile/Admin/AgentTown 及协议状态主链；第三轮与 AgentCore 架构报告、OpenCode 报告交叉核查；第四轮按证据等级执行已有测试和安全的 Web/Electron/移动端/Unity 实验；第五轮覆盖 Website/Promo/preview 等外围表面，复核负能力、未读取项和遗漏后冻结报告。
 
 OpenCode 只做关系核查，必须先判断双方是 provider、API 兼容、计费、sidecar、源码/运行时依赖、无直接关系还是未知，不能预设 OpenCode 是 AgentCore 底座。对 Magic 只做前端能力和心智迁移边界，不把 AgentCore 页面、Agent 或运行状态直接改名继承。
+
+
+
+
+
+
+
+
+

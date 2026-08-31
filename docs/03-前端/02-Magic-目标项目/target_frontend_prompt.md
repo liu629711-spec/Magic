@@ -8,10 +8,10 @@
 
 ## 输入与读取边界
 
-- Magic 根目录：`D:\Harmess\Magic`
-- 只强制读取：`D:\Harmess\Magic\docs\01-产品\Magic产品一页纸.md`、`D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
+- Magic 根目录：`D:\Magic`
+- 只强制读取：`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`、`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
 - AgentCore 参考：`D:\Harmess\reference-project\AgentCore` 及其 `docs`，只有当某项交互或协议经验会改变方案时才定向读取
-- 输出：`<默认：D:\Harmess\Magic\MAGIC_TARGET_FRONTEND_ARCHITECTURE.md>`
+- 输出：`<默认：D:\Magic\MAGIC_TARGET_FRONTEND_ARCHITECTURE.md>`
 
 先输出不超过 20 行的“Magic 前端约束摘要”。任何补充文档都需写明读取原因和影响。
 
@@ -67,3 +67,12 @@
 ```
 
 禁止把目标路径写成现状，禁止通读全部产品目录，禁止修改源码、产品文档或配置。
+
+
+
+
+
+
+
+
+

@@ -7,8 +7,8 @@
 ## 必读材料
 
 - `D:\Harmess\reference-project\AgentCore\AGENTCORE_EXISTING_BACKEND_BREAKDOWN.md`
-- `D:\Harmess\Magic\docs\01-产品\会议记录-第三轮-AgentCore架构技术总监.md`
-- `D:\Harmess\Magic\docs\01-产品\Magic产品系统边界与生命周期底图.md`
+- `D:\Magic\archive\product-docs-legacy\99-历史会议\会议记录-第三轮-AgentCore架构技术总监.md`
+- `D:\Magic\docs\01-产品\\PRD-04-任务执行与治理.md`
 
 ## 已交接结论
 
@@ -27,3 +27,12 @@
 ## 不得外推
 
 历史试运行经验不能证明 OpenCode 当前版本的实机能力，也不能替代 F-10 证据。
+
+
+
+
+
+
+
+
+

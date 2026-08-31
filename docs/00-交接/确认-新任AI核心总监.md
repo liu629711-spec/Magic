@@ -4,11 +4,11 @@
 
 已按要求完成以下文件的顺序阅读：
 
-1. `D:\Harmess\Magic\docs\00-交接\README.md`
-2. `D:\Harmess\Magic\docs\00-交接\05-AI核心总监交接.md`
+1. `D:\Magic\docs\00-交接\README.md`
+2. `D:\Magic\docs\00-交接\05-AI核心总监交接.md`
 3. `D:\Harmess\reference-project\AgentCore\AGENTCORE_EXISTING_AI_CORE_BREAKDOWN.md`
-4. `D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
-5. `D:\Harmess\Magic\docs\02-架构\02-Magic-目标项目\PRODUCT_TECH_ALIGNMENT_BASELINE.md`
+4. `D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
+5. `D:\Magic\docs\02-架构\02-Magic-目标项目\PRODUCT_TECH_ALIGNMENT_BASELINE.md`
 
 ## 我确认的三项事实
 
@@ -35,3 +35,12 @@ AI 核心侧必须保证模型不会把缺失证据、部分交付、等待、�
 ## 接任后的首个工作项
 
 牵头建立 F-10 的 AI 核心侧最小可复现实验包：先锁定 OpenCode runtime、commit/tag 与 canonical protocol/client contract，再为同一 `MagicTask` / `TaskAttempt` 定义断连、重启、事件异常、重试、停止、审批恢复和外部副作用场景的实验矩阵、证据字段、验收标准与 Go/No-Go 判定；在证据完成前，不冻结首版数据库、API、完整状态机或开发排期。
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,21 @@
+# Third-party source mirrors used only for local research
+/reference/
+
+# Temporary local workspace and packaged snapshots
+/新建文件夹/
+/*.7z
+/docs/*.zip
+
+# Local secrets and generated clutter
+.env
+.env.*
+!.env.example
+!.env.*.example
+.DS_Store
+Thumbs.db
+node_modules/
+dist/
+build/
+coverage/
+__pycache__/
+*.pyc

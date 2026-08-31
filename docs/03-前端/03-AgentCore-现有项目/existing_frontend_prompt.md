@@ -15,7 +15,7 @@ AgentCore 文档同时容纳现状与蓝图：frontmatter `landed/reference/blue
 - 默认报告：`D:\Harmess\reference-project\AgentCore\AGENTCORE_EXISTING_FRONTEND_BREAKDOWN.md`
 - AgentCore 架构报告：`D:\Harmess\reference-project\AgentCore\AGENTCORE_EXISTING_BACKEND_BREAKDOWN.md`
 - OpenCode 报告：`D:\Harmess\opencode\OPENCODE_BACKEND_ARCHITECTURE_BREAKDOWN.md`、`D:\Harmess\opencode\OPENCODE_FRONTEND_ARCHITECTURE_BREAKDOWN.md`
-- Magic 只允许在 AgentCore 前端事实冻结后定向读取：`D:\Harmess\Magic\docs\01-产品\Magic产品一页纸.md`、`D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
+- Magic 只允许在 AgentCore 前端事实冻结后定向读取：`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`、`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
 
 禁止修改 AgentCore、OpenCode 和 Magic 的源码、测试、配置、锁文件、生成物和历史文档。只写指定报告。关联报告缺失时保留未知，不得虚构交叉结论。
 
@@ -152,3 +152,12 @@ Magic 已裁定的产品不变量高于 AgentCore 旧 UI。“AgentCore 已经�
 ```
 
 报告最后明确哪些结论仍依赖架构报告、OpenCode 报告、实机环境或 Magic 产品裁定，不能以“完整准确无遗漏”作为无条件保证。
+
+
+
+
+
+
+
+
+

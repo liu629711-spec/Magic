@@ -4,11 +4,11 @@
 
 已按要求依次阅读：
 
-1. `D:\Harmess\Magic\docs\00-交接\README.md`
-2. `D:\Harmess\Magic\docs\00-交接\04-AgentCore-前端总监交接.md`
+1. `D:\Magic\docs\00-交接\README.md`
+2. `D:\Magic\docs\00-交接\04-AgentCore-前端总监交接.md`
 3. `D:\Harmess\reference-project\AgentCore\AGENTCORE_EXISTING_FRONTEND_BREAKDOWN.md`
-4. `D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
-5. `D:\Harmess\Magic\docs\02-架构\02-Magic-目标项目\PRODUCT_TECH_ALIGNMENT_BASELINE.md`
+4. `D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
+5. `D:\Magic\docs\02-架构\02-Magic-目标项目\PRODUCT_TECH_ALIGNMENT_BASELINE.md`
 
 ## 我确认的三项事实
 
@@ -28,3 +28,12 @@
 ## 接任后的首个工作项
 
 在 OpenCode runtime、版本和 canonical protocol/client contract 锁定后，立即牵头形成 F-10 前端状态投影与验收清单：逐项定义任务/运行/连接同步/审批/责任/产物/副作用在断连、重启、重复或乱序事件、重试、停止和恢复场景下的可见状态、责任归属、未知态文案与测试证据，并与 AgentCore 后端及 OpenCode 前端负责人对齐后进入可重复实测。
+
+
+
+
+
+
+
+
+

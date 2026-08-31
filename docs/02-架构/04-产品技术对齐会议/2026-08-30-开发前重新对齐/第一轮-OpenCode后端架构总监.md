@@ -18,3 +18,12 @@ F-10 技术切片从 `1 MagicTask / 1 TaskAttempt / 1 canonical Session / 1 work
 ## 判定
 
 `Product Go`；`Technical Discovery Go`；`First Development No-Go`。
+
+
+
+
+
+
+
+
+

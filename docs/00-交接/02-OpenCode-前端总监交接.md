@@ -7,8 +7,8 @@
 ## 必读材料
 
 - `D:\Harmess\opencode\OPENCODE_FRONTEND_ARCHITECTURE_BREAKDOWN.md`
-- `D:\Harmess\Magic\docs\01-产品\会议记录-第三轮-OpenCode前端总监.md`
-- `D:\Harmess\Magic\docs\01-产品\能力盘点-OpenCode与AgentCore常用能力.md`
+- `D:\Magic\archive\product-docs-legacy\99-历史会议\会议记录-第三轮-OpenCode前端总监.md`
+- `D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
 
 ## 已交接结论
 
@@ -27,3 +27,12 @@
 ## 不得外推
 
 存在组件、接口或测试资产不表示 Magic 已具备可恢复的责任、审批或副作用闭环。
+
+
+
+
+
+
+
+
+

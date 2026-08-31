@@ -45,3 +45,12 @@ Task、TaskAttempt/Run、Connection、Sync/Completeness、Approval、Artifact、
 - Resource、worktree、Artifact、ChangeSet、MergeTask 和合并责任边界。
 
 Git worktree 由 Magic Resource/Git Adapter 创建、登记并绑定 base commit。无法确认的非幂等副作用不得自动重试。
+
+
+
+
+
+
+
+
+

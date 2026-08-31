@@ -17,7 +17,16 @@
 - 主提示词：`target_architecture_prompt.md`
 - 工具助手：`target_architecture_tools.md`
 - 默认报告：`MAGIC_TARGET_BACKEND_ARCHITECTURE.md`
-- 必读产品入口：`D:\Harmess\Magic\docs\01-产品\Magic产品一页纸.md`、`D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
+- 必读产品入口：`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`、`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
 - 现有项目参考：`D:\Harmess\reference-project\AgentCore` 及其 `docs`，只作为经验和技术核查来源，不作为 Magic 现状
 
 报告中所有路径都必须标明是“目标路径”“参考路径”还是“待建立路径”，不得虚构 Magic 已存在的模块、接口或数据库。
+
+
+
+
+
+
+
+
+

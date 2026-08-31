@@ -10,3 +10,12 @@
 ## 保留意见
 
 反对复制 AgentCore 形成第二执行系统；`status_proposal` 只能提出状态建议，不能关闭 MagicTask。
+
+
+
+
+
+
+
+
+

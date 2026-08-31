@@ -5,7 +5,16 @@
 - 主提示词：`target_frontend_prompt.md`
 - 工具助手：`target_frontend_tools.md`
 - 默认报告：`MAGIC_TARGET_FRONTEND_ARCHITECTURE.md`
-- 产品入口：`D:\Harmess\Magic\docs\01-产品\Magic产品一页纸.md`、`D:\Harmess\Magic\docs\01-产品\Magic最终产品裁定与技术会议输入.md`
+- 产品入口：`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`、`D:\Magic\docs\01-产品\\PRD-01-Magic产品总览.md`
 - 现有项目参考：`D:\Harmess\reference-project\AgentCore`，只用于提取可继承交互经验
 
 所有页面、组件、路由、store 和协议都必须标记为目标设计/待建立，不得写成 Magic 已经存在。
+
+
+
+
+
+
+
+
+
