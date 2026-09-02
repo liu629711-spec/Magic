@@ -1,0 +1,8 @@
+[package]
+name = "magic-policy"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+magic-domain = { path = "../domain" }
+

@@ -1,0 +1,9 @@
+[package]
+name = "magic-contracts"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+magic-domain = { path = "../domain" }
+serde.workspace = true
+

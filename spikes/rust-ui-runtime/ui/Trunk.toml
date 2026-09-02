@@ -1,0 +1,3 @@
+dist = "dist"
+public_url = "/"
+filehash = false

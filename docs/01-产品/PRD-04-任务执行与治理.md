@@ -30,8 +30,8 @@ mindmap
       一次执行
       重试创建新 Attempt
       结构化结果
-    Run 运行
-      OpenCode 底层事实
+    底座执行证据
+      候选底座事实
       工具和事件
       运行结束不等于任务完成
     交付
@@ -51,9 +51,9 @@ mindmap
 | 对象 | 含义 |
 |---|---|
 | Task | 有目标、责任人和统一最终状态的产品工作单元 |
-| TaskAttempt | 一次真实执行尝试，可因重试或恢复产生多个 |
+| TaskAttempt | Magic 的一次真实执行尝试，可因重试或恢复产生多个 |
 | Session / Turn | 交流上下文和输入响应记录 |
-| Run | OpenCode 底层运行事实，由 Magic 映射但不冒充 Task |
+| 底座执行证据 | 锁定入口上可观察的 Session、输入/响应、事件与执行状态；具体对象和关联基数待核查 |
 | Artifact | 可访问、可验证、可追溯的交付结果 |
 | Fact | 有来源、范围、状态和版本的项目知识 |
 
@@ -108,7 +108,7 @@ stateDiagram-v2
 
 ## 6. F-10 开发准入
 
-首次正式开发前必须锁定 OpenCode commit/tag、server runtime、canonical protocol/client contract，并证明 TaskAttempt 在断连、事件重复/缺口、进程重启、重试、停止、审批和外部副作用组合场景下最终收敛。
+首次正式开发前必须锁定 OpenCode commit/tag、server runtime、实际调用入口与 protocol/client contract，并证明 Magic `TaskAttempt` 与底座执行证据的最小绑定模型，能在断连、事件重复/缺口、进程重启、重试、停止、审批和外部副作用组合场景下最终收敛。
 
 F-10 未通过前，允许产品裁定、适配器原型和受控实验；禁止冻结完整数据库、API、完整状态机、权限模型和正式排期。
 
@@ -137,7 +137,7 @@ F-10 未通过前，允许产品裁定、适配器原型和受控实验；禁止
 flowchart TD
   T[Task 任务] --> P[Plan 计划]
   T --> A[TaskAttempt 尝试]
-  A --> R[OpenCode Run 运行]
+  A --> R[底座执行证据引用 待核查]
   R --> E[事件与执行证据]
   T --> O[责任与派发]
   T --> X[Artifact 产物]
@@ -155,8 +155,8 @@ flowchart TD
 | ProjectMember / PM | Agent 在工程中的长期关系/协调关系 | 用户；停用/交接/归档 | Magic 工程组织 |
 | MagicTask / Subtask | 产品层工作和责任单位 | 用户/PM/Agent；收口/归档 | Magic 任务账本 |
 | Turn | 一次输入及响应 | 会话；追加写入 | Magic transcript |
-| TaskAttempt | 一次执行尝试 | 任务责任人；完成/失败/中断 | Magic 映射 + 底座证据 |
-| OpenCode Session / Run | 底座执行对象 | OpenCode；由底座结束 | OpenCode 事实 |
+| TaskAttempt | 一次执行尝试 | 任务责任人；完成/失败/中断 | Magic 对象 + 底座证据引用 |
+| OpenCode Session / 执行证据 | 锁定入口上实际可观察的底座对象 | OpenCode；按底座语义结束 | 底座事实，具体对象待核查 |
 | RootExecutionBinding | Magic 任务与底座入口的绑定 | 适配层；变更可审计 | Magic 绑定记录 |
 | Responsibility | 当前谁对任务收口负责 | 创建/移交；历史保留 | Magic 责任记录 |
 | Assignment / Delivery / Dependency | 派发、交付和依赖关系 | 派发者/责任人；完成或解除 | Magic 关系记录 |
@@ -179,15 +179,15 @@ flowchart TD
 
 PlanStep 只是向用户展示下一步的计划，不等于正式子任务或 Run。只有当步骤拥有独立责任人、交付物、验收条件、等待或依赖时，才升级成 Subtask。计划变更必须版本化，已完成步骤不能静默改写。
 
-结构化结果至少包含：状态、完成内容、未完成内容、产物、验证依据、风险/阻塞、下一步和待用户决策。产物状态为：`草稿 → 待验收 → 已接受/验证失败/替代/归档`。文件存在、工具成功或底座 Run 完成都不能直接宣告 Task 完成。
+结构化结果至少包含：状态、完成内容、未完成内容、产物、验证依据、风险/阻塞、下一步和待用户决策。产物状态为：`草稿 → 待验收 → 已接受/验证失败/替代/归档`。文件存在、工具成功或底座执行结束都不能直接宣告 Task 完成。
 
 ## 12. 前端状态合同
 
-任务卡必须显示：任务目标、当前责任人、任务状态、当前 Attempt、等待谁/什么、最近结果、产物链接、验证证据、预算、风险、副作用和下一步。底层 Session/Run/事件默认折叠，但失败、同步缺口、权限拒绝、资源冲突和不可逆副作用不可隐藏。
+任务状态必须可在会话工作现场中被理解：用户能看到当前目标、责任人、真实状态、计划步骤、下一步、工具调用、文件变化、协作派发、测试、结果和需要决定的事项。任务、Attempt、产物、验证证据、预算、风险和副作用可通过当前对象检查视图或按需打开的任务详情查看；底层事件仍可按需展开，但失败、同步缺口、权限拒绝、资源冲突和不可逆副作用不可隐藏。未经整理的原始内部推演不作为产品展示承诺。
 
 ## 13. F-10 组合验收
 
-锁定 OpenCode commit/tag、server runtime、canonical protocol/client contract 后，必须在同一证据包中验证：事件重复和乱序、断连、重启、重试、停止、审批等待、权限变化、文件/Git/MCP/网络副作用、责任收口和产物来源。任一组合场景不能解释清楚，首次正式开发保持 No-Go。
+锁定 OpenCode commit/tag、server runtime、实际调用入口与 protocol/client contract 后，必须先在同一证据包中确定 Magic `TaskAttempt` 对应哪些可观察底座证据，再验证：事件重复和乱序、断连、重启、重试、停止、审批等待、权限变化、文件/Git/MCP/网络副作用、责任收口和产物来源。任一组合场景不能解释清楚，首次正式开发保持 No-Go。
 
 【已确认产品规则】Magic 任务账本是真相源、对象分层、责任唯一、状态诚实、历史不可静默改写。
 
@@ -195,7 +195,7 @@ PlanStep 只是向用户展示下一步的计划，不等于正式子任务或 R
 
 【待用户裁定】未来多用户任务协作、跨工程事实和复杂恢复策略。
 
-【待技术核查】TaskAttempt 与 OpenCode Session/Run 的绑定、事件重放、连接恢复和工具审批事实。
+【待技术核查】TaskAttempt 与 OpenCode 实际会话、输入/响应、事件和执行状态的最小绑定模型；事件重放、连接恢复和工具审批事实。
 
 ## 14. 一项任务从创建到交付
 
@@ -221,7 +221,7 @@ flowchart LR
 
 ### 14.3 执行与结果
 
-每次真实执行创建一个 TaskAttempt，并关联一个或多个底座 Run。Attempt 结束后，执行者返回结构化结果；责任人检查结果、产物和证据，再决定完成、部分完成、失败、等待、停止或重开。
+每次真实执行创建一个 Magic `TaskAttempt`，并关联一个或多个经锁定入口确认的底座执行证据引用。Attempt 结束后，执行者返回结构化结果；责任人检查结果、产物和证据，再决定完成、部分完成、失败、等待、停止或重开。
 
 ### 14.4 交付与验收
 
@@ -328,7 +328,7 @@ PlanStep 只用于展示计划；当步骤需要独立责任人、独立产物�
 
 ## 21. F-10 Go/No-Go
 
-F-10 不是一份说明文档，而是一组必须可重复运行的证据：固定 OpenCode commit/tag、server runtime 和 canonical protocol/client contract；执行断连、重启、重复/乱序事件、重试、停止、审批、权限变化、文件/Git/MCP/网络副作用等组合场景；最终证明 Task、Attempt、Run、Approval、Artifact、Responsibility、SideEffect 和费用状态一致。任一项只能靠猜测时，首次正式开发保持 No-Go。
+F-10 不是一份说明文档，而是一组必须可重复运行的证据：固定 OpenCode commit/tag、server runtime、实际入口和 protocol/client contract；先确定 Attempt 与底座执行证据的最小绑定模型，再执行断连、重启、重复/乱序事件、重试、停止、审批、权限变化、文件/Git/MCP/网络副作用等组合场景；最终证明 Task、Attempt、底座执行证据、Approval、Artifact、Responsibility、SideEffect 和费用状态可以诚实收敛。任一项只能靠猜测时，首次正式开发保持 No-Go。
 
 ## 22. 用户验收时最容易混淆的四件事
 

@@ -11,11 +11,14 @@
 .env.*
 !.env.example
 !.env.*.example
+.tmp-*/
+.tmp-magic-real.db*
 .DS_Store
 Thumbs.db
 node_modules/
 dist/
 build/
 coverage/
+target/
 __pycache__/
 *.pyc

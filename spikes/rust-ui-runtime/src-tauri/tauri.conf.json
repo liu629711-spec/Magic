@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Magic Rust UI Runtime Spike",
+  "version": "0.1.0",
+  "identifier": "com.magic.rust.ui.runtime.spike",
+  "build": {
+    "beforeBuildCommand": "trunk build --release --config ui/Trunk.toml --dist dist index.html",
+    "frontendDist": "../ui/dist"
+  },
+  "app": {
+    "windows": [{ "label": "main", "title": "Magic Rust UI Runtime Spike", "width": 960, "height": 680 }],
+    "security": { "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:45175 http://127.0.0.1:45176 ipc: http://ipc.localhost" }
+  },
+  "bundle": { "active": false }
+}

@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/local-service",
+  "crates/domain",
+  "crates/contracts",
+  "crates/execution-port",
+  "crates/execution-opencode-v1",
+  "crates/persistence-port",
+  "crates/persistence",
+  "crates/application",
+  "crates/policy",
+  "crates/reconciliation",
+  "crates/observability",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+

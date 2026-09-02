@@ -1,0 +1,14 @@
+[package]
+name = "magic-application"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+magic-contracts = { path = "../contracts" }
+magic-domain = { path = "../domain" }
+magic-execution-port = { path = "../execution-port" }
+magic-persistence-port = { path = "../persistence-port" }
+thiserror.workspace = true
+
+[dev-dependencies]
+magic-persistence = { path = "../persistence" }
