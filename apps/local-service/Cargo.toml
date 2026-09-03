@@ -7,7 +7,10 @@ edition.workspace = true
 axum = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tower-http = { version = "0.6", features = ["cors"] }
+uuid = { version = "1", features = ["v4"] }
 magic-application = { path = "../../crates/application" }
+magic-contracts = { path = "../../crates/contracts" }
 magic-domain = { path = "../../crates/domain" }
 magic-execution-port = { path = "../../crates/execution-port" }
 magic-execution-opencode-v1 = { path = "../../crates/execution-opencode-v1" }
@@ -15,3 +18,7 @@ magic-persistence = { path = "../../crates/persistence" }
 magic-persistence-port = { path = "../../crates/persistence-port" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
 magic-reconciliation = { path = "../../crates/reconciliation" }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

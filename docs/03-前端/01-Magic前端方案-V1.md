@@ -1,7 +1,7 @@
 ---
-status: draft
-version: 1.1
-date: 2026-09-02
+status: frozen
+version: 1.2
+date: 2026-09-03
 authority: technical-design-draft
 ---
 
@@ -10,6 +10,7 @@ authority: technical-design-draft
 > 本文原地替换同文件的 1.0 草案，是唯一的前端技术设计文档，不新建平行 PRD 或过程文档。
 > 本文不冻结视觉风格；只定义信息架构、状态语义、交互行为和 API 消费方式。视觉与风格对齐清单见第 0.6 节，对齐前不做任何视觉实现。
 > 依据：《第一版范围确认》(confirmed)、ADR-0001/0002/0003/0004/0005、《代码架构基线 V1》《后端方案 V1》《数据库设计 V1》、PRD-01 至 PRD-05，以及 `apps/`、`crates/` 当前源码。文档与源码冲突时以源码为准，冲突逐条列在第 0.5 节。
+> 2026-09-03：前端契约冻结完成（决议 FZ-1~FZ-P1，见 [03-前端契约审查报告-2026-09-03.md](03-前端契约审查报告-2026-09-03.md) 第五节）。§6.2 为冻结版接口契约，全部待实现接口仍标注【待实现】；§4.4/§6.5/§6.6/§9.5/§9.10 已按决议修订。
 
 ## 0. 结论来源与证据状态
 
@@ -24,12 +25,12 @@ authority: technical-design-draft
 | S5 | Attempt 状态机为 8 态：`created→admitted→running`，`running→cancelling→cancelled`，`running|cancelling|unknown_after_restart→succeeded/failed`，`admitted|running|cancelling→unknown_after_restart`；wire 名称 snake_case | `crates/domain/src/lib.rs:25-34`、`:71-133`、`:334-343` |
 | S6 | Task 状态机为 8 态：`proposed/ready/in_progress/awaiting_review/completed/blocked/cancelled/failed`；Task 字段只有 `id/status/current_owner_id/acceptance_criteria_defined`，没有目标文本、时间戳和计划步骤 | `crates/domain/src/lib.rs:12-21`、`:156-234` |
 | S7 | Task `completed` 必须处于 `awaiting_review` 且带验收证据（`complete(true)`）；`ready` 必须有责任人和验收标准 | `crates/domain/src/lib.rs:190-222` |
-| S8 | reconcile 不是"刷新状态"：只有观察到终态证据才落终态；`running` 等非终态 Attempt 一经对账（含证据不足）即收口为 `unknown_after_restart` | `crates/application/src/lib.rs:176-240`；测试 `:390-405` |
+| S8 | reconcile 不是"刷新状态"：只有观察到终态证据才落终态；`running` 等非终态 Attempt 一经对账（含证据不足）即收口为 `unknown_after_restart` | `crates/application/src/lib.rs:176-240`；测试 `:390-405`。**2026-09-03 FZ-1 决议变更该语义**：周期对账移除、观测语义改为 Running/Terminal/Unknown（见 6.2）；后端实现前源码行为仍如上 |
 | S9 | 派发成功路径：建 Attempt(`created`)→写 `admitted`→新建 OpenCode Session→写 binding→`prompt_async`→写 `running`；每次派发新建一个 OpenCode Session，不跨 Attempt 复用 | `crates/application/src/lib.rs:89-173`、`:124` |
 | S10 | 持久层当前只有 4 张表：`task_attempt`、`event_ledger`、`attempt_binding`、`event_cursor`；没有 tasks、审批、产物、成本、副作用表；`task_attempt` 无时间戳列，`event_ledger` 无 occurred_at 列 | `crates/persistence/src/lib.rs:48-92` |
 | S11 | 状态事件写入事务：按 Attempt 聚合递增 `seq`，`event_type='attempt.status_changed'`，`source='magic'`，`payload_json={"from":..,"to":..}`，同一事务更新投影 | `crates/persistence/src/lib.rs:237-282` |
 | S12 | 外部（OpenCode）事件以 `aggregate_type="opencode"`、`source="opencode-v1"` 入账，按 `(source, source_event_id)` 与 `(aggregate, seq)` 去重；游标只在 seq 连续时推进，单调不回退 | `crates/reconciliation/src/lib.rs:100-108`、`:45-68`；`crates/persistence/src/lib.rs:348-505` |
-| S13 | Recovery Worker 与 API 同进程，默认每 30s 补拉 history 并对活跃 Attempt（admitted/running/cancelling）自动对账；无 binding 或对账失败→`unknown_after_restart` | `apps/local-service/src/main.rs:74-94`；`crates/reconciliation/src/lib.rs:88-150` |
+| S13 | Recovery Worker 与 API 同进程，默认每 30s 补拉 history 并对活跃 Attempt（admitted/running/cancelling）自动对账；无 binding 或对账失败→`unknown_after_restart` | `apps/local-service/src/main.rs:74-94`；`crates/reconciliation/src/lib.rs:88-150`。**2026-09-03 FZ-1 决议**：周期只补拉 history、不翻状态，探测仅在服务启动恢复/用户触发时执行（后端实现前源码行为仍如上） |
 | S14 | 端口层已有 `cancel`（OpenCode `POST /session/:id/abort`），但没有任何用例或 HTTP 路由调用它；`policy`、`observability` 是空壳 | `crates/execution-port/src/lib.rs:55`；`crates/execution-opencode-v1/src/lib.rs:102-107`、`:217-219`；`crates/policy/src/lib.rs:1-3` |
 | S15 | OpenCode 终态判据：最后一条 assistant 消息 `error.name=MessageAbortedError`→Cancelled，其他 error→Failed，`finish` 非空且 `time.completed` 存在→Succeeded，否则 Unknown；OpenCode 运行态不跨进程持久化 | `crates/execution-opencode-v1/src/lib.rs:230-260`；`docs/F-10-验证记录-001-OpenCode-HttpApi.md:49` |
 | S16 | 本地服务路由无 CORS、无鉴权中间件；`crates/contracts` 仅有未接线的 `AttemptView` | `apps/local-service/src/main.rs:106-115`；`crates/contracts/src/lib.rs:4-10` |
@@ -47,6 +48,8 @@ authority: technical-design-draft
 - 运行成功≠任务完成；取消不撤销已发生副作用；重试创建新 Attempt；同幂等键同请求体复用、异请求体冲突（PRD-04 §20、§22；《第一版范围确认》§2）。
 
 ### 0.3 仍是假设的部分（本文提出、待验证）
+
+> 2026-09-03 冻结更新：下列假设中的排序口径（C-2/FZ-4）、`request_hash` 口径（B-5/FZ-5）、CEO 语义（P-4/FZ-P1）、责任人取值（P-3）、视觉风格（P-6）均已收口，见 0.6 节与《前端契约确认清单》第 6 节；仅首屏耗时等量化目标仍待 E2E 校准。
 
 - 视觉风格、布局密度、主题（亮/暗跟随系统）——完全未定义，见 0.6 节。
 - 首屏耗时、长会话内存等量化目标——Spike 只测过空链路，未测真实负载，本文数字均为"待 E2E 校准的初始预算"。
@@ -75,6 +78,8 @@ authority: technical-design-draft
 | C10 | PRD-04 §16 运行状态含"排队/等待审批/暂停"，domain Attempt 无这些状态 | 同 C2；审批等待在 V1 以"审批卡+横幅"呈现，不改状态机（Q1） |
 
 ### 0.6 需要产品/后端确认的问题（对齐前不实现）
+
+> 2026-09-03：Q1-Q13 已随《前端契约确认清单 2026-09-02》与审查决议 FZ-1~FZ-P1 全部收口，本表保留作历史索引。
 
 | ID | 问题 | 影响 |
 |---|---|---|
@@ -153,13 +158,13 @@ Tauri 桌面壳（窗口、生命周期、manifest 发现、受限 invoke）
 - 顶部：工程标识条（V1 单工程，只读展示工程名/根目录；工程对象后端未实现，先静态显示工作目录，Q11 关联）。
 - "进行中"区：当前有活跃 Attempt（admitted/running/cancelling）的任务卡，显示任务标题、Attempt 序号、状态徽标、已确认事件序号。
 - "需要你处理"区：按严重度排序——`unknown_after_restart` 收口卡 > 待审批卡 > 待验收任务（Attempt 终态但 Task 未完成）。
-- "最近任务"区：按已知排序字段（待 Q11）取前 N 条。
+- "最近任务"区：按 C-2/FZ-4 冻结排序口径（读列表响应的 `ordering` 字段）取前 N 条。
 - 右上全局状态带：本地服务连接状态（已连接/重连中/未连接）、Recovery Worker 观察到的事件游标水位（待实现接口）、同步缺口标记。
 
 ### 4.2 任务列表
 
 - 列：任务标题（后端补齐前以 task_id 显示）、状态、责任人、当前 Attempt 序号与状态、最近事件 seq。
-- 筛选：状态（domain 8 态，S6）、责任人；排序字段待 Q11，缺省按创建顺序（task_id/attempt_no 推导）。
+- 筛选：状态（domain 8 态，S6）、责任人；排序按 C-2/FZ-4 冻结口径——读列表响应的 `ordering` 字段：时间戳迁移完成前为 `creation`（显示降级提示），迁移后 `updated_at DESC, id DESC`。
 - 行操作：Enter/点击进详情。
 - 列表虚拟化渲染（能力 spike 已验证 50 行窗口），筛选在客户端内存完成（V1 单用户数据量小，服务端分页接口待实现后切换）。
 
@@ -188,24 +193,25 @@ Tauri 桌面壳（窗口、生命周期、manifest 发现、受限 invoke）
 | 状态 | 文案 | 用户语义 | 可用操作 |
 |---|---|---|---|
 | `created` | 已创建 | 已登记，尚未接纳 | 无 |
-| `admitted` | 已接纳 | 已接纳，准备执行 | 取消（待实现，Q4） |
-| `running` | 执行中 | 正在执行 | 取消（待实现）；观察 |
+| `admitted` | 已接纳 | 已接纳，准备执行 | 无（取消仅 `running` 可发起，FZ-7；原 Q4 提案的 admitted 取消已废弃） |
+| `running` | 执行中 | 正在执行 | 取消（待实现，FZ-7 仅此状态可发起）；观察 |
 | `cancelling` | 取消中 | 取消已发出，未确认终态 | 只读；禁止重复取消 |
 | `cancelled` | 已取消 | 确认取消完成 | 重试（创建新 Attempt） |
 | `succeeded` | 成功 | 本次尝试成功，任务未完成 | 验收入口；再次执行 |
 | `failed` | 失败 | 本次尝试失败 | 重试；查看失败证据 |
 | `unknown_after_restart` | 重启后状态未知 | 证据不足，需要你决定 | 对账/重新执行/人工标记（4.6） |
 
-注意两点源码语义必须在 UI 体现：
+注意以下源码/冻结语义必须在 UI 体现：
 - "取消中"不是终态，取消可能以成功收口（domain 测试 `cancellation_race_can_finish_as_success`，`crates/domain/src/lib.rs:288-296`），UI 不得预设取消结果。
-- 时间线 V1 不显示发生时间（C9），只显示顺序；补时间列依赖后端加 `occurred_at`（Q5）。
+- 时间线按 `seq` 排序展示；`occurred_at` 已纳入冻结契约（B-1/FZ-3），迁移完成前为 null，显示"时间未知"，不伪造历史时间（C9）。
+- 对账（reconcile）是状态探测：按 FZ-1 冻结语义，会话存活时保持原状态，仅在无法观测（无绑定/会话丢失/对账失败）时收口为 unknown（见 4.6/6.6；后端待实现）。
 
 ### 4.5 审批区域
 
 - 独立路由 `/approvals` 为跨任务队列；任务详情内的审批区为同一数据的上下文视图。
 - 审批卡字段（PRD-05 §15）：动作、资源、范围、环境、风险等级、预计成本、有效期、来源；操作：批准/拒绝（拒绝需填原因）。
 - 数据源与写入接口均为待实现契约（S10 无审批表；S14 无审批用例）。未接入前，队列页显示空态"审批能力未接入"，不隐藏入口。
-- 审批等待期间（Q1 未决，当前状态机无等待态）：任务详情顶部显示"等待审批"横幅+审批卡引用；Attempt 状态保持后端真实值；用户在此期间可以：查看时间线与已登记证据、关闭窗口（执行继续）、（若 running）发起取消、不做任何会改变验收语义的操作。
+- 审批等待期间（P-1 已决议：不新增状态，当前状态机无等待态）：任务详情顶部显示"等待审批"横幅+审批卡引用；Attempt 状态保持后端真实值；用户在此期间可以：查看时间线与已登记证据、关闭窗口（执行继续）、（若 running）发起取消、不做任何会改变验收语义的操作。
 
 ### 4.6 `unknown_after_restart` 处理界面
 
@@ -216,7 +222,7 @@ unknown 是一等状态（S5、S8），展示上既不是成功也不是失败�
 3. 最近一次事件：seq、from→to。
 4. 底层绑定信息：OpenCode session/message 引用，说明"这是证据引用，不是状态来源"。
 5. 三个操作：
-   - 对账：调 `POST .../reconcile`（已实现，S1）。必须在卡上明示后果："对账只有在拿到终态证据时才会改变状态；否则本 Attempt 将被标记为状态未知"（S8）。禁止把对账当刷新按钮反复点。
+   - 对账：调 `POST .../reconcile`（已实现，S1）。必须在卡上明示后果（FZ-1 冻结语义）："对账是一次状态探测——只有拿到终态证据才会改变状态并收口；会话仍在运行或仍无法观测时状态不变、不产生新事件"。禁止把对账当刷新按钮反复点。
    - 重新执行：创建新 Attempt（现有派发接口即可实现，attempt_no+1、新幂等键，9.6 节），旧 Attempt 与 unknown 卡保留。
    - 人工标记结果：把 unknown 收口为成功/失败/取消。domain 状态机允许（`mark_succeeded/mark_failed/mark_cancelled` 从 unknown 可达，S5），但无 API（Q3）——按待实现契约设计，按钮禁用并标注"接口待实现"。
 
@@ -285,29 +291,42 @@ SideEffectView{ id, action, target, reversible, compensation? } // 待实现
 **POST /api/tasks/{task_id}/attempts/{attempt_id}/reconcile**
 无请求体 → 200 `{attempt_id, status, event_seq}`；`event_seq=null` 表示状态未变化（终态原样返回或无证据可写，S8）。
 
-### 6.2 待实现接口（契约提案，全部标注【待实现】）
+### 6.2 接口契约（已冻结 2026-09-03）
 
-提案沿用现有约定：写接口带幂等键、返回实体 ID+状态+event_seq；错误复用 S4 的 `{error}` 结构。
+冻结依据：《前端契约确认清单 2026-09-02》第 2/4 节结论 + 《前端契约审查报告 2026-09-03》决议 FZ-1~FZ-P1。除 §6.1 三个已实现接口外，本节全部接口均为【待实现】。现状基准：路由仅 `GET /health`、`POST /api/tasks/{task_id}/attempts`、`POST /api/tasks/{task_id}/attempts/{attempt_id}/reconcile`（`apps/local-service/src/main.rs:106-115`）。实现前不得按已存在接口编码。
 
-| 契约 | 方法与路径 | 要点 |
-|---|---|---|
-| 创建 Task【待实现】 | `POST /api/tasks` | body：goal、acceptance_criteria[]、owner_id?、mode(agent/ceo)（Q6/Q7）；幂等键必填 |
-| Task 列表【待实现】 | `GET /api/tasks?status=&owner=&limit=&offset=` | 排序字段待 Q11；返回 TaskView 投影 |
-| Task 详情【待实现】 | `GET /api/tasks/{task_id}` | 含 attempts 摘要与 last_seq |
-| Attempt 列表【待实现】 | `GET /api/tasks/{task_id}/attempts` | 按 attempt_no 倒序 |
-| 事件查询【待实现】 | `GET /api/tasks/{task_id}/attempts/{attempt_id}/events?after_seq=&limit=` | 按 seq 升序；`after_seq=0` 全量；响应带 `next_cursor`；OpenCode 证据另设 `?source=opencode`（Q5） |
-| Binding 查询【待实现】 | `GET /api/attempts/{attempt_id}/binding` | 数据已在 `attempt_binding` 表（S10） |
-| 取消【待实现】 | `POST /api/tasks/{task_id}/attempts/{attempt_id}/cancel` | 幂等键必填；后端调 `ExecutionPort::cancel`（端口已存在，S14）并写 `cancelling`；重复取消返回复用语义（200） |
-| 人工收口【待实现】 | `POST .../attempts/{attempt_id}/resolve` | body：result(succeeded/failed/cancelled)+reason+evidence 引用；仅 unknown 可调（Q3） |
-| Plan Step【待实现】 | `GET/POST /api/tasks/{task_id}/plan` | 数据库设计 §2 规划 |
-| 审批【待实现】 | `GET /api/approvals?status=pending`、`POST /api/approvals/{id}/decision` | 字段按 4.5；decision 需幂等键 |
-| 验收收口【待实现】 | `POST /api/tasks/{task_id}/complete` | 服务端校验 awaiting_review+证据（对应 domain `complete(true)`，S7） |
-| 产物/Diff/测试证据【待实现】 | `GET /api/tasks/{task_id}/artifacts|changeset|test-evidence` | Q8 |
-| 成本【待实现】 | `GET /api/tasks/{task_id}/cost` | 四数（PRD-05 §5） |
-| 副作用【待实现】 | `GET /api/tasks/{task_id}/side-effects` | PRD-05 §7 |
-| 服务信息【待实现】 | CORS/本地令牌、manifest 下发 | Q10 |
+通用约定：
 
-"重试"不设独立接口：前端用现有派发接口以 `attempt_no+1`+新幂等键创建新 Attempt（S2 唯一约束天然支持），仅当后端要求重试审计时再加【待实现】`POST /api/tasks/{id}/retry`。
+1. **错误体**：统一 `{ "error": string }`；状态码沿用现有映射（409 幂等冲突/非法状态/无 binding、502 执行失败、500 存储，`apps/local-service/src/main.rs:208-229`），并扩展 400 参数、404 不存在/归属不符、401/403 传输层。
+2. **幂等键与 request_hash**：派发接口二者的确定口径为 `SHA-256(UTF-8(task_id + U+001F + 十进制 attempt_no + U+001F + input + U+001F + directory))`，空 directory 用空串（B-5；服务端仅做相等比较，`crates/application/src/lib.rs:76-77`）。非派发写接口（cancel/resolve/complete/plan）的 `request_hash` = 对排除 `idempotency_key` 和 `request_hash` 后的规范化请求体做 SHA-256：对象键排序、无空白、数组顺序保留（FZ-5）。
+3. **事件游标（FZ-3）**：`confirmed_seq` = 该 Attempt 聚合在 `event_ledger` 中的最大 seq（服务端权威水位）；`next_cursor` = 本页最后一条事件的 seq，无更多数据时为 null；`limit` 默认 100、上限 500。`event_cursor` 表仅服务 OpenCode 外部事件续传（`crates/reconciliation/src/lib.rs:54-57`、`:100-108`），前端不消费。查询不推进任何游标、不触发 reconcile。
+4. **能力未接入（FZ-6）**：统一返回 HTTP 200 `{ "available": false, "reason": "not_implemented", "items": [], "next_cursor": null }`；前端以 `available` 判别并走"能力未接入"空态，`items` 空数组不得渲染为"无数据"。
+5. **传输（FZ-9）**：`GET /api/service-info` 为能力发现权威，`/health` 仅表示存活+可选诊断（B-7）；生产使用 `Authorization: Bearer <manifest 令牌>` + 受限 CORS 白名单；开发模式通过明确的环境变量开启（变量名由后端实现时确定并回写），禁止通配来源。
+
+| 契约 | 方法与路径 | 请求 → 响应 | 错误 | 备注 |
+|---|---|---|---|---|
+| 创建 Task【待实现】 | `POST /api/tasks` | `{idempotency_key,goal,acceptance_criteria[],owner_id,mode:"agent"\|"ceo"}` → 201 `{task_id,status,event_seq,reused:false}`；同键 200 `{…,event_seq:null,reused:true}` | 400/409/500 | P-3/P-4；`goal` 为任务目标文本，`mode` 仅取 agent/ceo（FZ-P1）；FZ-8：创建用例内自动完成 proposed→ready |
+| Task 列表【待实现】 | `GET /api/tasks?status=&owner=&limit=&offset=` | → `{items:[{task_id,goal,status,owner_id,current_attempt_no?,current_attempt_status?,last_seq,updated_at?}],next_offset,ordering}`（FZ-4）；时间戳迁移完成前 `updated_at` 为 null、`ordering:"creation"`，排序一律读 `ordering`；`next_offset` 末页为 null | 400/500 | C-2 |
+| Task 详情【待实现】 | `GET /api/tasks/{task_id}` | → `{task_id,goal,status,owner_id,acceptance_criteria[],attempts:[{attempt_id,attempt_no,status,last_seq}],last_seq,updated_at?}` | 404/500 | 清单第 3 条 |
+| Attempt 列表【待实现】 | `GET /api/tasks/{task_id}/attempts` | → `{items:[{attempt_id,attempt_no,status,last_seq}],next_cursor}`，`attempt_no` 倒序 | 404/500 | `UNIQUE(task_id,attempt_no)`（`crates/persistence/src/lib.rs:57`） |
+| 事件查询【待实现】 | `GET /api/tasks/{task_id}/attempts/{attempt_id}/events?after_seq=&limit=&source=` | → `{events:[{seq,event_type,source,source_event_id?,payload,occurred_at?}],next_cursor,confirmed_seq}`；seq 升序，`after_seq=0` 全量；`limit` 默认 100、上限 500；`source` ∈ `magic`/`opencode-v1`；`occurred_at` 迁移完成前为 null（显示"时间未知"） | 400/404/500 | B-1/FZ-3；游标口径见通用约定 3 |
+| Binding 查询【待实现】 | `GET /api/attempts/{attempt_id}/binding` | → 200 `{attempt_id,adapter,session_id,message_id}`，`message_id` 可空 | 404/500 | 与 `crates/persistence/src/lib.rs:304-326` 查询一致；仅证据引用，非状态来源 |
+| 取消【待实现】 | `POST /api/tasks/{task_id}/attempts/{attempt_id}/cancel` | `{idempotency_key,request_hash}` → 202 `{attempt_id,status:"cancelling",event_seq,reused:false}`；同键重放 200 `reused:true`；终态调用 200 `{attempt_id,status:<终态>,event_seq:null,reused:true}` 且不新增事件（FZ-7） | 400/404/409（幂等冲突/非法状态/无 binding）/502/500 | 仅 `running` 可发起，`created/admitted/cancelling/unknown_after_restart` 一律 409（FZ-7；domain `crates/domain/src/lib.rs:83-89`）；先写 `cancelling` 再调 `ExecutionPort::cancel`（`crates/execution-port/src/lib.rs:55`）；取消竞态仍可能以 succeeded 收口（`crates/domain/src/lib.rs:288-296`）；超时不自动重试 |
+| 人工收口【待实现】 | `POST /api/tasks/{task_id}/attempts/{attempt_id}/resolve` | `{idempotency_key,result:"succeeded"\|"failed"\|"cancelled",reason,evidence_refs[]}` → 200 `{attempt_id,status,event_seq,reused}`；产生 `attempt.status_changed` 事件，payload 含审计字段（C-1） | 400/404/409（非 unknown/证据为空/幂等冲突）/500 | 仅 `unknown_after_restart` 可调；与 domain 迁移一致（`crates/domain/src/lib.rs:91-120`） |
+| Plan【待实现】 | `GET`/`PUT /api/tasks/{task_id}/plan` | GET → `{version,steps[]}`（无计划 `{version:0,steps:[]}`）；PUT `{idempotency_key,version,steps[]}` → `{task_id,version,steps,event_seq,reused}` | 400/404/409（版本/幂等）/500 | 清单第 9 条；无表无用例，前端先空态占位 |
+| 审批【待实现】 | `GET /api/approvals?status=&task_id=&limit=&cursor=`；`POST /api/approvals/{id}/decision` | GET → `{items,next_cursor}`（字段按 §4.5）；decision `{idempotency_key,decision,reason?}` → `{approval_id,status,event_seq,reused}` | 400/404/409/500 | P-1：审批不新增 Attempt 状态，`running`+审批卡；字段保持现方案（FZ-P1） |
+| 验收收口【待实现】 | `POST /api/tasks/{task_id}/complete` | `{idempotency_key,evidence_refs[]}` → 200 `{task_id,status:"completed",event_seq,reused}` | 400/404/409（状态/证据/幂等）/500 | 严格对应 `complete(true)`（`crates/domain/src/lib.rs:216-222`）；仅 `awaiting_review` 且证据齐全 |
+| 产物/Diff/测试证据【待实现】 | `GET /api/tasks/{task_id}/artifacts`、`/changesets`、`/test-evidence?limit=&cursor=` | 已接入 → `{items,next_cursor}`；未接入 → FZ-6 统一形态 | 404/500 | 通用约定 4 |
+| 成本【待实现】 | `GET /api/tasks/{task_id}/cost` | 已接入 → `{available:true,limit,reserved,spent,remaining,currency,source}`；未接入 → FZ-6 统一形态，不返回伪造零值 | 404/500 | PRD-05 §5 |
+| 副作用【待实现】 | `GET /api/tasks/{task_id}/side-effects?limit=&cursor=` | 已接入 → `{items,next_cursor}`，items 含 `action,target,reversible,compensation,status,occurred_at`；未接入 → FZ-6 统一形态 | 404/500 | PRD-05 §7；取消/失败不回滚已发生副作用 |
+| 服务发现【待实现】 | manifest 下发基址+令牌；`GET /api/service-info` | → `{protocol_version,instance_id,capabilities,worker}` | 401/403/500 | FZ-9；绝不返回令牌；`/health` 保持 `{healthy:true}`+可选诊断字段 |
+
+补充约定：
+
+- **重试/再次执行不设独立接口**：前端以 `attempt_no+1` + 新派生键调用已实现派发接口（§6.1；唯一约束天然支持，`crates/persistence/src/lib.rs:57-58`）；`unknown` 不自动重派，必须用户显式操作（C-3）。
+- **Task 状态推进（FZ-8）**：由服务端用例自动推进——创建→proposed、准备（owner 与验收标准齐备，V1 在创建用例内完成）→ready、派发→in_progress、Attempt 落 succeeded→awaiting_review、验收完成→completed；不提供直接改状态 API，前端永不调用，Task 状态一律以响应与事件为准。
+- **对账与 Worker 语义（FZ-1，后端语义变更，待实现）**：Recovery Worker 周期只补拉 history，不因缺少终态证据把正常运行中的 Attempt 改成 unknown；状态探测仅在服务启动恢复或用户明确点击对账时执行；观测语义为 Running/Terminal/Unknown，有 binding 且会话存活返回 Running 并保持原状态（FZ-2：正常运行中的任务不得显示"状态未知"）。该决议实现前，现源码行为仍为"周期对账无终态证据即落 unknown"（`crates/application/src/lib.rs:222-240`、`crates/reconciliation/src/lib.rs:114-142`）；前端按冻结语义设计，联调前以 mock 契约测试覆盖（第 14 节第 3 条）。
+- **对账与 Worker 语义补充（FZ-1.1，2026-09-03 实弹联调裁定，待实现）**：FZ-1 禁止的是"无证据打 unknown"，不禁止正向收口——Worker 入账后，若已入账事件中含绑定活跃 Attempt 的终态证据，应据此收口为 succeeded/failed/cancelled（不需要用户点对账，也不算周期探测）；unknown 三进入路径不变。依据：实弹测试中 OpenCode 完成执行、223 条事件已入账，但 Attempt 因无人探测而永远停在 running。
 
 ### 6.3 页面 ↔ 接口依赖矩阵
 
@@ -328,24 +347,24 @@ SideEffectView{ id, action, target, reversible, compensation? } // 待实现
 
 - 所有会触发执行的写请求（派发、取消、审批决定、人工收口）必须携带客户端幂等键（S2 模式；后端方案 §6 原则）。
 - 键生成：`idempotency_key = UUIDv4()`，在"一次用户意图"生命周期内不变：网络超时、5xx、连接中断后的重发使用同一键与同一请求体；用户显式修改内容则视为新意图、生成新键。
-- 崩溃恢复：进程重启后内存键丢失。约定派发键为确定性派生 `hash(task_id | attempt_no | input | directory)`（Q9 定口径）——同键同请求体在服务端命中唯一约束并复用既有 Attempt（S3），因此重启后重发安全，无需前端持久化存储。
+- 崩溃恢复：进程重启后内存键丢失。约定派发键为确定性派生 `hash(task_id | attempt_no | input | directory)`（B-5/FZ-5 冻结口径）——同键同请求体在服务端命中唯一约束并复用既有 Attempt（S3），因此重启后重发安全，无需前端持久化存储。
 - `attempt_no` 取当前任务已有 Attempt 最大值+1，来源于 Attempt 列表查询【待实现】；列表不可得时禁用派发按钮而不是猜序号，避免 `UNIQUE(task_id, attempt_no)` 冲突（S2）。
-- `request_hash`：对 `(input, directory)` 规范化后哈希；同键不同体服务端返回 409（S4），前端渲染幂等冲突卡，提供"查看已有 Attempt/放弃本次"两个动作，禁止静默重试。
+- `request_hash`（B-5/FZ-5 冻结口径）：派发为 `SHA-256(UTF-8(task_id ␟ attempt_no ␟ input ␟ directory))`（与派发键同口径，空 directory 用空串）；非派发写接口对排除 `idempotency_key` 与 `request_hash` 后的规范化请求体做 SHA-256（对象键排序、无空白、数组顺序保留）。同键不同体服务端返回 409（S4），前端渲染幂等冲突卡，提供"查看已有 Attempt/放弃本次"两个动作，禁止静默重试。
 - 收到 `reused:true`（200）表示该键已被消费：将响应中的 attempt_id 与状态并入 Store，继续观察，不视为错误。
 
-### 6.5 事件序号与游标使用方式
+### 6.5 事件序号与游标使用方式（FZ-3 冻结口径）
 
-- 每个 Attempt 维护 `last_seq`（内存）与 `confirmed_seq` 概念对齐后端 `event_cursor.last_confirmed_seq`（S12）。
-- 拉取一律 `?after_seq=last_seq`，响应按 seq 升序，客户端按 5.4 合并；`next_cursor` 回写 `last_seq`。
-- 断线/重启恢复：以持久化的 `last_seq`（服务端 event_cursor 为权威）重新拉取，客户端不持久化事件数据本身（第 8 节）。
-- 游标只前进；发现服务端游标小于本地（服务重建库）→ 清空本地该聚合缓存全量重拉，并提示"检测到事件账本重建"。
+- `confirmed_seq` = 服务端该 Attempt 聚合在 `event_ledger` 中的最大 seq（服务端权威水位）；`next_cursor` = 本页最后一条事件的 seq，无更多数据时为 null。`event_cursor` 表仅服务 OpenCode 外部事件续传，前端不消费（2026-09-03 冻结修订，替换原"对齐 event_cursor"表述）。
+- 每个 Attempt 维护 `last_seq`（内存）；拉取一律 `?after_seq=last_seq&limit=`（默认 100、上限 500），响应按 seq 升序，客户端按 5.4 合并；`next_cursor` 非空时回写 `last_seq`；`last_seq == confirmed_seq` 即视为追平。
+- 断线/重启恢复：以服务端 `confirmed_seq` 为权威水位重新拉取，客户端不持久化事件数据本身（第 8 节）。
+- 游标只前进；发现服务端 `confirmed_seq` 小于本地 `last_seq`（服务重建库）→ 清空本地该聚合缓存全量重拉，并提示"检测到事件账本重建"。
 
-### 6.6 轮询策略（V1 无 SSE）
+### 6.6 轮询策略（V1 无 SSE；2026-09-03 按 FZ-1/FZ-2 冻结修订）
 
-- 数据轮询只允许 GET 查询类接口；**严禁轮询 reconcile**（S8：对运行中 Attempt 调 reconcile 会直接把它打成 unknown）。
-- 活跃 Attempt（admitted/running/cancelling）：2s 基础间隔，±20% 抖动；连续失败指数退避 2s→4s→…→30s 封顶；到达终态或 unknown 即停该 Attempt 的轮询。
+- 数据轮询只允许 GET 查询类接口；**严禁轮询 reconcile**——对账是状态探测动作（会话不存活时会把 Attempt 收口为 unknown），且 FZ-1/FZ-2 规定状态探测只发生在服务启动恢复与用户明确点击时（原"对运行中调 reconcile 会直接打成 unknown"的源码行为已由 FZ-1 决议移除，后端待实现，见 6.2 注记）。
+- 活跃 Attempt（admitted/running/cancelling）：2s 基础间隔，±20% 抖动；连续失败指数退避 2s→4s→…→30s 封顶；到达终态或 unknown 即停该 Attempt 的轮询。FZ-1 落地后，正常运行中的 Attempt 保持活跃，不会被周期任务改成 unknown。
 - 工作台/列表概览：10s；窗口隐藏（Tauri 可见性事件）时降为 30s，恢复可见立即刷一次。
-- Reconcile 只在三个时机由用户/系统触发：应用启动检测到"上次会话有活跃 Attempt"时逐个提示（不自动批调，先展示后果）；unknown 卡上用户点击；长期无终态（阈值待定，默认 10 分钟）时横幅建议用户对账。
+- Reconcile 触发时机（FZ-1/FZ-2 冻结）：服务启动恢复时由服务端自动探测一次（前端如实呈现结果，不重复调用）；unknown 卡上用户点击；应用启动检测到"上次会话有活跃 Attempt"时逐个提示用户选择（不自动批调）；活跃超过 10 分钟显示对账建议横幅——仅建议，不自动调用、不是计时器（FZ-2）。
 - 每次响应附 `Stale` 清除与同步水位更新；连续 2 次失败进入 9.3 的断线态。
 
 ### 6.7 实时事件订阅的扩展方式
@@ -368,7 +387,7 @@ api/
 
 - 传输：`gloo-net`/`reqwest-wasm` 同类 WASM HTTP 客户端（以 ADR-0003 栈内可用性为准）；所有请求默认超时 10s，写请求 30s（派发含 OpenCode 交互，S9）。
 - 重试判定：幂等写可安全重发（同键同体）；非幂等 GET 可重试；`409` 一律不重试，进入冲突处理；`502` 不自动重发（执行已失败并落账，S9），展示失败证据。
-- 鉴权与跨源：预留 `Authorization: Bearer <manifest 令牌>` 槽；Q10 决议前，开发模式直连+无令牌，生产模式二选一（服务端 CORS+令牌 / Tauri invoke 桥），Client 层用 trait 隔离传输通道，页面代码不感知。
+- 鉴权与跨源：Q10 已决议（B-4/FZ-9）——走 HTTP + `Authorization: Bearer <manifest 令牌>` + 受限 CORS；开发模式经明确的环境变量开启无令牌本机回退（禁止通配来源，变量名待后端定）；Client 层用 trait 隔离传输通道，页面代码不感知。
 - 客户端生成的 `attempt_id` 为 UUIDv4，一次派发尝试内不变。
 
 ## 8. 本地缓存设计
@@ -393,7 +412,7 @@ Tauri 关闭窗口只断开 UI，不调用任何取消/派发接口（ADR-0004�
 写请求超时后：请求进入 `pending_writes`，界面显示"提交中（可安全重试）"；重试按钮复用同一幂等键同一请求体（6.4）；收到 201/200 任一即收敛；409 幂等冲突→冲突卡。全程禁止前端生成新键自动重试。
 
 ### 9.5 取消的展示
-取消按钮（待实现接口）点击后立即：按钮转禁用+状态徽标切"取消中"（该徽标只能由后端 `cancelling` 事件确认后渲染，在此之前显示"取消请求发送中"）；终态前不显示"已取消"；终态可能是 cancelled 也可能是 succeeded（S5 取消竞态），按事件如实渲染；若已产生副作用，副作用区保持完整展示（PRD-05 §7）。
+取消仅 `running` 态可用（FZ-7：其余状态一律 409，按钮按 4.4 可用性矩阵禁用并注明原因；收到 409 时按事件重新对齐本地状态，不重试）。点击后立即：按钮转禁用+状态徽标切"取消中"（该徽标只能由后端 `cancelling` 事件确认后渲染，在此之前显示"取消请求发送中"）；终态前不显示"已取消"；终态可能是 cancelled 也可能是 succeeded（S5 取消竞态），按事件如实渲染；若已产生副作用，副作用区保持完整展示（PRD-05 §7）。
 
 ### 9.6 重试
 仅在 failed/cancelled/unknown（且用户选择"重新执行"）可用；动作=以 `attempt_no+1`+新键派发（6.4），旧 Attempt 原样保留在历史区，时间线独立。成功状态的任务提供"再次执行"，同一机制。派发前弹确认框显示本次输入与预计影响（V1 无预算预估数据，只显示输入）。
@@ -408,7 +427,7 @@ Tauri 关闭窗口只断开 UI，不调用任何取消/派发接口（ADR-0004�
 Attempt `succeeded` 时：Attempt 区显示"成功"；任务详情顶部固定横幅"执行已结束，等待验收——任务尚未完成"（PRD-04 §20 首行）；Task 状态保持后端值（`in_progress/awaiting_review`），绝不自动跳 `completed`。
 
 ### 9.10 服务重启后的未终结 Attempt
-Recovery Worker 每 30s 自动补拉+对账（S13），前端职责是如实呈现结果：收口为终态→时间线补事件；转 unknown→unknown 卡入"需要你处理"区。前端不自动派发、不自动改状态（对账失败禁止静默重派，代码架构基线 §7）。
+按 FZ-1 冻结语义（后端待实现）：Recovery Worker 周期只补拉 history；服务启动恢复时执行一次状态探测；正常运行中的 Attempt 不会被周期任务改成 unknown（FZ-2）。前端职责是如实呈现结果：收口为终态→时间线补事件；转 unknown（仅发生在无法观测：无 binding/会话丢失/对账失败）→unknown 卡入"需要你处理"区。前端不自动派发、不自动改状态、不自动调对账（对账失败禁止静默重派，代码架构基线 §7）。现源码仍为每 30s 周期对账（S13），实现落地前联调需注意该差异。
 
 ### 9.11 副作用已发生后的取消/失败
 取消/失败不回滚任何记录：副作用卡继续展示全部已发生条目并标注"取消/失败前已发生"（PRD-05 §7）；可逆项提供补偿入口（创建补偿任务，待实现）；不可逆项明示"不可撤销"。该区域数据在副作用契约落地前显示"副作用记录接口未接入"，不得留空冒充"无副作用"。
@@ -464,6 +483,8 @@ Recovery Worker 每 30s 自动补拉+对账（S13），前端职责是如实呈�
 
 ## 15. 当前后端缺口（按前端阻塞度排序）
 
+> 2026-09-03 冻结新增后端实现项：FZ-1 Worker 观测语义改造（周期只补拉 history、启动恢复/用户触发的状态探测、Running/Terminal/Unknown）——需在阶段 1 真实服务联调前落地，否则界面将按决议前源码行为（周期对账打 unknown）失真。原缺口 1-9 保持不变。
+
 1. **查询类**：Task 列表/详情、Attempt 列表、事件查询、binding 查询——没有它们，工作台/列表/详情/时间线四个主界面无数据可用（S1 对比 6.3 矩阵）。
 2. **时间戳**：`event_ledger` 无 `occurred_at`（S10/C9），时间线无时间可显示。
 3. **取消**：端口有 `cancel`，无用例无路由（S14）。
@@ -482,7 +503,7 @@ Recovery Worker 每 30s 自动补拉+对账（S13），前端职责是如实呈�
 
 每阶段有独立进入条件与退出验收；阶段 1 起必须与后端契约逐项对齐（第 15 节顺序）。
 
-- **阶段 0 契约与骨架**：冻结 6.2 契约（与后端评审 Q1-Q12）；搭 Tauri+Yew 工程落地 `apps/desktop`（满足其 README 的迁入前提：本地服务契约稳定，S17）；API Client+Store+Loadable；用已实现 3 接口做"派发控制台"最小页（输入→派发→显示 201/复用/错误→unknown 时提示可对账）。退出：契约评审通过；控制台可对真实 local-service 跑通 S3/S4/S8 全部分支。
+- **阶段 0 契约与骨架**：冻结 6.2 契约（与后端评审 Q1-Q12）；搭 Tauri+Yew 工程落地 `apps/desktop`（满足其 README 的迁入前提：本地服务契约稳定，S17）；API Client+Store+Loadable；用已实现 3 接口做"派发控制台"最小页（输入→派发→显示 201/复用/错误→unknown 时提示可对账）。退出：契约评审通过（已满足：2026-09-03 契约冻结，见 6.2）；控制台可对真实 local-service 跑通 S3/S4/S8 全部分支。
 - **阶段 1 读路径**：Task 列表/详情/工作台（依赖后端缺口 1）；四态与错误规范全量落地。退出：9.2 启动流程、9.9 横幅可演示。
 - **阶段 2 执行与恢复**：时间线（事件查询+游标+缺口条）、unknown 卡（对账+重新执行）、9.3/9.4/9.5/9.6/9.10 交互、轮询驱动。退出：E2E 断网/重启/取消竞态场景通过。
 - **阶段 3 治理面**：审批队列与卡片、验收收口、产物/Diff/证据/成本/副作用区域（依赖后端缺口 4-6）；取消接口接入。退出：9.7/9.8/9.11 验收通过。

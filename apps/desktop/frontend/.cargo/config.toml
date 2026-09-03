@@ -1,0 +1,4 @@
+# wasm32-unknown-unknown 上 getrandom 0.4 必须显式选择 wasm_js 后端；
+# 本配置仅在使用本目录（trunk 构建）时生效，不影响工作区其余部分。
+[build]
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]

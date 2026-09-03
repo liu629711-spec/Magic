@@ -2,8 +2,8 @@
 
 use magic_domain::{AttemptId, AttemptStatus};
 use magic_execution_port::{
-    EventSource, ExecutionError, ExecutionEvent, ExecutionHistoryEvent, ExecutionPort,
-    ExecutionReceipt, ExecutionSession,
+    EventSource, ExecutionError, ExecutionEvent, ExecutionHistoryEvent, ExecutionObservation,
+    ExecutionPort, ExecutionReceipt, ExecutionSession,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -96,7 +96,12 @@ impl OpenCodeV1Adapter {
 
     pub fn terminal_status(&self, session_id: &str) -> Result<AttemptStatus, ExecutionError> {
         let messages = self.messages(session_id)?;
-        Ok(status_from_messages(&messages))
+        Ok(match observation_from_messages(&messages) {
+            ExecutionObservation::Terminal(status) => status,
+            ExecutionObservation::Running | ExecutionObservation::Unknown => {
+                AttemptStatus::UnknownAfterRestart
+            }
+        })
     }
 
     pub fn abort(&self, session_id: &str) -> Result<bool, ExecutionError> {
@@ -222,25 +227,29 @@ impl ExecutionPort for OpenCodeV1Adapter {
         &self,
         _attempt_id: &AttemptId,
         session_id: &str,
-    ) -> Result<AttemptStatus, ExecutionError> {
-        self.terminal_status(session_id)
+    ) -> Result<ExecutionObservation, ExecutionError> {
+        let messages = self.messages(session_id)?;
+        Ok(observation_from_messages(&messages))
     }
 }
 
-fn status_from_messages(messages: &[Value]) -> AttemptStatus {
+/// FZ-1 observation semantics: a readable session without terminal evidence is
+/// Running (the session is alive); only explicit evidence closes an Attempt and
+/// only a failed read (transport error, session gone) surfaces as `Err`.
+fn observation_from_messages(messages: &[Value]) -> ExecutionObservation {
     let assistant = messages
         .iter()
         .filter_map(|message| message.get("info"))
         .filter(|info| info.get("role").and_then(Value::as_str) == Some("assistant"))
         .last();
     let Some(info) = assistant else {
-        return AttemptStatus::UnknownAfterRestart;
+        return ExecutionObservation::Running;
     };
     if let Some(error) = info.get("error") {
         return if error.get("name").and_then(Value::as_str) == Some("MessageAbortedError") {
-            AttemptStatus::Cancelled
+            ExecutionObservation::Terminal(AttemptStatus::Cancelled)
         } else {
-            AttemptStatus::Failed
+            ExecutionObservation::Terminal(AttemptStatus::Failed)
         };
     }
     let finished = info
@@ -253,9 +262,9 @@ fn status_from_messages(messages: &[Value]) -> AttemptStatus {
         .and_then(Value::as_u64)
         .is_some();
     if finished && completed {
-        AttemptStatus::Succeeded
+        ExecutionObservation::Terminal(AttemptStatus::Succeeded)
     } else {
-        AttemptStatus::UnknownAfterRestart
+        ExecutionObservation::Running
     }
 }
 
@@ -423,7 +432,7 @@ data: {"id":"event-2","type":"server.heartbeat","properties":{}}
     }
 
     #[test]
-    fn terminal_status_requires_explicit_finished_message_evidence() {
+    fn observation_requires_explicit_finished_message_evidence() {
         let success = vec![json!({
             "info": {
                 "role": "assistant",
@@ -431,7 +440,10 @@ data: {"id":"event-2","type":"server.heartbeat","properties":{}}
                 "time": { "completed": 42 }
             }
         })];
-        assert_eq!(status_from_messages(&success), AttemptStatus::Succeeded);
+        assert_eq!(
+            observation_from_messages(&success),
+            ExecutionObservation::Terminal(AttemptStatus::Succeeded)
+        );
 
         let failed = vec![json!({
             "info": {
@@ -440,7 +452,10 @@ data: {"id":"event-2","type":"server.heartbeat","properties":{}}
                 "error": { "name": "UnknownError", "data": { "message": "boom" } }
             }
         })];
-        assert_eq!(status_from_messages(&failed), AttemptStatus::Failed);
+        assert_eq!(
+            observation_from_messages(&failed),
+            ExecutionObservation::Terminal(AttemptStatus::Failed)
+        );
 
         let cancelled = vec![json!({
             "info": {
@@ -449,12 +464,14 @@ data: {"id":"event-2","type":"server.heartbeat","properties":{}}
                 "error": { "name": "MessageAbortedError", "data": { "message": "Aborted" } }
             }
         })];
-        assert_eq!(status_from_messages(&cancelled), AttemptStatus::Cancelled);
+        assert_eq!(
+            observation_from_messages(&cancelled),
+            ExecutionObservation::Terminal(AttemptStatus::Cancelled)
+        );
 
         let running = vec![json!({ "info": { "role": "assistant" } })];
-        assert_eq!(
-            status_from_messages(&running),
-            AttemptStatus::UnknownAfterRestart
-        );
+        assert_eq!(observation_from_messages(&running), ExecutionObservation::Running);
+
+        assert_eq!(observation_from_messages(&[]), ExecutionObservation::Running);
     }
 }

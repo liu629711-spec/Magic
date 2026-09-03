@@ -12,7 +12,10 @@ members = [
   "crates/policy",
   "crates/reconciliation",
   "crates/observability",
+  "crates/frontend",
 ]
+# 浏览器端 Yew 工程（wasm-only，trunk 构建）：独立于工作区，避免 host/wasm 配置互相干扰
+exclude = ["apps/desktop/frontend"]
 
 [workspace.package]
 version = "0.1.0"

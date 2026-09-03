@@ -70,14 +70,28 @@ OpenCode 的权限拦截可以作为底层保护，但 Magic 仍保存授权快�
 
 Recovery Worker 是独立于 Tauri 窗口的 Rust 进程。桌面层只负责启动或发现它，不能把窗口进程的存活当作 Worker 或 Attempt 的存活证明。
 
-启动时扫描 `running`、`cancelling` 和没有终结事件的 Attempt：
+**周期行为（FZ-1，2026-09-03 冻结决议，已实现）**：Recovery Worker 的周期循环只做 OpenCode history 补拉与事件入账，不对活跃 Attempt 做状态探测；正常运行中、有 binding 且会话存活的 Attempt 永远不会因"缺少终态证据"被周期任务改写为 `unknown_after_restart`（FZ-2 产品红线：正常运行中的任务不得显示"状态未知"）。
 
-- 先查询 OpenCode message 和 history；
-- 能确认成功/失败/取消则收口；
-- 只能确认 session 存在但无法确认执行结果则进入 `unknown_after_restart`；
-- 不自动重复投递，除非用户明确选择重试。
+**状态探测（FZ-1，服务启动恢复与用户 reconcile 共用同一逻辑，已实现）**：服务启动时对活跃 Attempt（`admitted/running/cancelling`）执行一次状态探测；用户在 unknown 卡上点击对账时走同一探测逻辑。观测语义为 Running / Terminal / Unknown 三态：
+
+- 有 binding 且会话存活（读取 session message 成功但无终态证据）→ 观测为 Running，Attempt 保持原状态、不产生事件；
+- 拿到终态证据（assistant 消息 error/finish/completed）→ 收口为对应终态（`succeeded/failed/cancelled`）；
+- 无 binding、会话丢失（session 不可读）或对账失败 → 落 `unknown_after_restart`。
+
+探测产出的状态变更仍按 domain 8 态状态机校验（domain 不允许的迁移不写入，例如对运行中 Attempt 观测到 OpenCode 侧 abort 证据时落 `unknown_after_restart` 而非直接 `cancelled`）；不自动重复投递，除非用户明确选择重试。
 
 Worker 启动和发现使用本地 runtime manifest（进程 ID、API 地址、协议版本、实例令牌和启动时间）及带令牌健康检查。独立 Worker Spike 已验证 manifest 发布、重复实例拒绝、无关桌面进程退出后继续健康，以及旧实例失效后的重新启动和发现。发现已有健康 Worker 时不得重复启动；manifest 存在但健康检查失败时，必须先确认 PID/实例身份已失效并保留证据，再进入恢复流程，不静默覆盖旧实例。Windows 允许 PID 复用，不能只用 PID 判断是否为新实例。
+
+### 4.6 Task 状态推进（FZ-8，2026-09-03 冻结决议，已实现）
+
+Task 状态由服务端用例自动推进，不提供直接改状态 API，前端永不调用：
+
+- 创建 → `proposed`；准备（owner 与验收标准齐备，V1 在创建用例内完成）→ `ready`；
+- 派发（Attempt 成功进入 `running`）→ `in_progress`；
+- Attempt 落 `succeeded` → `awaiting_review`（用户对账与 Worker 启动恢复探测共用）；
+- 验收完成 → `completed`（对应 `complete(true)`，V1 完成接口待实现）。
+
+推进使用 domain 状态机校验，仅写入 domain 允许的迁移；无 Task 投影行（历史派发）时跳过推进，不影响派发响应。Task 状态变更同样写入事件账本（`aggregate_type='task'`、`event_type='task.status_changed'`）。
 
 ## 5. 状态模型
 
@@ -146,6 +160,6 @@ OpenCode V1 的 `messageID` 只作为底层引用，不作为 Magic 幂等保证
 
 ## 11. 当前实现检查点
 
-`apps/local-service` 已提供 Axum 本地 API 的最小垂直切片：`GET /health`、`POST /api/tasks/:task_id/attempts` 和 `POST /api/tasks/:task_id/attempts/:attempt_id/reconcile`。派发、幂等和 binding 已接入 Application/SQLite；reconcile 会读取 binding、解析真实消息终态，并在证据不足时把运行中的 Attempt 收口为 `unknown_after_restart`。本机 OpenCode CLI `1.18.21` 的真实 HTTP 冒烟及可选 Rust 集成测试已验证 Magic 创建 Session、异步投递、重复请求复用和消息对账失败收口。`crates/reconciliation` 已实现外部事件写入、来源 ID/聚合序号去重和不跳过缺口的游标推进；Adapter 已能读取一次性 SSE 数据和调用 `/sync/history`，`apps/local-service` 的 Recovery Worker 会周期补拉 history 并扫描活跃 Attempt 自动执行对账。后台 SSE 长连接仍未接入。
+`apps/local-service` 已按《前端方案 V1》§6.2 冻结契约（2026-09-03）实现阶段 1 接口：`GET /health`（含可选诊断字段）、`POST /api/tasks`（FZ-5 口径 request_hash、FZ-8 创建内 proposed→ready）、`GET /api/tasks`（FZ-4 投影与 ordering）、`GET /api/tasks/{task_id}`、`GET /api/tasks/{task_id}/attempts`、`GET /api/attempts/{attempt_id}/binding`、`GET /api/tasks/{task_id}/attempts/{attempt_id}/events`（FZ-3 游标）、既有派发与 reconcile。FZ-1 观测语义已落地：Recovery Worker 周期只补拉 history 并入账，状态探测仅在服务启动恢复与用户 reconcile 时执行（Running/Terminal/Unknown，见 4.5 节）；FZ-8 Task 状态推进已接入派发与 Attempt 成功收口（见 4.6 节）。持久层迁移已新增 tasks 投影表、`event_ledger.occurred_at`（旧行保持 NULL）、task_attempt/tasks 的 `updated_at`（旧行以迁移时刻回填并在 schema_meta 标注历史近似值，C-2）。传输层支持生产 `Authorization: Bearer` 令牌校验、受限 CORS 白名单与开发模式回退（变量名见清单 FZ-9 行）：`GET /api/service-info` 为能力发现权威，绝不返回令牌。派发、幂等和 binding 语义未变；`crates/reconciliation` 的外部事件去重与游标推进未变；本机 OpenCode CLI 真实冒烟与 Rust 集成测试保留。审批/取消/人工收口/Plan/验收收口/产物/成本/副作用接口仍为待实现（前端以"能力未接入"空态先行，FZ-6）。后台 SSE 长连接仍未接入。
 
 依据：[F-10 OpenCode HTTP API](../F-10-验证记录-001-OpenCode-HttpApi.md)、[F-10 OpenCode 事件协议](../F-10-验证记录-002-OpenCode-事件协议.md)、[产品技术声明台账](../产品技术声明台账-2026-09-02.md)。
