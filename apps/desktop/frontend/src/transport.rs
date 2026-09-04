@@ -22,6 +22,7 @@ impl Transport for GlooTransport {
         let builder = match request.method {
             HttpMethod::Get => gloo_net::http::Request::get(&url),
             HttpMethod::Post => gloo_net::http::Request::post(&url),
+            HttpMethod::Delete => gloo_net::http::Request::delete(&url),
         };
         let mut builder = builder;
         for (key, value) in &request.headers {

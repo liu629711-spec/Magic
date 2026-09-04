@@ -9,12 +9,25 @@ use magic_persistence_port::{
 };
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, ToSql};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct SqlitePersistence {
     connection: Arc<Mutex<Connection>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionPresentation {
+    pub pinned: bool,
+    pub archived: bool,
+    pub standalone: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelProviderPresentation {
+    pub enabled: bool,
 }
 
 fn status_wire_name<T: Serialize>(value: &T) -> Result<String, PersistenceError> {
@@ -118,9 +131,38 @@ impl SqlitePersistence {
              CREATE TABLE IF NOT EXISTS schema_meta (
                  key TEXT PRIMARY KEY,
                  value TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS session_presentation (
+                 session_id TEXT PRIMARY KEY,
+                 pinned INTEGER NOT NULL DEFAULT 0,
+                 archived INTEGER NOT NULL DEFAULT 0,
+                 standalone INTEGER NOT NULL DEFAULT 0,
+                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                 CHECK (pinned IN (0, 1)),
+                 CHECK (archived IN (0, 1)),
+                 CHECK (standalone IN (0, 1))
+             );
+             CREATE TABLE IF NOT EXISTS session_project (
+                 session_id TEXT PRIMARY KEY,
+                 directory TEXT NOT NULL,
+                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+             );
+             CREATE TABLE IF NOT EXISTS model_provider_presentation (
+                 provider_id TEXT PRIMARY KEY,
+                 enabled INTEGER NOT NULL DEFAULT 1,
+                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                 CHECK (enabled IN (0, 1))
              );"
             ))
             .map_err(storage_error)?;
+        if !column_exists(&connection, "session_presentation", "standalone")? {
+            connection
+                .execute(
+                    "ALTER TABLE session_presentation ADD COLUMN standalone INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )
+                .map_err(storage_error)?;
+        }
         let legacy = !column_exists(&connection, "event_ledger", "occurred_at")?;
         if legacy {
             connection
@@ -149,6 +191,194 @@ impl SqlitePersistence {
             .execute(
                 "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('timestamps_ready', '1')",
                 [],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    pub fn session_presentations(
+        &self,
+    ) -> Result<HashMap<String, SessionPresentation>, PersistenceError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| storage_error("sqlite mutex poisoned"))?;
+        let mut statement = connection
+            .prepare("SELECT session_id, pinned, archived, standalone FROM session_presentation")
+            .map_err(storage_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    SessionPresentation {
+                        pinned: row.get::<_, i64>(1)? != 0,
+                        archived: row.get::<_, i64>(2)? != 0,
+                        standalone: row.get::<_, i64>(3)? != 0,
+                    },
+                ))
+            })
+            .map_err(storage_error)?;
+        rows.collect::<Result<HashMap<_, _>, _>>()
+            .map_err(storage_error)
+    }
+
+    pub fn set_session_pinned(
+        &self,
+        session_id: &str,
+        pinned: bool,
+    ) -> Result<(), PersistenceError> {
+        self.update_session_presentation(session_id, Some(pinned), None, None)
+    }
+
+    pub fn archive_session_presentation(&self, session_id: &str) -> Result<(), PersistenceError> {
+        self.update_session_presentation(session_id, Some(false), Some(true), None)
+    }
+
+    pub fn mark_session_standalone(&self, session_id: &str) -> Result<(), PersistenceError> {
+        self.update_session_presentation(session_id, None, None, Some(true))
+    }
+
+    pub fn session_project_directories(&self) -> Result<HashMap<String, String>, PersistenceError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| storage_error("sqlite mutex poisoned"))?;
+        let mut statement = connection
+            .prepare("SELECT session_id, directory FROM session_project")
+            .map_err(storage_error)?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(storage_error)?;
+        rows.collect::<Result<HashMap<_, _>, _>>()
+            .map_err(storage_error)
+    }
+
+    pub fn model_provider_presentations(
+        &self,
+    ) -> Result<HashMap<String, ModelProviderPresentation>, PersistenceError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| storage_error("sqlite mutex poisoned"))?;
+        let mut statement = connection
+            .prepare("SELECT provider_id, enabled FROM model_provider_presentation")
+            .map_err(storage_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    ModelProviderPresentation {
+                        enabled: row.get::<_, i64>(1)? != 0,
+                    },
+                ))
+            })
+            .map_err(storage_error)?;
+        rows.collect::<Result<HashMap<_, _>, _>>()
+            .map_err(storage_error)
+    }
+
+    pub fn set_model_provider_enabled(
+        &self,
+        provider_id: &str,
+        enabled: bool,
+    ) -> Result<(), PersistenceError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| storage_error("sqlite mutex poisoned"))?;
+        connection
+            .execute(
+                &format!(
+                    "INSERT INTO model_provider_presentation (provider_id, enabled, updated_at)
+                     VALUES (?1, ?2, {UTC_NOW_SQL})
+                     ON CONFLICT(provider_id) DO UPDATE SET
+                         enabled = excluded.enabled,
+                         updated_at = {UTC_NOW_SQL}"
+                ),
+                params![provider_id, bool_to_sql(enabled)],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    pub fn remove_model_provider_presentation(
+        &self,
+        provider_id: &str,
+    ) -> Result<(), PersistenceError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| storage_error("sqlite mutex poisoned"))?;
+        connection
+            .execute(
+                "DELETE FROM model_provider_presentation WHERE provider_id = ?1",
+                [provider_id],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    pub fn assign_session_project(
+        &self,
+        session_id: &str,
+        directory: &str,
+    ) -> Result<(), PersistenceError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| storage_error("sqlite mutex poisoned"))?;
+        connection
+            .execute(
+                &format!(
+                    "INSERT INTO session_project (session_id, directory, updated_at)
+                     VALUES (?1, ?2, {UTC_NOW_SQL})
+                     ON CONFLICT(session_id) DO UPDATE SET
+                         directory = excluded.directory,
+                         updated_at = {UTC_NOW_SQL}"
+                ),
+                params![session_id, directory],
+            )
+            .map_err(storage_error)?;
+        connection
+            .execute(
+                "UPDATE session_presentation SET standalone = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id = ?1",
+                [session_id],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    fn update_session_presentation(
+        &self,
+        session_id: &str,
+        pinned: Option<bool>,
+        archived: Option<bool>,
+        standalone: Option<bool>,
+    ) -> Result<(), PersistenceError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| storage_error("sqlite mutex poisoned"))?;
+        connection
+            .execute(
+                &format!(
+                    "INSERT INTO session_presentation (session_id, pinned, archived, standalone, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, {UTC_NOW_SQL})
+                     ON CONFLICT(session_id) DO UPDATE SET
+                         pinned = COALESCE(?5, session_presentation.pinned),
+                         archived = COALESCE(?6, session_presentation.archived),
+                         standalone = COALESCE(?7, session_presentation.standalone),
+                         updated_at = {UTC_NOW_SQL}"
+                ),
+                params![
+                    session_id,
+                    pinned.map(bool_to_sql).unwrap_or(0),
+                    archived.map(bool_to_sql).unwrap_or(0),
+                    standalone.map(bool_to_sql).unwrap_or(0),
+                    pinned.map(bool_to_sql),
+                    archived.map(bool_to_sql),
+                    standalone.map(bool_to_sql),
+                ],
             )
             .map_err(storage_error)?;
         Ok(())
@@ -235,6 +465,14 @@ impl SqlitePersistence {
                     .unwrap();
             }
         }
+    }
+}
+
+fn bool_to_sql(value: bool) -> i64 {
+    if value {
+        1
+    } else {
+        0
     }
 }
 
@@ -325,7 +563,9 @@ impl AttemptRepository for SqlitePersistence {
             .query_row([&attempt_id.0], |row| row.get::<_, String>(0))
             .optional()
             .map_err(storage_error)?;
-        value.map(|status| parse_attempt_status(&status)).transpose()
+        value
+            .map(|status| parse_attempt_status(&status))
+            .transpose()
     }
 
     fn active_attempts(&self) -> Result<Vec<ActiveAttempt>, PersistenceError> {
@@ -576,9 +816,11 @@ impl TaskRepository for SqlitePersistence {
             .map_err(|_| storage_error("sqlite mutex poisoned"))?;
         let transaction = connection.unchecked_transaction().map_err(storage_error)?;
         let current: String = transaction
-            .query_row("SELECT status FROM tasks WHERE id = ?1", [&task_id.0], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT status FROM tasks WHERE id = ?1",
+                [&task_id.0],
+                |row| row.get(0),
+            )
             .map_err(storage_error)?;
         let next_seq: i64 = transaction
             .query_row(
@@ -649,21 +891,28 @@ impl TaskRepository for SqlitePersistence {
         }
         params.push(Box::new(limit as i64));
         params.push(Box::new(offset as i64));
-        sql.push_str(&format!(" LIMIT ?{} OFFSET ?{}", params.len() - 1, params.len()));
+        sql.push_str(&format!(
+            " LIMIT ?{} OFFSET ?{}",
+            params.len() - 1,
+            params.len()
+        ));
         let mut statement = connection.prepare(&sql).map_err(storage_error)?;
         let rows = statement
-            .query_map(params_from_iter(params.iter().map(|param| param.as_ref())), |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                    row.get::<_, Option<i64>>(5)?,
-                    row.get::<_, Option<String>>(6)?,
-                    row.get::<_, i64>(7)?,
-                ))
-            })
+            .query_map(
+                params_from_iter(params.iter().map(|param| param.as_ref())),
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, Option<i64>>(5)?,
+                        row.get::<_, Option<String>>(6)?,
+                        row.get::<_, i64>(7)?,
+                    ))
+                },
+            )
             .map_err(storage_error)?;
         let mut items = Vec::new();
         for row in rows {
@@ -742,7 +991,10 @@ impl TaskRepository for SqlitePersistence {
             }
         } else {
             let rows = statement
-                .query_map(params![task_id.0, before_attempt_no.map(i64::from)], map_row)
+                .query_map(
+                    params![task_id.0, before_attempt_no.map(i64::from)],
+                    map_row,
+                )
                 .map_err(storage_error)?;
             for row in rows {
                 let (id, no, status, last_seq) = row.map_err(storage_error)?;
@@ -816,12 +1068,7 @@ impl EventQueryRepository for SqlitePersistence {
             .map_err(storage_error)?;
         let rows = statement
             .query_map(
-                params![
-                    attempt_id.0,
-                    after_seq as i64,
-                    source,
-                    limit as i64
-                ],
+                params![attempt_id.0, after_seq as i64, source, limit as i64],
                 ledger_event_row,
             )
             .map_err(storage_error)?;
@@ -864,7 +1111,7 @@ impl EventQueryRepository for SqlitePersistence {
         let sql = format!(
             "SELECT seq, event_type, source, source_event_id, payload_json, occurred_at
              FROM event_ledger
-             WHERE aggregate_type = 'opencode' AND aggregate_id IN ({placeholders}) AND seq > ?{}
+             WHERE aggregate_id IN ({placeholders}) AND seq > ?{}
              ORDER BY seq ASC, aggregate_id ASC LIMIT ?{}",
             session_ids.len() + 1,
             session_ids.len() + 2
@@ -877,7 +1124,10 @@ impl EventQueryRepository for SqlitePersistence {
         params.push(Box::new(limit as i64));
         let mut statement = connection.prepare(&sql).map_err(storage_error)?;
         let rows = statement
-            .query_map(params_from_iter(params.iter().map(|param| param.as_ref())), ledger_event_row)
+            .query_map(
+                params_from_iter(params.iter().map(|param| param.as_ref())),
+                ledger_event_row,
+            )
             .map_err(storage_error)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(storage_error)
     }
@@ -896,16 +1146,18 @@ impl EventQueryRepository for SqlitePersistence {
             .join(", ");
         let sql = format!(
             "SELECT COALESCE(MAX(seq), 0) FROM event_ledger
-             WHERE aggregate_type = 'opencode' AND aggregate_id IN ({placeholders})"
+             WHERE aggregate_id IN ({placeholders})"
         );
         let params: Vec<Box<dyn ToSql>> = session_ids
             .iter()
             .map(|id| Box::new(id.clone()) as Box<dyn ToSql>)
             .collect();
         let seq: i64 = connection
-            .query_row(&sql, params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
-                row.get(0)
-            })
+            .query_row(
+                &sql,
+                params_from_iter(params.iter().map(|p| p.as_ref())),
+                |row| row.get(0),
+            )
             .map_err(storage_error)?;
         Ok(seq.max(0) as u64)
     }
@@ -928,15 +1180,14 @@ impl EventQueryRepository for SqlitePersistence {
         Ok(seq.max(0) as u64)
     }
 
-    fn opencode_cursor_watermark(&self) -> Result<u64, PersistenceError> {
+    fn execution_cursor_watermark(&self) -> Result<u64, PersistenceError> {
         let connection = self
             .connection
             .lock()
             .map_err(|_| storage_error("sqlite mutex poisoned"))?;
         let seq: i64 = connection
             .query_row(
-                "SELECT COALESCE(MAX(last_confirmed_seq), 0) FROM event_cursor
-                 WHERE aggregate_type = 'opencode'",
+                "SELECT COALESCE(MAX(last_confirmed_seq), 0) FROM event_cursor",
                 [],
                 |row| row.get(0),
             )
@@ -1124,7 +1375,9 @@ fn storage_error(error: impl ToString) -> PersistenceError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use magic_persistence_port::{AttemptRepository, EventQueryRepository, EventRepository, TaskRepository};
+    use magic_persistence_port::{
+        AttemptRepository, EventQueryRepository, EventRepository, TaskRepository,
+    };
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
     static TEMP_DB_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -1182,6 +1435,60 @@ mod tests {
             Some(AttemptStatus::Running)
         );
         assert_eq!(store.event_count(&attempt_id.0), 2);
+    }
+
+    #[test]
+    fn session_presentation_persists_pin_and_archive_state() {
+        let store = SqlitePersistence::open_in_memory().unwrap();
+        store.set_session_pinned("session-1", true).unwrap();
+        assert_eq!(
+            store.session_presentations().unwrap().get("session-1"),
+            Some(&SessionPresentation {
+                pinned: true,
+                archived: false,
+                standalone: false,
+            })
+        );
+        store.mark_session_standalone("session-1").unwrap();
+        store.archive_session_presentation("session-1").unwrap();
+        assert_eq!(
+            store.session_presentations().unwrap().get("session-1"),
+            Some(&SessionPresentation {
+                pinned: false,
+                archived: true,
+                standalone: true,
+            })
+        );
+    }
+
+    #[test]
+    fn model_provider_presentation_persists_enabled_state() {
+        let store = SqlitePersistence::open_in_memory().unwrap();
+        assert!(store.model_provider_presentations().unwrap().is_empty());
+        store
+            .set_model_provider_enabled("provider-1", false)
+            .unwrap();
+        assert_eq!(
+            store
+                .model_provider_presentations()
+                .unwrap()
+                .get("provider-1"),
+            Some(&ModelProviderPresentation { enabled: false })
+        );
+        store
+            .set_model_provider_enabled("provider-1", true)
+            .unwrap();
+        assert_eq!(
+            store
+                .model_provider_presentations()
+                .unwrap()
+                .get("provider-1"),
+            Some(&ModelProviderPresentation { enabled: true })
+        );
+        store
+            .remove_model_provider_presentation("provider-1")
+            .unwrap();
+        assert!(store.model_provider_presentations().unwrap().is_empty());
     }
 
     #[test]
@@ -1245,6 +1552,9 @@ mod tests {
                      event_type TEXT NOT NULL, source TEXT NOT NULL, source_event_id TEXT,
                      payload_json TEXT NOT NULL,
                      UNIQUE(aggregate_type, aggregate_id, seq), UNIQUE(source, source_event_id));
+                 CREATE TABLE session_presentation (
+                     session_id TEXT PRIMARY KEY, pinned INTEGER NOT NULL DEFAULT 0,
+                     archived INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
                  INSERT INTO task_attempt (id, task_id, attempt_no, status, idempotency_key, input_hash)
                      VALUES ('attempt-1', 'task-1', 1, 'created', 'key-1', 'hash-1');
                  INSERT INTO event_ledger (aggregate_type, aggregate_id, seq, event_type, source, payload_json)
@@ -1270,12 +1580,16 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(occurred_at.is_none(), "legacy event rows keep occurred_at NULL");
-        drop(connection);
-        assert_eq!(
-            store.schema_meta("timestamps_ready").as_deref(),
-            Some("1")
+        assert!(
+            occurred_at.is_none(),
+            "legacy event rows keep occurred_at NULL"
         );
+        assert!(
+            column_exists(&connection, "session_presentation", "standalone").unwrap(),
+            "existing session presentation rows gain the standalone marker"
+        );
+        drop(connection);
+        assert_eq!(store.schema_meta("timestamps_ready").as_deref(), Some("1"));
         assert!(store.schema_meta("timestamps_approximate").is_some());
         assert_eq!(
             store.timestamp_ordering().unwrap(),
@@ -1283,7 +1597,11 @@ mod tests {
         );
 
         let new_event_seq = store
-            .append_status(&TaskId("task-1".into()), &AttemptId("attempt-1".into()), AttemptStatus::Admitted)
+            .append_status(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-1".into()),
+                AttemptStatus::Admitted,
+            )
             .unwrap();
         assert_eq!(new_event_seq, 2);
         let connection = store.connection.lock().unwrap();
@@ -1346,14 +1664,19 @@ mod tests {
         assert!(occurred_at.is_some());
 
         let duplicate = store.create_task(&task_record("task-2"), "idem-1", "hash-2");
-        assert!(duplicate.is_err(), "task idempotency key is globally unique");
+        assert!(
+            duplicate.is_err(),
+            "task idempotency key is globally unique"
+        );
     }
 
     #[test]
     fn task_list_projects_current_attempt_and_last_seq() {
         let store = SqlitePersistence::open_in_memory().unwrap();
         let (task_id, attempt_id) = ids();
-        store.create_task(&task_record("task-1"), "idem-1", "hash-1").unwrap();
+        store
+            .create_task(&task_record("task-1"), "idem-1", "hash-1")
+            .unwrap();
 
         let rows = store
             .list_tasks(None, None, 0, 10, TimestampOrdering::UpdatedAt)
@@ -1362,7 +1685,9 @@ mod tests {
         assert_eq!(rows[0].current_attempt_no, None);
         assert_eq!(rows[0].last_seq, 0);
 
-        store.append_task_status(&task_id, TaskStatus::Ready).unwrap();
+        store
+            .append_task_status(&task_id, TaskStatus::Ready)
+            .unwrap();
         store
             .create_attempt(&task_id, &attempt_id, 1, "request-1", "hash-1")
             .unwrap();
@@ -1445,9 +1770,7 @@ mod tests {
                 payload_json: "{}".into(),
             })
             .unwrap();
-        let session_events = store
-            .session_events(&["session-1".into()], 0, 10)
-            .unwrap();
+        let session_events = store.session_events(&["session-1".into()], 0, 10).unwrap();
         assert_eq!(session_events.len(), 1);
         assert_eq!(session_events[0].source, "opencode-v1");
         assert!(session_events[0].occurred_at.is_some());
@@ -1459,6 +1782,9 @@ mod tests {
             0
         );
         assert_eq!(store.session_max_seq(&["session-1".into()]).unwrap(), 1);
-        assert_eq!(store.attempt_task(&attempt_id).unwrap().unwrap().0, "task-1");
+        assert_eq!(
+            store.attempt_task(&attempt_id).unwrap().unwrap().0,
+            "task-1"
+        );
     }
 }

@@ -4,11 +4,11 @@ Magic 是面向真实交付的 Agent 工作台。本文件只统一产品和领�
 
 ## 工作对象
 
-**工作区（Workspace）**：用户文件、会话、工程和资源共同所在的范围。
-_Avoid_: 工程、文件夹
+**项目（Project）**：产品侧的容器，下面可以管理多个工作区和会话。
+_Avoid_: 把项目当作 Agent 实际工作的目录
 
-**工程（Project）**：用户确认后长期维护的目标、组织、任务和知识边界。
-_Avoid_: 工作区、仓库
+**工作区（Workspace）**：项目下的一个本地工作目录（文件夹），是 Agent 读取、修改和运行文件的地方。
+_Avoid_: 项目、工程
 
 **会话（Session）**：围绕一项连续工作的交流和执行现场。
 _Avoid_: 运行、任务
@@ -28,6 +28,9 @@ _Avoid_: 回合、Session、Run
 **底层绑定（Execution Binding）**：Attempt 与具体执行底座会话、输入、进程或事件引用之间的关系。
 _Avoid_: Run 绑定（除非底座实际提供该对象）
 
+**执行底座（Execution Base）**：提供会话、模型、工具和执行能力的外部 Agent 运行时；当前为 DSH。
+_Avoid_: Magic 产品层
+
 ## 结果与治理
 
 **产物（Artifact）**：用户可以访问、验证并使用的交付结果。
@@ -46,4 +49,4 @@ _Avoid_: 模型成功、请求成功
 _Avoid_: 空闲、异常
 
 **幂等键（Idempotency Key）**：客户端或 Magic 为一次有副作用请求提供的稳定标识，用于避免重复执行。
-_Avoid_: OpenCode messageID（它只是底层引用）
+_Avoid_: 底层消息 ID（它只是底层引用）

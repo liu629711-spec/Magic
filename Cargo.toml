@@ -5,6 +5,7 @@ members = [
   "crates/domain",
   "crates/contracts",
   "crates/execution-port",
+  "crates/execution-dsh-v1",
   "crates/execution-opencode-v1",
   "crates/persistence-port",
   "crates/persistence",

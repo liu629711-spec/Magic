@@ -1,13 +1,12 @@
 //! Independent local API/Worker process entry point.
 
+#![recursion_limit = "256"]
+
 use axum::{
-    extract::{
-        Path, Query, Request, State,
-        rejection::JsonRejection,
-    },
-    http::{HeaderValue, Method, StatusCode, header},
+    extract::{rejection::JsonRejection, Path, Query, Request, State},
+    http::{header, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use magic_application::{
@@ -16,12 +15,20 @@ use magic_application::{
     TaskListQuery,
 };
 use magic_contracts::{
-    BindingResponse, CreateTaskRequest as CreateTaskBody, CreateTaskResponse, EventsResponse,
-    HealthResponse, LedgerEventDto, ServiceInfoResponse, TaskDetailResponse, TaskListItem,
-    TaskListResponse, TaskMode, WorkerInfo,
+    BindingResponse, CreateSessionResponse, CreateTaskRequest as CreateTaskBody,
+    CreateTaskResponse, DiscoverModelsRequest, DiscoverModelsResponse, EventsResponse,
+    FileReferenceItem, FileReferenceResponse, HealthResponse, LedgerEventDto, RenameSessionRequest,
+    RenameSessionResponse, SaveModelProviderRequest, SaveModelProviderResponse,
+    SelectSessionModelRequest, SendSessionMessageResponse, ServiceInfoResponse,
+    SessionActivityResponse, SessionJobActivity, SessionListItem, SessionListResponse,
+    SessionUsageStats,
+    SessionToolActivity, SetModelProviderPresentationRequest, SetSessionPresentationRequest,
+    SetSessionProjectRequest, TaskDetailResponse, TaskListItem, TaskListResponse, TaskMode,
+    WorkerInfo,
 };
 use magic_domain::{AttemptId, AttemptStatus, TaskId, TaskStatus};
-use magic_execution_opencode_v1::OpenCodeV1Adapter;
+use magic_execution_dsh_v1::{DshLaunchConfig, DshProviderDraft, DshV1Adapter};
+use magic_execution_port::ExecutionPort;
 use magic_persistence::SqlitePersistence;
 use magic_persistence_port::{EventQueryRepository, TimestampOrdering};
 use magic_reconciliation::RecoveryWorker;
@@ -30,9 +37,10 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     env,
+    path::Path as FsPath,
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     time::Duration,
 };
@@ -45,7 +53,8 @@ const MAX_LIST_LIMIT: usize = 500;
 
 #[derive(Clone)]
 struct AppState {
-    application: Arc<Application<OpenCodeV1Adapter, SqlitePersistence>>,
+    application: Arc<Application<DshV1Adapter, SqlitePersistence>>,
+    dsh: Arc<DshV1Adapter>,
     repository: SqlitePersistence,
     transport: Arc<TransportConfig>,
     instance_id: String,
@@ -70,6 +79,34 @@ struct CreateAttemptBody {
     request_hash: String,
     directory: Option<String>,
     input: String,
+}
+
+#[derive(Deserialize)]
+struct CreateSessionBody {
+    directory: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ValidateDirectoryBody {
+    directory: String,
+}
+
+#[derive(Serialize)]
+struct ValidatedDirectoryResponse {
+    directory: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct SendSessionMessageBody {
+    input: String,
+}
+
+#[derive(Deserialize)]
+struct DshRpcBody {
+    endpoint: String,
+    #[serde(default)]
+    args: Value,
 }
 
 #[derive(Serialize)]
@@ -97,9 +134,6 @@ async fn main() {
     let database_path = env::var("MAGIC_DATABASE_PATH").unwrap_or_else(|_| "magic.db".into());
     let repository = SqlitePersistence::open(database_path).expect("open Magic database");
     let worker_repository = repository.clone();
-    let opencode_url =
-        env::var("MAGIC_OPENCODE_URL").unwrap_or_else(|_| "http://127.0.0.1:45176".into());
-    let worker_url = opencode_url.clone();
     let poll_ms = env::var("MAGIC_RECOVERY_POLL_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
@@ -111,11 +145,12 @@ async fn main() {
         running: AtomicBool::new(false),
         poll_ms,
     });
+    let dsh = Arc::new(
+        DshV1Adapter::launch(DshLaunchConfig::from_environment()).expect("launch DeepSeek Harness"),
+    );
     let state = AppState {
-        application: Arc::new(Application::new(
-            OpenCodeV1Adapter::new(opencode_url),
-            repository.clone(),
-        )),
+        application: Arc::new(Application::new((*dsh).clone(), repository.clone())),
+        dsh: dsh.clone(),
         repository,
         transport,
         instance_id: Uuid::new_v4().to_string(),
@@ -123,10 +158,7 @@ async fn main() {
     };
     tokio::spawn(async move {
         worker_status.running.store(true, Ordering::SeqCst);
-        let worker = Arc::new(RecoveryWorker::new(
-            OpenCodeV1Adapter::new(worker_url),
-            worker_repository,
-        ));
+        let worker = Arc::new(RecoveryWorker::new((*dsh).clone(), worker_repository));
         // FZ-1 startup recovery: one observation pass over active attempts.
         let probe_worker = worker.clone();
         match tokio::task::spawn_blocking(move || probe_worker.probe_active_attempts()).await {
@@ -169,7 +201,7 @@ fn load_transport_config(address: &str) -> TransportConfig {
     let token = env::var("MAGIC_API_TOKEN")
         .ok()
         .filter(|token| !token.trim().is_empty());
-    let cors_origins: Vec<String> = env::var("MAGIC_API_CORS_ORIGINS")
+    let mut cors_origins: Vec<String> = env::var("MAGIC_API_CORS_ORIGINS")
         .ok()
         .map(|raw| {
             raw.split(',')
@@ -196,8 +228,16 @@ fn load_transport_config(address: &str) -> TransportConfig {
                 "MAGIC_ALLOW_INSECURE_LOCAL_DEV requires a loopback bind address, got {address}"
             );
         }
+        // Browser preview is a strictly local development mode. Production
+        // still requires an explicit allowlist together with its bearer token.
+        if cors_origins.is_empty() {
+            cors_origins.push("http://127.0.0.1:1420".into());
+        }
     }
-    TransportConfig { token, cors_origins }
+    TransportConfig {
+        token,
+        cors_origins,
+    }
 }
 
 fn is_loopback_address(address: &str) -> bool {
@@ -241,7 +281,11 @@ fn check_bearer(header: Option<&str>, expected: &str) -> BearerCheck {
     }
 }
 
-async fn require_bearer(State(state): State<AppState>, request: Request, next: axum::middleware::Next) -> Response {
+async fn require_bearer(
+    State(state): State<AppState>,
+    request: Request,
+    next: axum::middleware::Next,
+) -> Response {
     let Some(expected) = state.transport.token.as_deref() else {
         return next.run(request).await;
     };
@@ -273,6 +317,48 @@ fn cors_layer(config: &TransportConfig) -> CorsLayer {
 
 fn router(state: AppState) -> Router {
     let api = Router::new()
+        .route("/api/sessions", get(list_sessions).post(create_session))
+        .route(
+            "/api/sessions/{session_id}/project",
+            post(set_session_project),
+        )
+        .route("/api/directories/validate", post(validate_directory))
+        .route("/api/sessions/status", get(session_statuses))
+        .route(
+            "/api/sessions/{session_id}/messages",
+            get(session_messages).post(send_session_message),
+        )
+        .route("/api/sessions/{session_id}/cancel", post(cancel_session))
+        .route("/api/sessions/{session_id}/rename", post(rename_session))
+        .route("/api/sessions/{session_id}/fork", post(fork_session))
+        .route("/api/sessions/{session_id}/archive", post(archive_session))
+        .route(
+            "/api/sessions/{session_id}/presentation",
+            post(set_session_presentation),
+        )
+        .route("/api/sessions/{session_id}/activity", get(session_activity))
+        .route(
+            "/api/sessions/{session_id}/file-references",
+            get(file_references),
+        )
+        .route("/api/models", get(model_configuration))
+        .route("/api/dsh/plugins", get(dsh_plugins))
+        .route("/api/dsh/agent-presets", get(dsh_agent_presets))
+        .route("/api/dsh/rpc", post(dsh_rpc))
+        .route("/api/model-providers", post(save_model_provider))
+        .route(
+            "/api/model-providers/{provider_id}",
+            delete(delete_model_provider),
+        )
+        .route(
+            "/api/model-providers/{provider_id}/presentation",
+            post(set_model_provider_presentation),
+        )
+        .route("/api/model-providers/discover", post(discover_models))
+        .route(
+            "/api/sessions/{session_id}/model",
+            post(select_session_model),
+        )
         .route("/api/tasks", post(create_task).get(list_tasks))
         .route("/api/tasks/{task_id}", get(task_detail))
         .route(
@@ -302,6 +388,39 @@ fn router(state: AppState) -> Router {
 
 fn capabilities() -> Value {
     serde_json::json!({
+        "session_list": true,
+        "session_create": true,
+        "session_messages": true,
+        "session_cancel": true,
+        "session_rename": true,
+        "session_fork": true,
+        "session_archive": true,
+        "session_presentation": true,
+        "session_activity": true,
+        "file_references": true,
+        "session_status": true,
+        "model_configuration": true,
+        "model_provider_save": true,
+        "model_provider_presentation": true,
+        "model_discovery": true,
+        "session_model_selection": true,
+        "dsh_plugin_inventory": true,
+        "dsh_agent_presets": true,
+        "dsh_remote_controls": true,
+        "dsh_reasoning_events": true,
+        "dsh_tool_events": true,
+        "dsh_terminal_events": true,
+        "dsh_approval_events": true,
+        "dsh_permission_presets": true,
+        "dsh_subagents": true,
+        "dsh_background_jobs": true,
+        "dsh_goals": true,
+        "dsh_plan_mode": true,
+        "dsh_skills": true,
+        "dsh_web_tools": true,
+        "dsh_attachments": true,
+        "dsh_session_search": true,
+        "dsh_message_feedback": true,
         "task_create": true,
         "task_list": true,
         "task_detail": true,
@@ -325,10 +444,11 @@ fn capabilities() -> Value {
 
 async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
     let repository = state.repository.clone();
-    let cursor_watermark = tokio::task::spawn_blocking(move || repository.opencode_cursor_watermark())
-        .await
-        .ok()
-        .and_then(|result| result.ok());
+    let cursor_watermark =
+        tokio::task::spawn_blocking(move || repository.execution_cursor_watermark())
+            .await
+            .ok()
+            .and_then(|result| result.ok());
     Json(HealthResponse {
         healthy: true,
         protocol_version: Some(PROTOCOL_VERSION.into()),
@@ -352,13 +472,656 @@ async fn service_info(State(state): State<AppState>) -> Json<ServiceInfoResponse
     })
 }
 
+async fn list_sessions(
+    State(state): State<AppState>,
+) -> Result<Json<SessionListResponse>, ApiError> {
+    let dsh = state.dsh.clone();
+    let sessions = tokio::task::spawn_blocking(move || dsh.sessions())
+        .await
+        .map_err(join_error("list sessions worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    let repository = state.repository.clone();
+    let presentations = tokio::task::spawn_blocking(move || repository.session_presentations())
+        .await
+        .map_err(join_error("list session presentations worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    let repository = state.repository.clone();
+    let project_directories =
+        tokio::task::spawn_blocking(move || repository.session_project_directories())
+            .await
+            .map_err(join_error("list session projects worker failed"))?
+            .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    let items = sessions
+        .into_iter()
+        .filter(|session| {
+            !presentations
+                .get(&session.id)
+                .is_some_and(|presentation| presentation.archived)
+        })
+        .map(|session| {
+            let project_directory = project_directories.get(&session.id).cloned();
+            SessionListItem {
+                pinned: presentations
+                    .get(&session.id)
+                    .is_some_and(|presentation| presentation.pinned),
+                standalone: project_directory.is_none()
+                    && presentations
+                        .get(&session.id)
+                        .is_some_and(|presentation| presentation.standalone),
+                session_id: session.id,
+                title: session.title,
+                directory: project_directory.unwrap_or(session.directory),
+                parent_id: session.parent_id,
+                updated_at: session.updated_at,
+            }
+        })
+        .collect();
+    Ok(Json(SessionListResponse { items }))
+}
+
+async fn rename_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    body: Result<Json<RenameSessionRequest>, JsonRejection>,
+) -> Result<Json<RenameSessionResponse>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    let title = body.title.trim().to_owned();
+    if title.is_empty() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "session title must not be empty".into(),
+        )));
+    }
+    let dsh = state.dsh.clone();
+    let title = tokio::task::spawn_blocking(move || dsh.rename_session(&session_id, &title))
+        .await
+        .map_err(join_error("rename session worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(RenameSessionResponse { title }))
+}
+
+async fn fork_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<(StatusCode, Json<CreateSessionResponse>), ApiError> {
+    let repository = state.repository.clone();
+    let source_session_id = session_id.clone();
+    let source_is_standalone = tokio::task::spawn_blocking(move || {
+        repository.session_presentations().map(|presentations| {
+            presentations
+                .get(&source_session_id)
+                .is_some_and(|presentation| presentation.standalone)
+        })
+    })
+    .await
+    .map_err(join_error("read source session presentation worker failed"))?
+    .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    let dsh = state.dsh.clone();
+    let session = tokio::task::spawn_blocking(move || dsh.fork_session(&session_id))
+        .await
+        .map_err(join_error("fork session worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    if source_is_standalone {
+        let repository = state.repository.clone();
+        let fork_id = session.id.clone();
+        tokio::task::spawn_blocking(move || repository.mark_session_standalone(&fork_id))
+            .await
+            .map_err(join_error("mark fork session standalone worker failed"))?
+            .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    }
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateSessionResponse {
+            session_id: session.id,
+        }),
+    ))
+}
+
+async fn archive_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let dsh = state.dsh.clone();
+    let dsh_session_id = session_id.clone();
+    tokio::task::spawn_blocking(move || dsh.archive_session(&dsh_session_id))
+        .await
+        .map_err(join_error("archive session worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    let repository = state.repository.clone();
+    tokio::task::spawn_blocking(move || repository.archive_session_presentation(&session_id))
+        .await
+        .map_err(join_error("archive session presentation worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    Ok(Json(serde_json::json!({ "archived": true })))
+}
+
+async fn set_session_presentation(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    body: Result<Json<SetSessionPresentationRequest>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    let repository = state.repository.clone();
+    tokio::task::spawn_blocking(move || repository.set_session_pinned(&session_id, body.pinned))
+        .await
+        .map_err(join_error("set session presentation worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    Ok(Json(serde_json::json!({ "pinned": body.pinned })))
+}
+
+async fn set_session_project(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    body: Result<Json<SetSessionProjectRequest>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    let directory = body.directory.trim().to_owned();
+    if directory.is_empty() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "project directory must not be empty".into(),
+        )));
+    }
+    let repository = state.repository.clone();
+    let directory_for_storage = directory.clone();
+    tokio::task::spawn_blocking(move || {
+        repository.assign_session_project(&session_id, &directory_for_storage)
+    })
+    .await
+    .map_err(join_error("assign session project worker failed"))?
+    .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    Ok(Json(serde_json::json!({ "directory": directory })))
+}
+
+async fn create_session(
+    State(state): State<AppState>,
+    body: Result<Json<CreateSessionBody>, JsonRejection>,
+) -> Result<(StatusCode, Json<CreateSessionResponse>), ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    let is_standalone = body
+        .directory
+        .as_deref()
+        .is_none_or(|directory| directory.trim().is_empty());
+    let dsh = state.dsh.clone();
+    let session =
+        tokio::task::spawn_blocking(move || dsh.create_session(body.directory.as_deref()))
+            .await
+            .map_err(join_error("create session worker failed"))?
+            .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    if is_standalone {
+        let repository = state.repository.clone();
+        let session_id = session.id.clone();
+        tokio::task::spawn_blocking(move || repository.mark_session_standalone(&session_id))
+            .await
+            .map_err(join_error("mark standalone session worker failed"))?
+            .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    }
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateSessionResponse {
+            session_id: session.id,
+        }),
+    ))
+}
+
+async fn validate_directory(
+    body: Result<Json<ValidateDirectoryBody>, JsonRejection>,
+) -> Result<Json<ValidatedDirectoryResponse>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    let directory = body.directory.trim();
+    if directory.is_empty() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "directory must not be empty".into(),
+        )));
+    }
+    let path = FsPath::new(directory);
+    if !path.is_absolute() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "directory must be an absolute path".into(),
+        )));
+    }
+    let canonical = std::fs::canonicalize(path).map_err(|_| {
+        ApiError(ApplicationError::InvalidParameter(
+            "directory does not exist or cannot be accessed".into(),
+        ))
+    })?;
+    if !canonical.is_dir() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "path is not a directory".into(),
+        )));
+    }
+    let name = canonical
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(directory)
+        .to_owned();
+    Ok(Json(ValidatedDirectoryResponse {
+        directory: user_directory_path(&canonical),
+        name,
+    }))
+}
+
+fn user_directory_path(path: &FsPath) -> String {
+    let path = path.to_string_lossy();
+    if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{path}");
+    }
+    path.strip_prefix(r"\\?\").unwrap_or(&path).to_owned()
+}
+
+async fn session_messages(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let dsh = state.dsh.clone();
+    let messages = tokio::task::spawn_blocking(move || dsh.messages(&session_id))
+        .await
+        .map_err(join_error("get session messages worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(Value::Array(messages)))
+}
+
+async fn cancel_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let dsh = state.dsh.clone();
+    tokio::task::spawn_blocking(move || dsh.cancel_session(&session_id))
+        .await
+        .map_err(join_error("cancel session worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(serde_json::json!({ "accepted": true })))
+}
+
+async fn session_activity(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<SessionActivityResponse>, ApiError> {
+    let dsh = state.dsh.clone();
+    let activity = tokio::task::spawn_blocking(move || dsh.session_activity(&session_id))
+        .await
+        .map_err(join_error("get session activity worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(SessionActivityResponse {
+        tools: activity
+            .tools
+            .into_iter()
+            .map(|tool| SessionToolActivity {
+                call_id: tool.call_id,
+                name: tool.name,
+                status: tool.status,
+                arguments_summary: tool.arguments_summary,
+                result_summary: tool.result_summary,
+            })
+            .collect(),
+        jobs: activity
+            .jobs
+            .into_iter()
+            .map(|job| SessionJobActivity {
+                id: job.id,
+                kind: job.kind,
+                label: job.label,
+                status: job.status,
+                detail: job.detail,
+                started_at: job.started_at,
+                finished_at: job.finished_at,
+            })
+            .collect(),
+        stats: activity.stats.map(|stats| SessionUsageStats {
+            turns: stats.turns,
+            steps: stats.steps,
+            input_tokens: stats.input_tokens,
+            output_tokens: stats.output_tokens,
+            cache_read_tokens: stats.cache_read_tokens,
+            reasoning_tokens: stats.reasoning_tokens,
+        }),
+        jobs_available: activity.jobs_available,
+    }))
+}
+
+async fn file_references(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Json<FileReferenceResponse>, ApiError> {
+    let text = query.get("query").cloned().unwrap_or_default();
+    let dsh = state.dsh.clone();
+    let references = tokio::task::spawn_blocking(move || dsh.file_references(&session_id, &text))
+        .await
+        .map_err(join_error("get file references worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(FileReferenceResponse {
+        items: references
+            .into_iter()
+            .map(|item| FileReferenceItem {
+                path: item.path,
+                kind: item.kind,
+            })
+            .collect(),
+    }))
+}
+
+async fn send_session_message(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    body: Result<Json<SendSessionMessageBody>, JsonRejection>,
+) -> Result<Json<SendSessionMessageResponse>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    if body.input.trim().is_empty() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "message input must not be empty".into(),
+        )));
+    }
+    let dsh = state.dsh.clone();
+    let receipt = tokio::task::spawn_blocking(move || dsh.prompt_async(&session_id, &body.input))
+        .await
+        .map_err(join_error("send session message worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(SendSessionMessageResponse {
+        message_id: receipt.message_id,
+    }))
+}
+
+async fn session_statuses(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let dsh = state.dsh.clone();
+    let statuses = tokio::task::spawn_blocking(move || dsh.session_statuses())
+        .await
+        .map_err(join_error("get session statuses worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(Value::Object(statuses.into_iter().collect())))
+}
+
+async fn model_configuration(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let dsh = state.dsh.clone();
+    let mut configuration = tokio::task::spawn_blocking(move || dsh.model_configuration())
+        .await
+        .map_err(join_error("get model configuration worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    let repository = state.repository.clone();
+    let presentations =
+        tokio::task::spawn_blocking(move || repository.model_provider_presentations())
+            .await
+            .map_err(join_error("get model provider presentation worker failed"))?
+            .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    if let Some(object) = configuration.as_object_mut() {
+        object.insert(
+            "magic_provider_presentation".into(),
+            Value::Object(
+                presentations
+                    .into_iter()
+                    .map(|(provider_id, presentation)| {
+                        (
+                            provider_id,
+                            serde_json::json!({ "enabled": presentation.enabled }),
+                        )
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    Ok(Json(configuration))
+}
+
+async fn dsh_plugins(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let dsh = state.dsh.clone();
+    let value = tokio::task::spawn_blocking(move || dsh.plugin_inventory())
+        .await
+        .map_err(join_error("get DSH plugin inventory worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(value))
+}
+
+async fn dsh_agent_presets(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let dsh = state.dsh.clone();
+    let value = tokio::task::spawn_blocking(move || dsh.agent_presets())
+        .await
+        .map_err(join_error("get DSH agent preset worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(value))
+}
+
+async fn dsh_rpc(
+    State(state): State<AppState>,
+    body: Result<Json<DshRpcBody>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    // Keep the bridge limited to user-facing DSH controls. In particular,
+    // settings/credentials and arbitrary host invocation never cross this API.
+    const ALLOWED: &[&str] = &[
+        "agentPresets/read",
+        "agentPresets/copy",
+        "agentPresets/deletePreset",
+        "agentPresets/select",
+        "permission/preset",
+        "subagents/list",
+        "subagents/prompt",
+        "subagents/interruptByParent",
+        "commands/list",
+        "commands/execute",
+        "skills/list",
+        "directoryPicker/pick",
+        "directoryPicker/list",
+        "directoryPicker/createDirectory",
+        "sessionReferenceResolver/candidates",
+        "session/canOpenWorkspacePath",
+        "session/openWorkspacePath",
+        "settings/canOpenAgentPresetDirectory",
+        "settings/openAgentPresetDirectory",
+        "goals/create",
+        "goals/edit",
+        "goals/pause",
+        "goals/resume",
+        "goals/complete",
+        "goals/clear",
+        "messageFeedback/list",
+        "messageFeedback/put",
+        "messageFeedback/delete",
+        "session/search",
+        "session/page",
+        "session/attachment",
+    ];
+    if !ALLOWED.contains(&body.endpoint.as_str()) {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "DSH Remote 方法未向 Magic 开放".into(),
+        )));
+    }
+    let dsh = state.dsh.clone();
+    let value = tokio::task::spawn_blocking(move || dsh.remote_call(&body.endpoint, body.args))
+        .await
+        .map_err(join_error("call DSH Remote worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(value))
+}
+
+async fn save_model_provider(
+    State(state): State<AppState>,
+    body: Result<Json<SaveModelProviderRequest>, JsonRejection>,
+) -> Result<Json<SaveModelProviderResponse>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    let draft = provider_draft(
+        body.provider_id,
+        body.display_name,
+        body.base_url,
+        body.api,
+        body.models,
+        body.api_key,
+        true,
+    )?;
+    let dsh = state.dsh.clone();
+    let provider_id = tokio::task::spawn_blocking(move || dsh.save_provider(draft))
+        .await
+        .map_err(join_error("save model provider worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(SaveModelProviderResponse { provider_id }))
+}
+
+async fn delete_model_provider(
+    State(state): State<AppState>,
+    Path(provider_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let dsh = state.dsh.clone();
+    let presentation_provider_id = provider_id.clone();
+    tokio::task::spawn_blocking(move || dsh.delete_provider(&provider_id))
+        .await
+        .map_err(join_error("delete model provider worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    let repository = state.repository.clone();
+    tokio::task::spawn_blocking(move || {
+        repository.remove_model_provider_presentation(&presentation_provider_id)
+    })
+    .await
+    .map_err(join_error(
+        "remove model provider presentation worker failed",
+    ))?
+    .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn set_model_provider_presentation(
+    State(state): State<AppState>,
+    Path(provider_id): Path<String>,
+    body: Result<Json<SetModelProviderPresentationRequest>, JsonRejection>,
+) -> Result<StatusCode, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    if provider_id.trim().is_empty() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "provider id must not be empty".into(),
+        )));
+    }
+    let repository = state.repository.clone();
+    tokio::task::spawn_blocking(move || {
+        repository.set_model_provider_enabled(&provider_id, body.enabled)
+    })
+    .await
+    .map_err(join_error("set model provider presentation worker failed"))?
+    .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn discover_models(
+    State(state): State<AppState>,
+    body: Result<Json<DiscoverModelsRequest>, JsonRejection>,
+) -> Result<Json<DiscoverModelsResponse>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    let draft = provider_draft(
+        body.provider_id,
+        "discovery".into(),
+        body.base_url,
+        body.api,
+        Vec::new(),
+        body.api_key,
+        false,
+    )?;
+    let dsh = state.dsh.clone();
+    let models = tokio::task::spawn_blocking(move || dsh.discover_models(&draft))
+        .await
+        .map_err(join_error("discover models worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(DiscoverModelsResponse { models }))
+}
+
+async fn select_session_model(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    body: Result<Json<SelectSessionModelRequest>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    if body.provider.trim().is_empty() || body.model.trim().is_empty() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "model provider and model must not be empty".into(),
+        )));
+    }
+    let repository = state.repository.clone();
+    let provider_id = body.provider.clone();
+    let enabled = tokio::task::spawn_blocking(move || {
+        repository
+            .model_provider_presentations()
+            .map(|presentations| {
+                presentations
+                    .get(&provider_id)
+                    .map(|state| state.enabled)
+                    .unwrap_or(true)
+            })
+    })
+    .await
+    .map_err(join_error("get model provider presentation worker failed"))?
+    .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    if !enabled {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "provider is disabled in Magic".into(),
+        )));
+    }
+    let dsh = state.dsh.clone();
+    let selection = tokio::task::spawn_blocking(move || {
+        dsh.select_session_model(&session_id, &body.provider, &body.model)
+    })
+    .await
+    .map_err(join_error("select session model worker failed"))?
+    .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(selection))
+}
+
+fn provider_draft(
+    provider_id: Option<String>,
+    display_name: String,
+    base_url: String,
+    api: String,
+    models: Vec<String>,
+    api_key: Option<String>,
+    require_models: bool,
+) -> Result<DshProviderDraft, ApiError> {
+    let display_name = display_name.trim().to_owned();
+    let base_url = base_url.trim().to_owned();
+    let api = api.trim().to_owned();
+    let models: Vec<String> = models
+        .into_iter()
+        .map(|model| model.trim().to_owned())
+        .filter(|model| !model.is_empty())
+        .collect();
+    if display_name.is_empty() || base_url.is_empty() || api.is_empty() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "provider name, Base URL, and API format must not be empty".into(),
+        )));
+    }
+    if require_models && models.is_empty() {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "at least one model must be configured".into(),
+        )));
+    }
+    if !matches!(
+        api.as_str(),
+        "openai-completions" | "openai-responses" | "anthropic-messages"
+    ) {
+        return Err(ApiError(ApplicationError::InvalidParameter(
+            "unsupported API format".into(),
+        )));
+    }
+    Ok(DshProviderDraft {
+        provider_id: provider_id.filter(|value| !value.trim().is_empty()),
+        display_name,
+        base_url,
+        api,
+        models,
+        api_key: api_key.filter(|value| !value.trim().is_empty()),
+    })
+}
+
 async fn create_task(
     State(state): State<AppState>,
     body: Result<Json<CreateTaskBody>, JsonRejection>,
 ) -> Result<(StatusCode, Json<CreateTaskResponse>), ApiError> {
-    let Json(body) = body.map_err(|rejection| {
-        ApiError(ApplicationError::InvalidParameter(rejection.body_text()))
-    })?;
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
     let mode = match body.mode {
         TaskMode::Agent => "agent",
         TaskMode::Ceo => "ceo",
@@ -471,11 +1234,7 @@ async fn task_detail(
         status: detail.task.status,
         owner_id: detail.task.owner_id,
         acceptance_criteria: detail.task.acceptance_criteria,
-        attempts: detail
-            .attempts
-            .into_iter()
-            .map(attempt_summary)
-            .collect(),
+        attempts: detail.attempts.into_iter().map(attempt_summary).collect(),
         last_seq: detail.last_seq,
         updated_at: match detail.ordering {
             TimestampOrdering::Creation => None,
@@ -531,7 +1290,7 @@ async fn attempt_events(
     let source = match params.get("source").map(String::as_str) {
         None => None,
         Some("magic") => Some(EventSourceFilter::Magic),
-        Some("opencode-v1") => Some(EventSourceFilter::OpencodeV1),
+        Some("dsh-v1") => Some(EventSourceFilter::Execution),
         Some(other) => {
             return Err(ApiError(ApplicationError::InvalidParameter(format!(
                 "unknown event source: {other}"
@@ -570,7 +1329,9 @@ async fn attempt_events(
     }))
 }
 
-fn attempt_summary(row: magic_persistence_port::AttemptSummaryRow) -> magic_contracts::AttemptSummary {
+fn attempt_summary(
+    row: magic_persistence_port::AttemptSummaryRow,
+) -> magic_contracts::AttemptSummary {
     magic_contracts::AttemptSummary {
         attempt_id: row.attempt_id.0,
         attempt_no: row.attempt_no,
@@ -623,18 +1384,14 @@ fn parse_u32_param(raw: Option<&String>, name: &str) -> Result<Option<u32>, ApiE
     let Some(raw) = raw else {
         return Ok(None);
     };
-    raw.parse::<u32>()
-        .map(Some)
-        .map_err(|_| {
-            ApiError(ApplicationError::InvalidParameter(format!(
-                "invalid {name}: {raw}"
-            )))
-        })
+    raw.parse::<u32>().map(Some).map_err(|_| {
+        ApiError(ApplicationError::InvalidParameter(format!(
+            "invalid {name}: {raw}"
+        )))
+    })
 }
 
-fn join_error(
-    message: &'static str,
-) -> impl Fn(tokio::task::JoinError) -> ApiError {
+fn join_error(message: &'static str) -> impl Fn(tokio::task::JoinError) -> ApiError {
     move |error: tokio::task::JoinError| {
         ApiError(ApplicationError::Execution(format!("{message}: {error}")))
     }
@@ -749,26 +1506,32 @@ impl IntoResponse for ApiError {
 }
 
 fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
-    (status, Json(ApiErrorBody { error: message.into() })).into_response()
+    (
+        status,
+        Json(ApiErrorBody {
+            error: message.into(),
+        }),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use magic_persistence_port::{AttemptRepository, EventRepository};
-    use std::net::TcpListener;
     use axum::body::Body;
     use http_body_util::BodyExt;
+    use magic_persistence_port::{AttemptRepository, EventRepository};
+    use std::net::TcpListener;
     use tower::ServiceExt;
 
     fn test_state(transport: TransportConfig) -> AppState {
         let repository = SqlitePersistence::open_in_memory().unwrap();
         let refused = refused_port();
+        let dsh_origin = format!("http://127.0.0.1:{refused}");
+        let dsh = DshV1Adapter::connect(dsh_origin, "magic-test-cookie");
         AppState {
-            application: Arc::new(Application::new(
-                OpenCodeV1Adapter::new(format!("http://127.0.0.1:{refused}")),
-                repository.clone(),
-            )),
+            application: Arc::new(Application::new(dsh.clone(), repository.clone())),
+            dsh: Arc::new(dsh),
             repository,
             transport: Arc::new(transport),
             instance_id: "instance-test".into(),
@@ -847,9 +1610,68 @@ mod tests {
         assert_eq!(body["instance_id"], "instance-test");
         assert_eq!(body["capabilities"]["task_create"], true);
         assert_eq!(body["capabilities"]["attempt_events"], true);
+        assert_eq!(body["capabilities"]["session_rename"], true);
+        assert_eq!(body["capabilities"]["session_presentation"], true);
         assert_eq!(body["capabilities"]["task_complete"], false);
         assert_eq!(body["worker"]["poll_ms"], 30_000);
         assert!(body.get("token").is_none());
+    }
+
+    #[tokio::test]
+    async fn directory_validation_accepts_an_existing_absolute_directory() {
+        let app = router(test_state(dev_config()));
+        let directory = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let (status, body) = status_of(
+            app,
+            json_request(
+                Method::POST,
+                "/api/directories/validate",
+                serde_json::json!({ "directory": directory }),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body["directory"]
+            .as_str()
+            .is_some_and(|path| !path.is_empty() && !path.starts_with(r"\\?\")));
+    }
+
+    #[tokio::test]
+    async fn directory_validation_rejects_a_relative_path() {
+        let app = router(test_state(dev_config()));
+        let (status, _) = status_of(
+            app,
+            json_request(
+                Method::POST,
+                "/api/directories/validate",
+                serde_json::json!({ "directory": "." }),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn session_presentation_endpoint_persists_the_pin_choice() {
+        let state = test_state(dev_config());
+        let repository = state.repository.clone();
+        let app = router(state);
+        let (status, body) = status_of(
+            app,
+            json_request(
+                Method::POST,
+                "/api/sessions/session-1/presentation",
+                serde_json::json!({ "pinned": true }),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["pinned"], true);
+        assert!(repository
+            .session_presentations()
+            .unwrap()
+            .get("session-1")
+            .is_some_and(|presentation| presentation.pinned));
     }
 
     #[tokio::test]
@@ -862,7 +1684,8 @@ mod tests {
             "owner_id": "member-1",
             "mode": "agent"
         });
-        let (status, body) = status_of(app.clone(), json_request(Method::POST, "/api/tasks", body)).await;
+        let (status, body) =
+            status_of(app.clone(), json_request(Method::POST, "/api/tasks", body)).await;
         assert_eq!(status, StatusCode::CREATED);
         assert_eq!(body["reused"], false);
         assert_eq!(body["status"], "ready");
@@ -982,7 +1805,10 @@ mod tests {
 
         let (status, body) = status_of(
             app.clone(),
-            request(Method::GET, "/api/tasks?status=ready&owner=member-2&limit=1&offset=0"),
+            request(
+                Method::GET,
+                "/api/tasks?status=ready&owner=member-2&limit=1&offset=0",
+            ),
         )
         .await;
         assert_eq!(status, StatusCode::OK);
@@ -1032,15 +1858,31 @@ mod tests {
         let task_ref = task_id.0.clone();
         state
             .repository
-            .create_attempt(&task_id, &AttemptId("attempt-2".into()), 2, "key-a2", "hash-2")
+            .create_attempt(
+                &task_id,
+                &AttemptId("attempt-2".into()),
+                2,
+                "key-a2",
+                "hash-2",
+            )
             .unwrap();
         state
             .repository
-            .append_status(&task_id, &AttemptId("attempt-2".into()), AttemptStatus::Admitted)
+            .append_status(
+                &task_id,
+                &AttemptId("attempt-2".into()),
+                AttemptStatus::Admitted,
+            )
             .unwrap();
         state
             .repository
-            .create_attempt(&task_id, &AttemptId("attempt-1".into()), 1, "key-a1", "hash-1")
+            .create_attempt(
+                &task_id,
+                &AttemptId("attempt-1".into()),
+                1,
+                "key-a1",
+                "hash-1",
+            )
             .unwrap();
         let app = router(state);
 
@@ -1082,11 +1924,7 @@ mod tests {
 
         let (status, _) = status_of(app.clone(), request(Method::GET, "/api/tasks/missing")).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
-        let (status, _) = status_of(
-            app,
-            request(Method::GET, "/api/tasks/missing/attempts"),
-        )
-        .await;
+        let (status, _) = status_of(app, request(Method::GET, "/api/tasks/missing/attempts")).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
@@ -1095,13 +1933,19 @@ mod tests {
         let state = test_state(dev_config());
         state
             .repository
-            .create_attempt(&TaskId("task-1".into()), &AttemptId("attempt-1".into()), 1, "key-1", "hash-1")
+            .create_attempt(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-1".into()),
+                1,
+                "key-1",
+                "hash-1",
+            )
             .unwrap();
         state
             .repository
             .create_binding(&magic_persistence_port::AttemptBinding {
                 attempt_id: AttemptId("attempt-1".into()),
-                adapter: "opencode-v1".into(),
+                adapter: "dsh-v1".into(),
                 session_id: "session-1".into(),
                 message_id: None,
             })
@@ -1114,7 +1958,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["attempt_id"], "attempt-1");
-        assert_eq!(body["adapter"], "opencode-v1");
+        assert_eq!(body["adapter"], "dsh-v1");
         assert_eq!(body["session_id"], "session-1");
         assert_eq!(body["message_id"], Value::Null);
 
@@ -1131,14 +1975,17 @@ mod tests {
         let state = test_state(dev_config());
         state
             .repository
-            .create_attempt(&TaskId("task-1".into()), &AttemptId("attempt-9".into()), 1, "key-9", "hash-9")
+            .create_attempt(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-9".into()),
+                1,
+                "key-9",
+                "hash-9",
+            )
             .unwrap();
         let app = router(state);
-        let (status, body) = status_of(
-            app,
-            request(Method::GET, "/api/attempts/attempt-9/binding"),
-        )
-        .await;
+        let (status, body) =
+            status_of(app, request(Method::GET, "/api/attempts/attempt-9/binding")).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert!(body["error"].is_string());
     }
@@ -1148,21 +1995,35 @@ mod tests {
         let state = test_state(dev_config());
         state
             .repository
-            .create_attempt(&TaskId("task-1".into()), &AttemptId("attempt-1".into()), 1, "key-1", "hash-1")
+            .create_attempt(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-1".into()),
+                1,
+                "key-1",
+                "hash-1",
+            )
             .unwrap();
         state
             .repository
-            .append_status(&TaskId("task-1".into()), &AttemptId("attempt-1".into()), AttemptStatus::Admitted)
+            .append_status(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-1".into()),
+                AttemptStatus::Admitted,
+            )
             .unwrap();
         state
             .repository
-            .append_status(&TaskId("task-1".into()), &AttemptId("attempt-1".into()), AttemptStatus::Running)
+            .append_status(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-1".into()),
+                AttemptStatus::Running,
+            )
             .unwrap();
         state
             .repository
             .create_binding(&magic_persistence_port::AttemptBinding {
                 attempt_id: AttemptId("attempt-1".into()),
-                adapter: "opencode-v1".into(),
+                adapter: "dsh-v1".into(),
                 session_id: "session-1".into(),
                 message_id: None,
             })
@@ -1170,11 +2031,11 @@ mod tests {
         state
             .repository
             .append_external_event(&magic_persistence_port::ExternalEvent {
-                aggregate_type: "opencode".into(),
+                aggregate_type: "dsh".into(),
                 aggregate_id: "session-1".into(),
                 seq: Some(1),
                 event_type: "session.updated".into(),
-                source: "opencode-v1".into(),
+                source: "dsh-v1".into(),
                 source_event_id: Some("event-1".into()),
                 payload_json: r#"{"status":"running"}"#.into(),
             })
@@ -1213,14 +2074,14 @@ mod tests {
             app.clone(),
             request(
                 Method::GET,
-                "/api/tasks/task-1/attempts/attempt-1/events?source=opencode-v1",
+                "/api/tasks/task-1/attempts/attempt-1/events?source=dsh-v1",
             ),
         )
         .await;
         assert_eq!(status, StatusCode::OK);
         let events = body["events"].as_array().unwrap();
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0]["source"], "opencode-v1");
+        assert_eq!(events[0]["source"], "dsh-v1");
         assert_eq!(events[0]["source_event_id"], "event-1");
         assert_eq!(body["confirmed_seq"], 1);
 
@@ -1228,7 +2089,7 @@ mod tests {
             app.clone(),
             request(
                 Method::GET,
-                "/api/tasks/task-1/attempts/attempt-1/events?source=opencode",
+                "/api/tasks/task-1/attempts/attempt-1/events?source=opencode-v1",
             ),
         )
         .await;
@@ -1280,21 +2141,35 @@ mod tests {
         let state = test_state(dev_config());
         state
             .repository
-            .create_attempt(&TaskId("task-1".into()), &AttemptId("attempt-1".into()), 1, "key-1", "hash-1")
+            .create_attempt(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-1".into()),
+                1,
+                "key-1",
+                "hash-1",
+            )
             .unwrap();
         state
             .repository
-            .append_status(&TaskId("task-1".into()), &AttemptId("attempt-1".into()), AttemptStatus::Admitted)
+            .append_status(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-1".into()),
+                AttemptStatus::Admitted,
+            )
             .unwrap();
         state
             .repository
-            .append_status(&TaskId("task-1".into()), &AttemptId("attempt-1".into()), AttemptStatus::Running)
+            .append_status(
+                &TaskId("task-1".into()),
+                &AttemptId("attempt-1".into()),
+                AttemptStatus::Running,
+            )
             .unwrap();
         state
             .repository
             .create_binding(&magic_persistence_port::AttemptBinding {
                 attempt_id: AttemptId("attempt-1".into()),
-                adapter: "opencode-v1".into(),
+                adapter: "dsh-v1".into(),
                 session_id: "session-1".into(),
                 message_id: None,
             })
@@ -1344,19 +2219,28 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
 
         let authorized = |mut req: axum::http::Request<Body>| {
-            req.headers_mut()
-                .insert(header::AUTHORIZATION, HeaderValue::from_static("Bearer wrong"));
+            req.headers_mut().insert(
+                header::AUTHORIZATION,
+                HeaderValue::from_static("Bearer wrong"),
+            );
             req
         };
-        let (status, _) = status_of(app.clone(), authorized(request(Method::GET, "/api/service-info"))).await;
+        let (status, _) = status_of(
+            app.clone(),
+            authorized(request(Method::GET, "/api/service-info")),
+        )
+        .await;
         assert_eq!(status, StatusCode::FORBIDDEN);
 
         let authorized = |mut req: axum::http::Request<Body>| {
-            req.headers_mut()
-                .insert(header::AUTHORIZATION, HeaderValue::from_static("Bearer secret"));
+            req.headers_mut().insert(
+                header::AUTHORIZATION,
+                HeaderValue::from_static("Bearer secret"),
+            );
             req
         };
-        let (status, _) = status_of(app, authorized(request(Method::GET, "/api/service-info"))).await;
+        let (status, _) =
+            status_of(app, authorized(request(Method::GET, "/api/service-info"))).await;
         assert_eq!(status, StatusCode::OK);
     }
 
@@ -1369,8 +2253,10 @@ mod tests {
         let app = router(state);
         let origin_request = |uri: &str| {
             let mut req = request(Method::OPTIONS, uri);
-            req.headers_mut()
-                .insert(header::ORIGIN, HeaderValue::from_static("http://localhost:5173"));
+            req.headers_mut().insert(
+                header::ORIGIN,
+                HeaderValue::from_static("http://localhost:5173"),
+            );
             req.headers_mut().insert(
                 header::ACCESS_CONTROL_REQUEST_METHOD,
                 HeaderValue::from_static("POST"),
@@ -1388,9 +2274,10 @@ mod tests {
         );
 
         let mut foreign = origin_request("/api/tasks");
-        foreign
-            .headers_mut()
-            .insert(header::ORIGIN, HeaderValue::from_static("http://evil.example"));
+        foreign.headers_mut().insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://evil.example"),
+        );
         let response = send(app.clone(), foreign).await;
         assert!(response
             .headers()
@@ -1398,9 +2285,10 @@ mod tests {
             .is_none());
 
         let mut plain = request(Method::GET, "/api/tasks");
-        plain
-            .headers_mut()
-            .insert(header::ORIGIN, HeaderValue::from_static("http://localhost:5173"));
+        plain.headers_mut().insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://localhost:5173"),
+        );
         let response = send(app, plain).await;
         assert_eq!(
             response
@@ -1413,10 +2301,7 @@ mod tests {
 
     #[test]
     fn check_bearer_and_constant_time_eq() {
-        assert!(matches!(
-            check_bearer(None, "secret"),
-            BearerCheck::Missing
-        ));
+        assert!(matches!(check_bearer(None, "secret"), BearerCheck::Missing));
         assert!(matches!(
             check_bearer(Some("Basic abc"), "secret"),
             BearerCheck::Missing
@@ -1444,11 +2329,15 @@ mod tests {
         env::remove_var("MAGIC_API_TOKEN");
         env::remove_var("MAGIC_ALLOW_INSECURE_LOCAL_DEV");
         let result = std::panic::catch_unwind(|| load_transport_config("127.0.0.1:45280"));
-        assert!(result.is_err(), "tokenless start must fail without dev mode");
+        assert!(
+            result.is_err(),
+            "tokenless start must fail without dev mode"
+        );
 
         env::set_var("MAGIC_ALLOW_INSECURE_LOCAL_DEV", "1");
         let config = load_transport_config("127.0.0.1:45280");
         assert!(config.token.is_none());
+        assert_eq!(config.cors_origins, vec!["http://127.0.0.1:1420"]);
         let result = std::panic::catch_unwind(|| load_transport_config("0.0.0.0:45280"));
         env::remove_var("MAGIC_ALLOW_INSECURE_LOCAL_DEV");
         assert!(result.is_err(), "dev mode must refuse non-loopback bind");
@@ -1467,5 +2356,36 @@ mod tests {
         assert!(is_loopback_address("[::1]:45280"));
         assert!(!is_loopback_address("0.0.0.0:45280"));
         assert!(!is_loopback_address("192.168.1.5:45280"));
+    }
+
+    #[test]
+    fn provider_draft_rejects_unsupported_api_formats() {
+        let result = provider_draft(
+            None,
+            "Company".into(),
+            "https://api.example.com/v1".into(),
+            "unsupported".into(),
+            vec!["model-1".into()],
+            Some("secret".into()),
+            true,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn provider_draft_removes_blank_model_names() {
+        let result = provider_draft(
+            None,
+            "Company".into(),
+            "https://api.example.com/v1".into(),
+            "openai-completions".into(),
+            vec!["  model-1  ".into(), " ".into()],
+            None,
+            true,
+        );
+        let Ok(draft) = result else {
+            panic!("valid provider draft should be accepted");
+        };
+        assert_eq!(draft.models, vec!["model-1"]);
     }
 }

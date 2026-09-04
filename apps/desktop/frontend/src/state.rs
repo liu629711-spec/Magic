@@ -4,6 +4,7 @@
 use yew::prelude::*;
 
 /// 四态包装：Empty 仅在"查询成功且无数据"时出现；unknown 是 Ready 的合法值，不是 Failed。
+#[derive(PartialEq)]
 pub enum Loadable<T> {
     Loading,
     Ready(T),

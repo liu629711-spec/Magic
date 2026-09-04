@@ -9,7 +9,7 @@ authority: technical-design-draft
 
 ## 1. 设计原则
 
-数据库保存 Magic 的产品事实和审计事实；OpenCode 数据库只作为外部执行证据来源。所有时间使用 UTC；所有状态变更写入不可变事件表，再维护当前状态投影。
+数据库保存 Magic 的产品事实和审计事实；DSH 持有会话与日志，Magic 只保存必要的底层绑定和产品扩展元数据。所有时间使用 UTC；所有状态变更写入不可变事件表，再维护当前状态投影。
 
 第一版采用关系模型，数据库引擎冻结为 SQLite，Rust 驱动使用 rusqlite `bundled`。字段类型仍使用逻辑类型描述，具体 SQL 方言、迁移文件和索引实现由正式骨架确定。
 
@@ -41,7 +41,7 @@ authority: technical-design-draft
 
 ### `magic_session`
 
-记录 Magic 产品层会话，不等同于 OpenCode Session。字段：`id`、`workspace_id`、`project_id` nullable、`mode`（`agent`/`ceo`）、`primary_member_id` nullable、`status`、`title`、`created_at`、`updated_at`、`archived_at` nullable。
+记录 Magic 产品层会话元数据，不等同于 DSH Session。字段：`id`、`workspace_id`、`project_id` nullable、`mode`（`agent`/`ceo`）、`primary_member_id` nullable、`status`、`title`、`created_at`、`updated_at`、`archived_at` nullable。
 
 ### `task_session`
 
@@ -49,7 +49,7 @@ authority: technical-design-draft
 
 ### `member`
 
-记录 Magic 工程成员关系，不等同于 OpenCode Agent。字段：`id`、`project_id`、`kind`（`pm`/`member`/`temporary`）、`display_name`、`role_snapshot_json`、`permission_snapshot_json`、`status`、时间字段。
+记录 Magic 工程成员关系，不等同于底座 Agent。字段：`id`、`project_id`、`kind`（`pm`/`member`/`temporary`）、`display_name`、`role_snapshot_json`、`permission_snapshot_json`、`status`、时间字段。
 
 数据库约束：同一 `project_id` 同时最多一个 active PM。
 
@@ -75,7 +75,7 @@ authority: technical-design-draft
 
 ### `attempt_binding`
 
-保存底层引用而不是假设的 Run：`id`、`attempt_id`、`adapter`（`opencode-v1`）、`opencode_session_id`、`opencode_message_id` nullable、`process_id` nullable、`binding_json`、`created_at`、`released_at`。
+保存底层引用而不是假设的 Run：`id`、`attempt_id`、`adapter`（当前为 `dsh-v1`）、`session_id`、`message_id` nullable、`process_id` nullable、`binding_json`、`created_at`、`released_at`。
 
 同一个 Attempt 可以有多个底层引用，但同一时刻只允许一个 active binding。
 
@@ -136,7 +136,7 @@ authority: technical-design-draft
 
 - `task(project_id, status, updated_at)`
 - `task_attempt(task_id, status, started_at)`
-- `attempt_binding(opencode_session_id)`
+- `attempt_binding(session_id)`
 - `event_ledger(aggregate_type, aggregate_id, seq)`
 - `event_cursor(aggregate_type, aggregate_id)`
 - `approval_request(status, project_id)`
@@ -144,7 +144,7 @@ authority: technical-design-draft
 
 ## 9. 数据保留和删除
 
-Task、Attempt、事件、审批、费用、副作用和审计记录默认保留；用户删除工作区时先软删除并保留审计引用。OpenCode 原始消息可按保留策略清理，但不能删除 Magic 对 Attempt 状态判断所需的摘要、来源 ID 和事件序号。
+Task、Attempt、事件、审批、费用、副作用和审计记录默认保留；用户删除工作区时先软删除并保留审计引用。DSH 原始日志不复制进 Magic；不能删除 Magic 对 Attempt 状态判断所需的摘要、来源 ID 和事件序号。
 
 ## 10. 尚未冻结的实现选择
 
@@ -152,4 +152,4 @@ Task、Attempt、事件、审批、费用、副作用和审计记录默认保留
 
 ## 11. 当前实现检查点
 
-`crates/persistence` 已完成最小 SQLite Adapter：创建 `task_attempt`、`attempt_binding`、`event_ledger` 和 `event_cursor` 表，使用事务同时追加状态事件和更新 Attempt 投影，并由唯一约束拒绝同一 Task 的重复幂等键。派发时保存 OpenCode adapter、session ID 和可获得的 message ID；外部事件支持按来源事件 ID及聚合序号去重，游标只会连续推进。`apps/local-service` 的 Recovery Worker 会复用这些游标执行周期性 history 补拉。该实现还不是完整迁移集，其他表会按应用用例逐步加入。
+`crates/persistence` 已完成最小 SQLite Adapter：创建 `task_attempt`、`attempt_binding`、`event_ledger` 和 `event_cursor` 表，使用事务同时追加状态事件和更新 Attempt 投影，并由唯一约束拒绝同一 Task 的重复幂等键。派发时保存 DSH adapter、session ID 和可获得的 message ID；外部事件支持按来源事件 ID 及聚合序号去重。DSH 当前的持久日志是 per-session journal，后台全局 history 补拉尚未实现。该实现还不是完整迁移集，其他表会按应用用例逐步加入。

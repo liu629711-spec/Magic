@@ -3,6 +3,173 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Execution-base-owned session summary. Magic reads this through its local
+/// proxy and does not persist a parallel conversation record.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionListItem {
+    pub session_id: String,
+    pub title: String,
+    pub directory: String,
+    pub parent_id: Option<String>,
+    pub updated_at: Option<u64>,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub standalone: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SessionListResponse {
+    pub items: Vec<SessionListItem>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CreateSessionRequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub directory: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CreateSessionResponse {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ValidateDirectoryRequestBody {
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ValidatedDirectoryResponse {
+    pub directory: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RenameSessionRequestBody {
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RenameSessionResponse {
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SetSessionPresentationRequestBody {
+    pub pinned: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SetSessionProjectRequestBody {
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SendSessionMessageRequestBody {
+    pub input: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SendSessionMessageResponse {
+    pub message_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionToolActivity {
+    pub call_id: String,
+    pub name: String,
+    pub status: String,
+    pub arguments_summary: String,
+    pub result_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionJobActivity {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub status: String,
+    pub detail: Option<String>,
+    pub started_at: u64,
+    pub finished_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionUsageStats {
+    pub turns: u32,
+    pub steps: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub reasoning_tokens: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionActivityResponse {
+    pub tools: Vec<SessionToolActivity>,
+    pub jobs: Vec<SessionJobActivity>,
+    #[serde(default)]
+    pub stats: Option<SessionUsageStats>,
+    pub jobs_available: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct FileReferenceItem {
+    pub path: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct FileReferenceResponse {
+    pub items: Vec<FileReferenceItem>,
+}
+
+/// Write-only API key used only while the browser sends a provider profile to
+/// the local service. The service never returns it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SaveModelProviderRequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    pub display_name: String,
+    pub base_url: String,
+    pub api: String,
+    pub models: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SaveModelProviderResponse {
+    pub provider_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SetModelProviderPresentationRequestBody {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DiscoverModelsRequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    pub base_url: String,
+    pub api: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DiscoverModelsResponse {
+    pub models: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SelectSessionModelRequestBody {
+    pub provider: String,
+    pub model: String,
+}
+
 /// POST /api/tasks/{task_id}/attempts 请求体（`apps/local-service/src/main.rs:26-33`）。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DispatchRequestBody {
@@ -71,7 +238,7 @@ pub struct HealthResponse {
     pub healthy: bool,
     pub protocol_version: Option<String>,
     pub worker: Option<WorkerInfo>,
-    /// OpenCode 侧事件游标水位（event_cursor），前端只作展示、不消费其 attempt 语义。
+    /// 执行底座侧事件游标水位（event_cursor），前端只作展示、不消费其 attempt 语义。
     pub cursor_watermark: Option<u64>,
 }
 
@@ -85,7 +252,7 @@ pub struct ServiceInfoResponse {
 }
 
 /// FZ-4：Task 列表 items 投影。`updated_at` 时间戳迁移完成前为 null；排序一律读外层 `ordering`。
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct TaskListItem {
     pub task_id: String,
     pub goal: String,

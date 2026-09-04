@@ -20,6 +20,22 @@ pub struct OpenCodeSession {
     pub id: String,
 }
 
+/// OpenCode-owned session metadata used by Magic's conversation list.
+///
+/// This is decoded only while proxying an OpenCode response; Magic does not
+/// persist a copy of it.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenCodeSessionInfo {
+    pub id: String,
+    pub title: String,
+    pub directory: String,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub time: Value,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct OpenCodeEvent {
     pub id: String,
@@ -85,6 +101,20 @@ impl OpenCodeV1Adapter {
                 .or_else(|| value.get("message_id"))
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
+        })
+    }
+
+    pub fn sessions(&self) -> Result<Vec<OpenCodeSessionInfo>, ExecutionError> {
+        let value = self.request("GET", "/session", None)?;
+        serde_json::from_value(value).map_err(|error| {
+            ExecutionError::Adapter(format!("invalid session list response: {error}"))
+        })
+    }
+
+    pub fn session_statuses(&self) -> Result<HashMap<String, Value>, ExecutionError> {
+        let value = self.request("GET", "/session/status", None)?;
+        serde_json::from_value(value).map_err(|error| {
+            ExecutionError::Adapter(format!("invalid session status response: {error}"))
         })
     }
 
@@ -205,6 +235,10 @@ impl OpenCodeV1Adapter {
 }
 
 impl ExecutionPort for OpenCodeV1Adapter {
+    fn adapter_name(&self) -> &'static str {
+        "opencode-v1"
+    }
+
     fn create_session(&self, directory: Option<&str>) -> Result<ExecutionSession, ExecutionError> {
         self.create_session(directory)
             .map(|session| ExecutionSession { id: session.id })
@@ -269,6 +303,14 @@ fn observation_from_messages(messages: &[Value]) -> ExecutionObservation {
 }
 
 impl EventSource for OpenCodeV1Adapter {
+    fn aggregate_type(&self) -> &'static str {
+        "opencode"
+    }
+
+    fn event_source_name(&self) -> &'static str {
+        "opencode-v1"
+    }
+
     fn read_events(&self, max_events: usize) -> Result<Vec<ExecutionEvent>, ExecutionError> {
         self.events(max_events).map(|events| {
             events
@@ -400,6 +442,27 @@ mod tests {
             .join()
             .unwrap()
             .starts_with("POST /session/session-1/abort HTTP/1.1"));
+
+        let (url, sessions_request) = mock_server(
+            r#"[{"id":"session-1","title":"Conversation","directory":"D:/Harmess","slug":"x","projectID":"p","version":"v","time":{"created":1,"updated":2}}]"#,
+        );
+        let adapter = OpenCodeV1Adapter::new(url);
+        assert_eq!(adapter.sessions().unwrap()[0].title, "Conversation");
+        assert!(sessions_request
+            .join()
+            .unwrap()
+            .starts_with("GET /session HTTP/1.1"));
+
+        let (url, status_request) = mock_server(r#"{"session-1":{"type":"busy"}}"#);
+        let adapter = OpenCodeV1Adapter::new(url);
+        assert_eq!(
+            adapter.session_statuses().unwrap()["session-1"]["type"],
+            "busy"
+        );
+        assert!(status_request
+            .join()
+            .unwrap()
+            .starts_with("GET /session/status HTTP/1.1"));
     }
 
     #[test]
@@ -470,8 +533,14 @@ data: {"id":"event-2","type":"server.heartbeat","properties":{}}
         );
 
         let running = vec![json!({ "info": { "role": "assistant" } })];
-        assert_eq!(observation_from_messages(&running), ExecutionObservation::Running);
+        assert_eq!(
+            observation_from_messages(&running),
+            ExecutionObservation::Running
+        );
 
-        assert_eq!(observation_from_messages(&[]), ExecutionObservation::Running);
+        assert_eq!(
+            observation_from_messages(&[]),
+            ExecutionObservation::Running
+        );
     }
 }

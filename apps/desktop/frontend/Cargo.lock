@@ -501,6 +501,7 @@ dependencies = [
  "getrandom 0.4.3",
  "gloo",
  "gloo-net",
+ "js-sys",
  "magic-frontend",
  "serde",
  "serde_json",

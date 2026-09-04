@@ -2,7 +2,7 @@
 
 use magic_domain::{AttemptStatus, TaskId, TaskStatus};
 use magic_execution_port::{
-    EventSource, ExecutionError, ExecutionObservation, ExecutionPort, observed_transition,
+    observed_transition, EventSource, ExecutionError, ExecutionObservation, ExecutionPort,
 };
 use magic_persistence_port::{
     AttemptRepository, EventRepository, ExternalEvent, PersistenceError, TaskRepository,
@@ -94,7 +94,7 @@ where
         }
     }
 
-    /// FZ-1: the periodic cycle only backfills OpenCode history into the ledger.
+    /// FZ-1: the periodic cycle only backfills execution history into the ledger.
     /// It never probes live attempts, so a running Attempt is never rewritten to
     /// `unknown_after_restart` just because terminal evidence is missing.
     pub fn run_once(&self) -> Result<RecoveryReport, ReconciliationError> {
@@ -112,11 +112,11 @@ where
         };
         for event in &history {
             let result = self.reconciler.ingest(ExternalEvent {
-                aggregate_type: "opencode".into(),
+                aggregate_type: self.source.aggregate_type().into(),
                 aggregate_id: event.aggregate_id.clone(),
                 seq: Some(event.seq),
                 event_type: event.event_type.clone(),
-                source: "opencode-v1".into(),
+                source: self.source.event_source_name().into(),
                 source_event_id: Some(event.id.clone()),
                 payload_json: event.data_json.clone(),
             })?;
@@ -132,11 +132,7 @@ where
         let mut report = ProbeReport::default();
         for active in self.reconciler.repository.active_attempts()? {
             report.probed += 1;
-            let Some(binding) = self
-                .reconciler
-                .repository
-                .binding(&active.attempt_id)?
-            else {
+            let Some(binding) = self.reconciler.repository.binding(&active.attempt_id)? else {
                 self.reconciler.repository.append_status(
                     &active.task_id,
                     &active.attempt_id,
@@ -187,9 +183,11 @@ where
 mod tests {
     use super::*;
     use magic_execution_port::{ExecutionEvent, ExecutionHistoryEvent};
-    use std::sync::{Arc, Mutex};
     use magic_persistence::SqlitePersistence;
-    use magic_persistence_port::{AttemptBinding, AttemptRepository, EventQueryRepository, TaskRepository};
+    use magic_persistence_port::{
+        AttemptBinding, AttemptRepository, EventQueryRepository, TaskRepository,
+    };
+    use std::sync::{Arc, Mutex};
 
     #[derive(Clone)]
     struct FakeSource {
@@ -228,6 +226,10 @@ mod tests {
     }
 
     impl ExecutionPort for FakeSource {
+        fn adapter_name(&self) -> &'static str {
+            "test-v1"
+        }
+
         fn create_session(
             &self,
             _directory: Option<&str>,

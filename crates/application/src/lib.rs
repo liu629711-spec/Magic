@@ -1,7 +1,9 @@
 //! Product use cases that coordinate domain rules, persistence and execution ports.
 
-use magic_domain::{Attempt, AttemptId, AttemptStatus, InvalidTransition, Task, TaskId, TaskStatus};
-use magic_execution_port::{ExecutionObservation, ExecutionPort, observed_transition};
+use magic_domain::{
+    Attempt, AttemptId, AttemptStatus, InvalidTransition, Task, TaskId, TaskStatus,
+};
+use magic_execution_port::{observed_transition, ExecutionObservation, ExecutionPort};
 use magic_persistence_port::{
     AttemptBinding, AttemptRepository, AttemptSummaryRow, EventQueryRepository, LedgerEvent,
     PersistenceError, TaskListItemRow, TaskRecord, TaskRepository, TimestampOrdering,
@@ -94,7 +96,7 @@ pub struct AttemptListPage {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EventSourceFilter {
     Magic,
-    OpencodeV1,
+    Execution,
 }
 
 pub struct EventPageQuery {
@@ -241,7 +243,7 @@ where
         };
         if let Err(error) = self.repository.create_binding(&AttemptBinding {
             attempt_id: request.attempt_id.clone(),
-            adapter: "opencode-v1".into(),
+            adapter: self.execution.adapter_name().into(),
             session_id: session.id.clone(),
             message_id: None,
         }) {
@@ -331,10 +333,7 @@ where
                 }
             };
         };
-        let observation = match self
-            .execution
-            .reconcile(attempt_id, &binding.session_id)
-        {
+        let observation = match self.execution.reconcile(attempt_id, &binding.session_id) {
             Ok(observation) => observation,
             Err(_) => ExecutionObservation::Unknown,
         };
@@ -390,9 +389,9 @@ where
             status: task.status.clone(),
             updated_at: None,
         };
-        if let Err(error) = self
-            .repository
-            .create_task(&record, &request.idempotency_key, &request_hash)
+        if let Err(error) =
+            self.repository
+                .create_task(&record, &request.idempotency_key, &request_hash)
         {
             // Another caller may have won the unique-key race between lookup and insert.
             if let Some(result) = self.reuse_task(&request, &request_hash)? {
@@ -400,7 +399,9 @@ where
             }
             return Err(ApplicationError::Persistence(error));
         }
-        let event_seq = self.repository.append_task_status(&task_id, task.status.clone())?;
+        let event_seq = self
+            .repository
+            .append_task_status(&task_id, task.status.clone())?;
         Ok(CreateTaskResult::Created {
             task_id,
             status: task.status,
@@ -477,27 +478,21 @@ where
         if self.repository.task(task_id)?.is_none() {
             return Err(ApplicationError::NotFound("task not found".into()));
         }
-        let rows = self
-            .repository
-            .attempts_for_task(task_id, before_attempt_no, Some(limit + 1))?;
+        let rows =
+            self.repository
+                .attempts_for_task(task_id, before_attempt_no, Some(limit + 1))?;
         let has_more = rows.len() > limit;
         let items: Vec<AttemptSummaryRow> = rows.into_iter().take(limit).collect();
-        let next_cursor = has_more.then(|| items.last().expect("page is not empty").attempt_no as u64);
-        Ok(AttemptListPage {
-            items,
-            next_cursor,
-        })
+        let next_cursor =
+            has_more.then(|| items.last().expect("page is not empty").attempt_no as u64);
+        Ok(AttemptListPage { items, next_cursor })
     }
 
     pub fn attempt_binding(
         &self,
         attempt_id: &AttemptId,
     ) -> Result<AttemptBinding, ApplicationError> {
-        if self
-            .repository
-            .status(attempt_id)?
-            .is_none()
-        {
+        if self.repository.status(attempt_id)?.is_none() {
             return Err(ApplicationError::NotFound("attempt not found".into()));
         }
         self.repository
@@ -516,13 +511,10 @@ where
             ));
         }
         let (events, confirmed_seq) = match query.source {
-            Some(EventSourceFilter::OpencodeV1) => {
-                let binding = self
-                    .repository
-                    .binding(&query.attempt_id)?
-                    .ok_or_else(|| {
-                        ApplicationError::NotFound("attempt has no active binding".into())
-                    })?;
+            Some(EventSourceFilter::Execution) => {
+                let binding = self.repository.binding(&query.attempt_id)?.ok_or_else(|| {
+                    ApplicationError::NotFound("attempt has no active binding".into())
+                })?;
                 let sessions = vec![binding.session_id];
                 let events =
                     self.repository
@@ -619,6 +611,10 @@ mod tests {
     }
 
     impl ExecutionPort for FakeExecution {
+        fn adapter_name(&self) -> &'static str {
+            "test-v1"
+        }
+
         fn create_session(
             &self,
             _directory: Option<&str>,
@@ -708,7 +704,10 @@ mod tests {
 
     #[test]
     fn create_task_auto_progresses_proposed_to_ready() {
-        let app = Application::new(FakeExecution::running(), SqlitePersistence::open_in_memory().unwrap());
+        let app = Application::new(
+            FakeExecution::running(),
+            SqlitePersistence::open_in_memory().unwrap(),
+        );
         let result = app.create_task(create_task_request("key-1")).unwrap();
         let task_id = match result {
             CreateTaskResult::Created {
@@ -731,7 +730,10 @@ mod tests {
 
     #[test]
     fn same_task_idempotency_key_reuses_and_conflicting_body_is_rejected() {
-        let app = Application::new(FakeExecution::running(), SqlitePersistence::open_in_memory().unwrap());
+        let app = Application::new(
+            FakeExecution::running(),
+            SqlitePersistence::open_in_memory().unwrap(),
+        );
         let first = app.create_task(create_task_request("key-1")).unwrap();
         let task_id = match &first {
             CreateTaskResult::Created { task_id, .. } => task_id.clone(),
@@ -775,8 +777,12 @@ mod tests {
 
     #[test]
     fn reconcile_with_live_session_keeps_running_without_events() {
-        let app = Application::new(FakeExecution::running(), SqlitePersistence::open_in_memory().unwrap());
-        app.dispatch_attempt(request("hash-1", "attempt-1")).unwrap();
+        let app = Application::new(
+            FakeExecution::running(),
+            SqlitePersistence::open_in_memory().unwrap(),
+        );
+        app.dispatch_attempt(request("hash-1", "attempt-1"))
+            .unwrap();
         let result = app
             .reconcile_attempt(&TaskId("task-1".into()), &AttemptId("attempt-1".into()))
             .unwrap();
@@ -788,7 +794,9 @@ mod tests {
     fn reconcile_with_terminal_evidence_closes_attempt_and_awaits_review() {
         let repository = SqlitePersistence::open_in_memory().unwrap();
         let app = Application::new(
-            FakeExecution::with_observation(ExecutionObservation::Terminal(AttemptStatus::Succeeded)),
+            FakeExecution::with_observation(ExecutionObservation::Terminal(
+                AttemptStatus::Succeeded,
+            )),
             repository.clone(),
         );
         let task_id = new_task(&app);
@@ -825,7 +833,8 @@ mod tests {
         let mut execution = FakeExecution::running();
         execution.reconcile_fails = true;
         let app = Application::new(execution, SqlitePersistence::open_in_memory().unwrap());
-        app.dispatch_attempt(request("hash-1", "attempt-1")).unwrap();
+        app.dispatch_attempt(request("hash-1", "attempt-1"))
+            .unwrap();
         let result = app
             .reconcile_attempt(&TaskId("task-1".into()), &AttemptId("attempt-1".into()))
             .unwrap();
@@ -1053,9 +1062,10 @@ mod tests {
     fn binding_query_distinguishes_missing_attempt_and_missing_binding() {
         let repository = SqlitePersistence::open_in_memory().unwrap();
         let app = Application::new(FakeExecution::running(), repository.clone());
-        app.dispatch_attempt(request("hash-1", "attempt-1")).unwrap();
+        app.dispatch_attempt(request("hash-1", "attempt-1"))
+            .unwrap();
         let binding = app.attempt_binding(&AttemptId("attempt-1".into())).unwrap();
-        assert_eq!(binding.adapter, "opencode-v1");
+        assert_eq!(binding.adapter, "test-v1");
         assert_eq!(binding.session_id, "session-1");
         assert_eq!(binding.message_id, Some("message-1".into()));
 
@@ -1107,7 +1117,9 @@ mod tests {
                 source,
             }
         };
-        let magic = app.attempt_events(query(0, Some(EventSourceFilter::Magic))).unwrap();
+        let magic = app
+            .attempt_events(query(0, Some(EventSourceFilter::Magic)))
+            .unwrap();
         assert_eq!(magic.events.len(), 1);
         assert_eq!(magic.events[0].seq, 1);
         assert_eq!(magic.next_cursor, Some(1));
@@ -1119,7 +1131,7 @@ mod tests {
         assert_eq!(rest.events[0].seq, 2);
         assert_eq!(rest.next_cursor, None);
         let external = app
-            .attempt_events(query(0, Some(EventSourceFilter::OpencodeV1)))
+            .attempt_events(query(0, Some(EventSourceFilter::Execution)))
             .unwrap();
         assert_eq!(external.events.len(), 1);
         assert_eq!(external.events[0].source, "opencode-v1");
@@ -1127,8 +1139,12 @@ mod tests {
         let default_view = app.attempt_events(query(0, None)).unwrap();
         assert_eq!(default_view.events.len(), 1);
         assert_eq!(default_view.confirmed_seq, 2);
-        app.dispatch_attempt(request_for(&TaskId("task-9".into()), "hash-2", "attempt-foreign"))
-            .unwrap();
+        app.dispatch_attempt(request_for(
+            &TaskId("task-9".into()),
+            "hash-2",
+            "attempt-foreign",
+        ))
+        .unwrap();
         assert!(matches!(
             app.attempt_events(EventPageQuery {
                 task_id: TaskId("task-1".into()),

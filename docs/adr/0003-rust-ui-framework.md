@@ -32,4 +32,4 @@ decision: yew-wasm
 
 ## 资源结论
 
-Rust UI 的小资源体积不等于整个 Agent 小资源占用。之前 Spike 显示 OpenCode V1 约 400 MB 工作集，因此性能验收必须以桌面、Rust 服务、Worker、OpenCode、工具进程和日志渲染的总进程组为准。
+Rust UI 的小资源体积不等于整个 Agent 小资源占用。性能验收必须以桌面、Rust 服务、Worker、DSH、工具进程和日志渲染的总进程组为准；DSH 的真实负载内存仍待测量。

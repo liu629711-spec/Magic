@@ -139,14 +139,22 @@ pub trait AttemptRepository: Send + Sync {
 }
 
 pub trait TaskRepository: Send + Sync {
-    fn create_task(&self, task: &TaskRecord, idempotency_key: &str, request_hash: &str)
-        -> Result<(), PersistenceError>;
+    fn create_task(
+        &self,
+        task: &TaskRecord,
+        idempotency_key: &str,
+        request_hash: &str,
+    ) -> Result<(), PersistenceError>;
     fn find_task_idempotency(
         &self,
         idempotency_key: &str,
     ) -> Result<Option<TaskIdempotencyRecord>, PersistenceError>;
     fn task(&self, task_id: &TaskId) -> Result<Option<TaskRecord>, PersistenceError>;
-    fn append_task_status(&self, task_id: &TaskId, next: TaskStatus) -> Result<u64, PersistenceError>;
+    fn append_task_status(
+        &self,
+        task_id: &TaskId,
+        next: TaskStatus,
+    ) -> Result<u64, PersistenceError>;
     fn list_tasks(
         &self,
         status: Option<&TaskStatus>,
@@ -182,7 +190,7 @@ pub trait EventQueryRepository: Send + Sync {
     ) -> Result<Vec<LedgerEvent>, PersistenceError>;
     fn session_max_seq(&self, session_ids: &[String]) -> Result<u64, PersistenceError>;
     fn task_last_seq(&self, task_id: &TaskId) -> Result<u64, PersistenceError>;
-    fn opencode_cursor_watermark(&self) -> Result<u64, PersistenceError>;
+    fn execution_cursor_watermark(&self) -> Result<u64, PersistenceError>;
 }
 
 pub trait EventRepository: Send + Sync {

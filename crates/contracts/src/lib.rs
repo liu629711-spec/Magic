@@ -131,3 +131,156 @@ pub struct HealthResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor_watermark: Option<u64>,
 }
+
+/// Execution-base-owned session projection returned by the local service.
+/// It is never stored in Magic's database.
+#[derive(Debug, Serialize)]
+pub struct SessionListItem {
+    pub session_id: String,
+    pub title: String,
+    pub directory: String,
+    pub parent_id: Option<String>,
+    pub updated_at: Option<u64>,
+    pub pinned: bool,
+    pub standalone: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionListResponse {
+    pub items: Vec<SessionListItem>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateSessionResponse {
+    pub session_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RenameSessionRequest {
+    pub title: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RenameSessionResponse {
+    pub title: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetSessionPresentationRequest {
+    pub pinned: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetSessionProjectRequest {
+    pub directory: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SendSessionMessageResponse {
+    pub message_id: Option<String>,
+}
+
+/// A redacted, display-safe tool lifecycle projected from one DSH session log.
+/// Magic never returns raw tool payloads because they can contain credentials or
+/// large local-file contents.
+#[derive(Debug, Serialize)]
+pub struct SessionToolActivity {
+    pub call_id: String,
+    pub name: String,
+    pub status: String,
+    pub arguments_summary: String,
+    pub result_summary: Option<String>,
+}
+
+/// A display-safe DSH background-job row for one session.
+#[derive(Debug, Serialize)]
+pub struct SessionJobActivity {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub status: String,
+    pub detail: Option<String>,
+    pub started_at: u64,
+    pub finished_at: Option<u64>,
+}
+
+/// Provider-reported usage accumulated from DSH assistant usage events.
+#[derive(Debug, Serialize)]
+pub struct SessionUsageStats {
+    pub turns: u32,
+    pub steps: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub reasoning_tokens: u64,
+}
+
+/// Current execution activity owned by DSH, not by Magic's database.
+#[derive(Debug, Serialize)]
+pub struct SessionActivityResponse {
+    pub tools: Vec<SessionToolActivity>,
+    pub jobs: Vec<SessionJobActivity>,
+    pub stats: Option<SessionUsageStats>,
+    /// False means the connected DSH instance did not make its live job
+    /// snapshot available. It is distinct from an empty job list.
+    pub jobs_available: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FileReferenceItem {
+    pub path: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FileReferenceResponse {
+    pub items: Vec<FileReferenceItem>,
+}
+
+/// User-authored generic provider profile. `api_key` is write-only and must
+/// never occur in any response, persistence record, or log.
+#[derive(Debug, Deserialize)]
+pub struct SaveModelProviderRequest {
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    pub display_name: String,
+    pub base_url: String,
+    pub api: String,
+    pub models: Vec<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SaveModelProviderResponse {
+    pub provider_id: String,
+}
+
+/// Magic-owned availability state for a configured provider. This deliberately
+/// remains outside DSH's provider schema so upstream configuration stays valid.
+#[derive(Debug, Deserialize)]
+pub struct SetModelProviderPresentationRequest {
+    pub enabled: bool,
+}
+
+/// Draft endpoint check. Like save, the key is one-way input only.
+#[derive(Debug, Deserialize)]
+pub struct DiscoverModelsRequest {
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    pub base_url: String,
+    pub api: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DiscoverModelsResponse {
+    pub models: Vec<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SelectSessionModelRequest {
+    pub provider: String,
+    pub model: String,
+}

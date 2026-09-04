@@ -13,6 +13,17 @@
 !.env.*.example
 .tmp-*/
 .tmp-magic-real.db*
+.magic-dsh/
+.codegraph/
+.cursor/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.out.log
+*.err.log
+apps/desktop/frontend/dist-*/
+target-*/
 .DS_Store
 Thumbs.db
 node_modules/

@@ -90,6 +90,16 @@ pub fn observed_transition(
 }
 
 pub trait EventSource: Send + Sync {
+    /// Stable ledger aggregate type emitted by this execution source.
+    fn aggregate_type(&self) -> &'static str {
+        "execution"
+    }
+
+    /// Stable event-source name persisted in Magic's ledger.
+    fn event_source_name(&self) -> &'static str {
+        "execution-v1"
+    }
+
     fn read_events(&self, max_events: usize) -> Result<Vec<ExecutionEvent>, ExecutionError>;
     fn sync_history(
         &self,
@@ -98,6 +108,9 @@ pub trait EventSource: Send + Sync {
 }
 
 pub trait ExecutionPort: Send + Sync {
+    /// Stable identifier persisted with Magic's execution binding.
+    fn adapter_name(&self) -> &'static str;
+
     fn create_session(&self, directory: Option<&str>) -> Result<ExecutionSession, ExecutionError>;
     fn submit(
         &self,

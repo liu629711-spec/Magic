@@ -21,7 +21,9 @@ pub fn dispatch_idempotency_key(
     input: &str,
     directory: Option<&str>,
 ) -> String {
-    hash_utf8(&dispatch_canonical_input(task_id, attempt_no, input, directory))
+    hash_utf8(&dispatch_canonical_input(
+        task_id, attempt_no, input, directory,
+    ))
 }
 
 /// 派发接口的 request_hash：与幂等键同一冻结口径（B-5）。
@@ -62,7 +64,12 @@ pub fn new_attempt_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
-fn dispatch_canonical_input(task_id: &str, attempt_no: u32, input: &str, directory: Option<&str>) -> String {
+fn dispatch_canonical_input(
+    task_id: &str,
+    attempt_no: u32,
+    input: &str,
+    directory: Option<&str>,
+) -> String {
     format!(
         "{task_id}{UNIT_SEPARATOR}{attempt_no}{UNIT_SEPARATOR}{input}{UNIT_SEPARATOR}{}",
         directory.unwrap_or("")
