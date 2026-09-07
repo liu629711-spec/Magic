@@ -1,5 +1,6 @@
 # Third-party source mirrors used only for local research
 /reference/
+/reference-project/
 
 # Temporary local workspace and packaged snapshots
 /新建文件夹/
@@ -23,7 +24,8 @@
 *.log
 *.out.log
 *.err.log
-apps/desktop/frontend/dist-*/
+apps/
+spikes/
 target-*/
 .DS_Store
 Thumbs.db

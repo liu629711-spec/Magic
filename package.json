@@ -1,0 +1,16 @@
+{
+  "name": "magic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Magic product plugins on DeepSeek Harness",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./plugins/**\" run build",
+    "typecheck": "pnpm -r --filter \"./plugins/**\" run typecheck",
+    "test": "pnpm -r --filter \"./plugins/**\" run test"
+  }
+}

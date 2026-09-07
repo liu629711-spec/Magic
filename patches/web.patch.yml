@@ -1,0 +1,8 @@
+# Load Magic product plugins into a DSH web profile.
+# Usage:
+#   dsh web --patch ./patches/web.patch.yml
+- insert:
+    - id: magic-work-mode
+      name: '@magic/dsh-work-mode'
+    - id: magic-engineering
+      name: '@magic/dsh-engineering'

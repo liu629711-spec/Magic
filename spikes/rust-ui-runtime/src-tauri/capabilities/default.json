@@ -1,7 +1,0 @@
-{
-  "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Rust UI spike with the default Tauri core capability only.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
-}

@@ -1,9 +1,0 @@
-[package]
-name = "magic-persistence-port"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-magic-domain = { path = "../domain" }
-thiserror.workspace = true
-

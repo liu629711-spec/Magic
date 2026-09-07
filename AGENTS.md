@@ -10,16 +10,19 @@
 6. 面对用户提出的问题和需求，要思考，调研，验证过之后再去给到用户答案，用户的方向有问题直接指出纠正，不可以只服从用户。
 7. 不替用户做决定，不确定的内容必须先问用户，用户确定后才可以进行处理。
 
-## 项目范围
+## 当前架构
+
+`main` 是 DSH 插件工作区。Magic 产品能力以 Cordis 插件形式接入 DSH，不重新实现 Agent 执行底座，也不把 DSH 改成独立桌面应用后再反向接插件。
 
 | 内容 | 路径 | 用途 |
 | --- | --- | --- |
-| Magic 产品规则 | `D:\Harmess\Magic\docs\01-产品\PRD-01` 至 `PRD-05` | 唯一正式 PRD |
-| Magic 自研项目 | `D:\Harmess\Magic\` | 产品文档与后续自研代码 |
-| 参考项目 | `D:\Harmess\Magic\reference-project\` | 源码研究和可选能力来源 |
-| OpenCode | `reference-project\opencode\` | 强代理执行底座候选 |
-| AgentCore | `reference-project\AgentCore\` | CEO、工程与恢复能力的参考源码 |
-| DeepSeek Harness | `reference-project\deepseek-harness\` | 已拆解的候选 Harness |
+| Magic 产品规则 | `docs/01-产品/PRD-01` 至 `PRD-05` | 唯一正式 PRD |
+| Magic 插件 | `plugins/` | 自研 DSH 插件 |
+| DSH 加载补丁 | `patches/web.patch.yml` | web profile overlay |
+| 参考项目 | `reference-project/` | 本地源码研究，不提交第三方完整仓 |
+| 旧桌面实现 | `old-design` 分支 | 归档，不作为当前实现 |
+
+CEO 模式和工程模式是两个独立插件。使用 CEO 不等于建立工程；建立工程必须用户明确确认。
 
 ## 修改规则
 
@@ -27,3 +30,4 @@
 2. 改动前说明文件、依据、目的和影响范围；只做完成任务所需的最小改动。
 3. 涉及共享协议、状态、权限、事件或跨项目适配时，先用 CodeGraph 查影响范围，再实施和验证。
 4. 产品语义变更先改对应既有 PRD；不要新建平行 PRD。
+5. 新能力优先做成 DSH 插件或 bundle patch，不要在 Magic 里复制 DSH 的 session、tool、agent-loop。
