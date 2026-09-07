@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Magic",
+  "version": "0.1.0",
+  "identifier": "com.lawofall.magic",
+  "build": {
+    "beforeDevCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File frontend/dev.ps1 --port 1420",
+    "beforeBuildCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File frontend/build.ps1",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* ipc: http://ipc.local"
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

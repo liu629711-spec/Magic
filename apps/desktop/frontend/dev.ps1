@@ -12,7 +12,7 @@ $exitCode = 1
 try {
     Push-Location $PSScriptRoot
     [Environment]::SetEnvironmentVariable("NO_COLOR", $null, "Process")
-    & trunk build @TrunkArgs
+    & trunk serve --config Trunk.toml @TrunkArgs
     $exitCode = $LASTEXITCODE
 }
 finally {

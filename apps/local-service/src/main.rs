@@ -5,7 +5,10 @@
 use axum::{
     extract::{rejection::JsonRejection, Path, Query, Request, State},
     http::{header, HeaderValue, Method, StatusCode},
-    response::{IntoResponse, Response},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Response,
+    },
     routing::{delete, get, post},
     Json, Router,
 };
@@ -20,11 +23,11 @@ use magic_contracts::{
     FileReferenceItem, FileReferenceResponse, HealthResponse, LedgerEventDto, RenameSessionRequest,
     RenameSessionResponse, SaveModelProviderRequest, SaveModelProviderResponse,
     SelectSessionModelRequest, SendSessionMessageResponse, ServiceInfoResponse,
-    SessionActivityResponse, SessionJobActivity, SessionListItem, SessionListResponse,
-    SessionUsageStats,
-    SessionToolActivity, SetModelProviderPresentationRequest, SetSessionPresentationRequest,
-    SetSessionProjectRequest, TaskDetailResponse, TaskListItem, TaskListResponse, TaskMode,
-    WorkerInfo,
+    SessionActivityArtifact, SessionActivityResponse, SessionApprovalRequest,
+    SessionApprovalResponse, SessionJobActivity, SessionListItem, SessionListResponse,
+    SessionToolActivity, SessionUsageStats, SetModelProviderPresentationRequest,
+    SetSessionPresentationRequest, SetSessionProjectRequest, TaskDetailResponse, TaskListItem,
+    TaskListResponse, TaskMode, WorkerInfo,
 };
 use magic_domain::{AttemptId, AttemptStatus, TaskId, TaskStatus};
 use magic_execution_dsh_v1::{DshLaunchConfig, DshProviderDraft, DshV1Adapter};
@@ -36,20 +39,25 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::HashMap,
-    env,
+    convert::Infallible,
+    env, fs,
     path::Path as FsPath,
+    process,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
     time::Duration,
 };
+use tokio::sync::mpsc::unbounded_channel;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
 const PROTOCOL_VERSION: &str = "1";
 const DEFAULT_LIST_LIMIT: usize = 100;
 const MAX_LIST_LIMIT: usize = 500;
+const DEFAULT_RUNTIME_MANIFEST: &str = "magic-runtime.json";
 
 #[derive(Clone)]
 struct AppState {
@@ -64,6 +72,16 @@ struct AppState {
 struct TransportConfig {
     token: Option<String>,
     cors_origins: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct RuntimeManifest {
+    instance_id: String,
+    pid: u32,
+    api_addr: String,
+    protocol_version: &'static str,
+    instance_token: String,
+    started_at_unix_ms: u128,
 }
 
 struct WorkerStatus {
@@ -180,14 +198,49 @@ async fn main() {
             tokio::time::sleep(Duration::from_millis(poll_ms)).await;
         }
     });
+    let manifest_instance_id = state.instance_id.clone();
+    let manifest_token = state.transport.token.clone().unwrap_or_default();
     let app = router(state);
     let listener = tokio::net::TcpListener::bind(&address)
         .await
         .expect("bind Magic local API");
+    let manifest_path = env::var_os("MAGIC_RUNTIME_MANIFEST")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_RUNTIME_MANIFEST));
+    let started_at_unix_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock before unix epoch")
+        .as_millis();
+    let manifest = RuntimeManifest {
+        instance_id: manifest_instance_id,
+        pid: process::id(),
+        api_addr: address.clone(),
+        protocol_version: PROTOCOL_VERSION,
+        instance_token: manifest_token,
+        started_at_unix_ms,
+    };
+    write_runtime_manifest(&manifest_path, &manifest).expect("publish Magic runtime manifest");
     println!("Magic local API listening at {address}");
     axum::serve(listener, app)
         .await
         .expect("serve Magic local API");
+    let _ = fs::remove_file(manifest_path);
+}
+
+fn write_runtime_manifest(
+    path: &std::path::Path,
+    manifest: &RuntimeManifest,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
+    let temporary = path.with_extension("tmp");
+    fs::write(&temporary, serde_json::to_vec_pretty(manifest)?)?;
+    fs::rename(temporary, path)?;
+    Ok(())
 }
 
 /// FZ-9 transport configuration.
@@ -231,7 +284,10 @@ fn load_transport_config(address: &str) -> TransportConfig {
         // Browser preview is a strictly local development mode. Production
         // still requires an explicit allowlist together with its bearer token.
         if cors_origins.is_empty() {
-            cors_origins.push("http://127.0.0.1:1420".into());
+            cors_origins.extend([
+                "http://127.0.0.1:8080".into(),
+                "http://127.0.0.1:1420".into(),
+            ]);
         }
     }
     TransportConfig {
@@ -318,6 +374,7 @@ fn cors_layer(config: &TransportConfig) -> CorsLayer {
 fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/api/sessions", get(list_sessions).post(create_session))
+        .route("/api/sessions/archived", get(list_archived_sessions))
         .route(
             "/api/sessions/{session_id}/project",
             post(set_session_project),
@@ -329,9 +386,16 @@ fn router(state: AppState) -> Router {
             get(session_messages).post(send_session_message),
         )
         .route("/api/sessions/{session_id}/cancel", post(cancel_session))
+        .route(
+            "/api/sessions/{session_id}/approvals",
+            get(session_approvals),
+        )
+        .route("/api/sessions/{session_id}/events", get(session_events))
+        .route("/api/approvals/{approval_id}/answer", post(answer_approval))
         .route("/api/sessions/{session_id}/rename", post(rename_session))
         .route("/api/sessions/{session_id}/fork", post(fork_session))
         .route("/api/sessions/{session_id}/archive", post(archive_session))
+        .route("/api/sessions/{session_id}/restore", post(restore_session))
         .route(
             "/api/sessions/{session_id}/presentation",
             post(set_session_presentation),
@@ -475,6 +539,19 @@ async fn service_info(State(state): State<AppState>) -> Json<ServiceInfoResponse
 async fn list_sessions(
     State(state): State<AppState>,
 ) -> Result<Json<SessionListResponse>, ApiError> {
+    list_sessions_impl(state, false).await
+}
+
+async fn list_archived_sessions(
+    State(state): State<AppState>,
+) -> Result<Json<SessionListResponse>, ApiError> {
+    list_sessions_impl(state, true).await
+}
+
+async fn list_sessions_impl(
+    state: AppState,
+    include_archived: bool,
+) -> Result<Json<SessionListResponse>, ApiError> {
     let dsh = state.dsh.clone();
     let sessions = tokio::task::spawn_blocking(move || dsh.sessions())
         .await
@@ -494,9 +571,10 @@ async fn list_sessions(
     let items = sessions
         .into_iter()
         .filter(|session| {
-            !presentations
-                .get(&session.id)
-                .is_some_and(|presentation| presentation.archived)
+            include_archived
+                == presentations
+                    .get(&session.id)
+                    .is_some_and(|presentation| presentation.archived)
         })
         .map(|session| {
             let project_directory = project_directories.get(&session.id).cloned();
@@ -581,18 +659,26 @@ async fn archive_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let dsh = state.dsh.clone();
-    let dsh_session_id = session_id.clone();
-    tokio::task::spawn_blocking(move || dsh.archive_session(&dsh_session_id))
-        .await
-        .map_err(join_error("archive session worker failed"))?
-        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    // Archive is a Magic presentation concern. DSH has no restore operation;
+    // keep the DSH session intact so the user can recover it later.
     let repository = state.repository.clone();
     tokio::task::spawn_blocking(move || repository.archive_session_presentation(&session_id))
         .await
         .map_err(join_error("archive session presentation worker failed"))?
         .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
     Ok(Json(serde_json::json!({ "archived": true })))
+}
+
+async fn restore_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let repository = state.repository.clone();
+    tokio::task::spawn_blocking(move || repository.restore_session_presentation(&session_id))
+        .await
+        .map_err(join_error("restore session presentation worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Persistence(error)))?;
+    Ok(Json(serde_json::json!({ "archived": false })))
 }
 
 async fn set_session_presentation(
@@ -737,6 +823,81 @@ async fn cancel_session(
     Ok(Json(serde_json::json!({ "accepted": true })))
 }
 
+/// Proxies the authenticated DSH session/follow stream as browser-friendly SSE.
+/// The first item is a complete snapshot; later items are the durable DSH
+/// events appended to this session. The browser owns reconnect timing.
+async fn session_events(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    let (sender, receiver) = unbounded_channel::<Result<Event, Infallible>>();
+    let dsh = state.dsh.clone();
+    tokio::task::spawn_blocking(move || {
+        let error_sender = sender.clone();
+        let result = dsh.follow_session(&session_id, move |frame| {
+            let event = Event::default().data(frame.to_string());
+            sender.send(Ok(event)).is_ok()
+        });
+        if let Err(error) = result {
+            let _ = error_sender.send(Ok(Event::default().data(
+                serde_json::json!({
+                    "type": "error",
+                    "message": error.to_string(),
+                })
+                .to_string(),
+            )));
+        }
+    });
+    Sse::new(UnboundedReceiverStream::new(receiver)).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keep-alive"),
+    )
+}
+
+async fn session_approvals(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<SessionApprovalResponse>, ApiError> {
+    let dsh = state.dsh.clone();
+    let items = tokio::task::spawn_blocking(move || dsh.approvals(&session_id))
+        .await
+        .map_err(join_error("get DSH approval requests worker failed"))?;
+    Ok(Json(SessionApprovalResponse {
+        items: items
+            .into_iter()
+            .map(|item| SessionApprovalRequest {
+                id: item.id,
+                session_id: item.session_id,
+                tool_name: item.tool_name,
+                call_id: item.call_id,
+                reason: item.reason,
+            })
+            .collect(),
+    }))
+}
+
+#[derive(Deserialize)]
+struct AnswerApprovalBody {
+    outcome: String,
+}
+
+async fn answer_approval(
+    State(state): State<AppState>,
+    Path(approval_id): Path<String>,
+    body: Result<Json<AnswerApprovalBody>, JsonRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Json(body) = body
+        .map_err(|rejection| ApiError(ApplicationError::InvalidParameter(rejection.body_text())))?;
+    let dsh = state.dsh.clone();
+    let outcome = body.outcome;
+    tokio::task::spawn_blocking(move || dsh.answer_approval(&approval_id, &outcome))
+        .await
+        .map_err(join_error("answer DSH approval worker failed"))?
+        .map_err(|error| ApiError(ApplicationError::Execution(error.to_string())))?;
+    Ok(Json(serde_json::json!({ "accepted": true })))
+}
+
 async fn session_activity(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
@@ -756,6 +917,19 @@ async fn session_activity(
                 status: tool.status,
                 arguments_summary: tool.arguments_summary,
                 result_summary: tool.result_summary,
+            })
+            .collect(),
+        artifacts: activity
+            .artifacts
+            .into_iter()
+            .map(|item| SessionActivityArtifact {
+                id: item.id,
+                kind: item.kind,
+                title: item.title,
+                summary: item.summary,
+                detail: item.detail,
+                call_id: item.call_id,
+                event_seq: item.event_seq,
             })
             .collect(),
         jobs: activity
@@ -902,6 +1076,7 @@ async fn dsh_rpc(
         "subagents/list",
         "subagents/prompt",
         "subagents/interruptByParent",
+        "session/page",
         "commands/list",
         "commands/execute",
         "skills/list",
@@ -2215,6 +2390,12 @@ mod tests {
         let app = router(state);
         let (status, _) = status_of(app.clone(), request(Method::GET, "/api/service-info")).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+        let (status, _) = status_of(
+            app.clone(),
+            request(Method::GET, "/api/sessions/session-1/events"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
         let (status, _) = status_of(app.clone(), request(Method::GET, "/health")).await;
         assert_eq!(status, StatusCode::OK);
 
@@ -2337,7 +2518,10 @@ mod tests {
         env::set_var("MAGIC_ALLOW_INSECURE_LOCAL_DEV", "1");
         let config = load_transport_config("127.0.0.1:45280");
         assert!(config.token.is_none());
-        assert_eq!(config.cors_origins, vec!["http://127.0.0.1:1420"]);
+        assert_eq!(
+            config.cors_origins,
+            vec!["http://127.0.0.1:8080", "http://127.0.0.1:1420"]
+        );
         let result = std::panic::catch_unwind(|| load_transport_config("0.0.0.0:45280"));
         env::remove_var("MAGIC_ALLOW_INSECURE_LOCAL_DEV");
         assert!(result.is_err(), "dev mode must refuse non-loopback bind");

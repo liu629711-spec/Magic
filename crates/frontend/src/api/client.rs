@@ -14,9 +14,10 @@ use super::dto::{
     HealthResponse, ReconcileResponse, RenameSessionRequestBody, RenameSessionResponse,
     SaveModelProviderRequestBody, SaveModelProviderResponse, SelectSessionModelRequestBody,
     SendSessionMessageRequestBody, SendSessionMessageResponse, ServiceInfoResponse,
-    SessionActivityResponse, SessionListResponse, SetModelProviderPresentationRequestBody,
-    SetSessionPresentationRequestBody, SetSessionProjectRequestBody, TaskDetailResponse,
-    TaskListResponse, ValidateDirectoryRequestBody, ValidatedDirectoryResponse,
+    SessionActivityResponse, SessionApprovalResponse, SessionListResponse,
+    SetModelProviderPresentationRequestBody, SetSessionPresentationRequestBody,
+    SetSessionProjectRequestBody, TaskDetailResponse, TaskListResponse,
+    ValidateDirectoryRequestBody, ValidatedDirectoryResponse,
 };
 use super::error::ApiError;
 
@@ -313,6 +314,29 @@ impl ApiClient {
         Ok(())
     }
 
+    pub async fn archived_session_list(&self) -> Result<SessionListResponse, ApiError> {
+        let response = self
+            .send_json(
+                HttpMethod::Get,
+                "/api/sessions/archived".into(),
+                None,
+                false,
+            )
+            .await?;
+        parse(&response)
+    }
+
+    pub async fn restore_session(&self, session_id: &str) -> Result<(), ApiError> {
+        self.send_json(
+            HttpMethod::Post,
+            format!("/api/sessions/{session_id}/restore"),
+            None,
+            true,
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn set_session_presentation(
         &self,
         session_id: &str,
@@ -369,6 +393,37 @@ impl ApiClient {
                 format!("/api/sessions/{session_id}/activity"),
                 None,
                 false,
+            )
+            .await?;
+        parse(&response)
+    }
+
+    pub async fn session_approvals(
+        &self,
+        session_id: &str,
+    ) -> Result<SessionApprovalResponse, ApiError> {
+        let response = self
+            .send_json(
+                HttpMethod::Get,
+                format!("/api/sessions/{session_id}/approvals"),
+                None,
+                false,
+            )
+            .await?;
+        parse(&response)
+    }
+
+    pub async fn answer_approval(
+        &self,
+        approval_id: &str,
+        outcome: &str,
+    ) -> Result<serde_json::Value, ApiError> {
+        let response = self
+            .send_json(
+                HttpMethod::Post,
+                format!("/api/approvals/{approval_id}/answer"),
+                Some(serde_json::json!({ "outcome": outcome })),
+                true,
             )
             .await?;
         parse(&response)
@@ -535,7 +590,7 @@ impl ApiClient {
     ) -> Result<serde_json::Value, ApiError> {
         self.dsh_rpc(
             "subagents/list",
-            serde_json::json!({ "agentId": parent_session_id }),
+            serde_json::json!({ "parentSessionId": parent_session_id }),
         )
         .await
     }
@@ -565,6 +620,33 @@ impl ApiClient {
             }),
         )
         .await
+    }
+
+    /// Reads a child history page through DSH's parent-addressed route. A
+    /// child is not an ordinary root session: DSH validates this address before
+    /// returning its records.
+    pub async fn dsh_subagent_messages(
+        &self,
+        parent_session_id: &str,
+        child_session_id: &str,
+        mode: &str,
+    ) -> Result<serde_json::Value, ApiError> {
+        let response = self
+            .dsh_rpc(
+                "session/page",
+                serde_json::json!({
+                    "address": {
+                        "kind": "subagent",
+                        "parentSessionId": parent_session_id,
+                        "childSessionId": child_session_id,
+                        "mode": mode,
+                    },
+                    "throughSeq": -1,
+                    "maxMessages": 500,
+                }),
+            )
+            .await?;
+        Ok(response.get("records").cloned().unwrap_or(response))
     }
 
     pub async fn dsh_goal_create(
@@ -1014,6 +1096,49 @@ pub(crate) mod tests {
         assert_eq!(info.capabilities.get("task_create"), Some(&true));
         assert_eq!(info.capabilities.get("approvals"), Some(&false));
         assert!(info.worker.running);
+    }
+
+    #[test]
+    fn subagent_history_uses_parent_addressed_session_page() {
+        let (client, transport) = client(MockTransport::new(|request| {
+            assert_eq!(request.path, "/api/dsh/rpc");
+            let body: serde_json::Value =
+                serde_json::from_str(request.body.as_deref().unwrap()).unwrap();
+            assert_eq!(body["endpoint"], "session/page");
+            assert_eq!(body["args"]["address"]["kind"], "subagent");
+            assert_eq!(body["args"]["address"]["parentSessionId"], "parent-1");
+            assert_eq!(body["args"]["address"]["childSessionId"], "child-1");
+            assert_eq!(body["args"]["address"]["mode"], "continuable");
+            assert_eq!(body["args"]["throughSeq"], -1);
+            json_response(
+                200,
+                json!({"records": [{"event": {"type": "assistant/message"}}]}),
+            )
+        }));
+
+        let value = futures::executor::block_on(client.dsh_subagent_messages(
+            "parent-1",
+            "child-1",
+            "continuable",
+        ))
+        .unwrap();
+        assert!(value.is_array());
+        assert_eq!(transport.last_request().path, "/api/dsh/rpc");
+    }
+
+    #[test]
+    fn subagent_list_uses_the_current_parent_session_contract() {
+        let (client, transport) = client(MockTransport::new(|request| {
+            let body: serde_json::Value =
+                serde_json::from_str(request.body.as_deref().unwrap()).unwrap();
+            assert_eq!(body["endpoint"], "subagents/list");
+            assert_eq!(body["args"]["parentSessionId"], "parent-1");
+            assert!(body["args"].get("agentId").is_none());
+            json_response(200, json!({"entries": []}))
+        }));
+        let value = futures::executor::block_on(client.dsh_subagents_list("parent-1")).unwrap();
+        assert_eq!(value["entries"], serde_json::json!([]));
+        assert_eq!(transport.last_request().path, "/api/dsh/rpc");
     }
 
     #[test]

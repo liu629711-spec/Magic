@@ -16,7 +16,8 @@ magic-execution-port = { path = "../../crates/execution-port" }
 magic-execution-dsh-v1 = { path = "../../crates/execution-dsh-v1" }
 magic-persistence = { path = "../../crates/persistence" }
 magic-persistence-port = { path = "../../crates/persistence-port" }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time", "sync"] }
+tokio-stream = "0.1"
 magic-reconciliation = { path = "../../crates/reconciliation" }
 
 [dev-dependencies]

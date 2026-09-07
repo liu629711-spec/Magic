@@ -234,6 +234,10 @@ impl SqlitePersistence {
         self.update_session_presentation(session_id, Some(false), Some(true), None)
     }
 
+    pub fn restore_session_presentation(&self, session_id: &str) -> Result<(), PersistenceError> {
+        self.update_session_presentation(session_id, None, Some(false), None)
+    }
+
     pub fn mark_session_standalone(&self, session_id: &str) -> Result<(), PersistenceError> {
         self.update_session_presentation(session_id, None, None, Some(true))
     }
@@ -1456,6 +1460,15 @@ mod tests {
             Some(&SessionPresentation {
                 pinned: false,
                 archived: true,
+                standalone: true,
+            })
+        );
+        store.restore_session_presentation("session-1").unwrap();
+        assert_eq!(
+            store.session_presentations().unwrap().get("session-1"),
+            Some(&SessionPresentation {
+                pinned: false,
+                archived: false,
                 standalone: true,
             })
         );

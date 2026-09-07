@@ -204,6 +204,18 @@ pub struct SessionJobActivity {
     pub finished_at: Option<u64>,
 }
 
+/// Display-safe typed detail projected from DSH tool/event presentation.
+#[derive(Debug, Serialize)]
+pub struct SessionActivityArtifact {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub summary: String,
+    pub detail: String,
+    pub call_id: Option<String>,
+    pub event_seq: Option<u64>,
+}
+
 /// Provider-reported usage accumulated from DSH assistant usage events.
 #[derive(Debug, Serialize)]
 pub struct SessionUsageStats {
@@ -219,11 +231,27 @@ pub struct SessionUsageStats {
 #[derive(Debug, Serialize)]
 pub struct SessionActivityResponse {
     pub tools: Vec<SessionToolActivity>,
+    pub artifacts: Vec<SessionActivityArtifact>,
     pub jobs: Vec<SessionJobActivity>,
     pub stats: Option<SessionUsageStats>,
     /// False means the connected DSH instance did not make its live job
     /// snapshot available. It is distinct from an empty job list.
     pub jobs_available: bool,
+}
+
+/// One display-safe DSH approval request waiting for the desktop user.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SessionApprovalRequest {
+    pub id: String,
+    pub session_id: String,
+    pub tool_name: String,
+    pub call_id: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SessionApprovalResponse {
+    pub items: Vec<SessionApprovalRequest>,
 }
 
 #[derive(Debug, Serialize)]

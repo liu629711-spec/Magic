@@ -498,6 +498,7 @@ name = "magic-desktop-frontend"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures",
  "getrandom 0.4.3",
  "gloo",
  "gloo-net",
@@ -506,6 +507,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "yew",

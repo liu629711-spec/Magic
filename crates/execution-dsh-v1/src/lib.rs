@@ -65,6 +65,7 @@ impl DshLaunchConfig {
 pub struct DshV1Adapter {
     client: Arc<DshRemoteClient>,
     _process: Option<Arc<ManagedDshProcess>>,
+    approvals: Arc<DshApprovalBroker>,
 }
 
 struct ManagedDshProcess {
@@ -120,6 +121,7 @@ pub struct DshProviderDraft {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DshSessionActivity {
     pub tools: Vec<DshToolActivity>,
+    pub artifacts: Vec<DshSessionArtifact>,
     pub jobs: Vec<DshSessionJob>,
     pub jobs_available: bool,
     pub stats: Option<DshUsageStats>,
@@ -144,6 +146,19 @@ pub struct DshToolActivity {
     pub result_summary: Option<String>,
 }
 
+/// A bounded, redacted UI payload from DSH's typed tool/event presentation.
+/// The adapter deliberately does not expose the original event or meta JSON.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DshSessionArtifact {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub summary: String,
+    pub detail: String,
+    pub call_id: Option<String>,
+    pub event_seq: Option<u64>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct DshSessionJob {
     pub id: String,
@@ -159,6 +174,45 @@ pub struct DshSessionJob {
 pub struct DshFileReference {
     pub path: String,
     pub kind: String,
+}
+
+/// One DSH approval request waiting for a user decision in Magic.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DshApprovalRequest {
+    pub id: String,
+    pub session_id: String,
+    pub tool_name: String,
+    pub call_id: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct PendingDshApproval {
+    request: DshApprovalRequest,
+    client_id: String,
+    event_id: String,
+}
+
+#[derive(Default)]
+struct DshApprovalBroker {
+    pending: Mutex<HashMap<String, PendingDshApproval>>,
+}
+
+impl DshApprovalBroker {
+    fn upsert(&self, pending: PendingDshApproval) {
+        if let Ok(mut requests) = self.pending.lock() {
+            // A reconnect can replay the same waterfall request with a new
+            // client generation. Replacing the entry refreshes the transport
+            // correlation while preserving one visible approval request.
+            requests.insert(pending.request.id.clone(), pending);
+        }
+    }
+
+    fn remove(&self, id: &str) {
+        if let Ok(mut requests) = self.pending.lock() {
+            requests.remove(id);
+        }
+    }
 }
 
 struct DshRemoteClient {
@@ -219,12 +273,15 @@ impl DshV1Adapter {
             }
         };
         let client = DshRemoteClient::connect(&launch_url)?;
-        Ok(Self {
+        let adapter = Self {
             client: Arc::new(client),
             _process: Some(Arc::new(ManagedDshProcess {
                 child: Mutex::new(child),
             })),
-        })
+            approvals: Arc::new(DshApprovalBroker::default()),
+        };
+        adapter.start_approval_bridge();
+        Ok(adapter)
     }
 
     /// Connects to a DSH process already authenticated by Magic's supervisor.
@@ -236,7 +293,19 @@ impl DshV1Adapter {
                 agent: ureq::Agent::new_with_defaults(),
             }),
             _process: None,
+            approvals: Arc::new(DshApprovalBroker::default()),
         }
+    }
+
+    fn start_approval_bridge(&self) {
+        let client = self.client.clone();
+        let approvals = self.approvals.clone();
+        std::thread::spawn(move || loop {
+            if let Err(error) = client.follow_approval_events(approvals.clone()) {
+                eprintln!("DSH approval event bridge stopped: {error}");
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        });
     }
 
     pub fn sessions(&self) -> Result<Vec<DshSessionInfo>, ExecutionError> {
@@ -245,6 +314,67 @@ impl DshV1Adapter {
 
     pub fn messages(&self, session_id: &str) -> Result<Vec<Value>, ExecutionError> {
         self.client.session_records(session_id)
+    }
+
+    /// Follows one DSH session until the consumer stops accepting frames.
+    ///
+    /// DSH's `session/follow` stream opens with a complete snapshot and then
+    /// emits one durable event per frame. Magic keeps the transport here so
+    /// callers never need to handle the authenticated DSH WebSocket directly.
+    pub fn follow_session<F>(&self, session_id: &str, on_frame: F) -> Result<(), ExecutionError>
+    where
+        F: FnMut(Value) -> bool,
+    {
+        let address = self.client.session_address(session_id)?;
+        self.client.follow_session_address(address, on_frame)
+    }
+
+    /// Returns pending DSH approval requests for one session.
+    pub fn approvals(&self, session_id: &str) -> Vec<DshApprovalRequest> {
+        self.approvals
+            .pending
+            .lock()
+            .map(|pending| {
+                pending
+                    .values()
+                    .filter(|item| item.request.session_id == session_id)
+                    .map(|item| item.request.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Answers one pending DSH approval through the active `$events` client.
+    pub fn answer_approval(&self, id: &str, outcome: &str) -> Result<(), ExecutionError> {
+        if !matches!(outcome, "allowed-once" | "rejected") {
+            return Err(ExecutionError::Adapter(
+                "DSH approval outcome must be allowed-once or rejected".into(),
+            ));
+        }
+        let pending = self
+            .approvals
+            .pending
+            .lock()
+            .map_err(|_| ExecutionError::Adapter("DSH approval broker is unavailable".into()))?
+            .remove(id)
+            .ok_or_else(|| {
+                ExecutionError::Adapter("DSH approval request is no longer pending".into())
+            })?;
+        let result = self.client.rpc(
+            "$events/result",
+            json!({
+                "clientId": pending.client_id,
+                "eventId": pending.event_id,
+                "outcome": { "kind": "result", "value": outcome },
+            }),
+        );
+        if let Err(error) = result {
+            if let Ok(mut requests) = self.approvals.pending.lock() {
+                requests.insert(pending.request.id.clone(), pending);
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Reads DSH-owned tool and job activity without copying raw transcripts
@@ -257,6 +387,7 @@ impl DshV1Adapter {
         };
         Ok(DshSessionActivity {
             tools: project_tool_activities(&records),
+            artifacts: project_session_artifacts(&records),
             jobs,
             jobs_available,
             stats: project_usage_stats(&records),
@@ -396,9 +527,11 @@ impl DshV1Adapter {
 
     /// Lists durable direct children of a session without resuming them.
     pub fn subagents_list(&self, parent_session_id: &str) -> Result<Value, ExecutionError> {
-        ensure_remote_id("agentId", parent_session_id)?;
-        self.client
-            .rpc("subagents/list", json!({ "agentId": parent_session_id }))
+        ensure_remote_id("parentSessionId", parent_session_id)?;
+        self.client.rpc(
+            "subagents/list",
+            json!({ "parentSessionId": parent_session_id }),
+        )
     }
 
     /// Delivers a browser-authored prompt to a continuable child. The request
@@ -640,6 +773,116 @@ impl EventSource for DshV1Adapter {
 }
 
 impl DshRemoteClient {
+    fn follow_approval_events(
+        &self,
+        approvals: Arc<DshApprovalBroker>,
+    ) -> Result<(), ExecutionError> {
+        let websocket_url = self.origin.replacen("http", "ws", 1) + "/api/remote.mux";
+        let request = ClientRequestBuilder::new(websocket_url.parse().map_err(|error| {
+            ExecutionError::Adapter(format!("invalid DSH WebSocket URL: {error}"))
+        })?)
+        .with_header("Cookie", &self.cookie);
+        let (mut socket, _) = connect(request).map_err(|error| {
+            ExecutionError::Adapter(format!("connect to DSH approval stream failed: {error}"))
+        })?;
+        let stream_id = format!("magic-approval-{}", Uuid::new_v4());
+        socket
+            .send(Message::Text(
+                json!({
+                    "type": "open",
+                    "streamId": stream_id,
+                    "endpoint": "$events",
+                    "payload": { "args": {} },
+                })
+                .to_string()
+                .into(),
+            ))
+            .map_err(|error| {
+                ExecutionError::Adapter(format!("open DSH approval stream failed: {error}"))
+            })?;
+        let mut client_id = None::<String>;
+        loop {
+            let message = socket.read().map_err(|error| {
+                ExecutionError::Adapter(format!("read DSH approval stream failed: {error}"))
+            })?;
+            let Message::Text(text) = message else {
+                continue;
+            };
+            let frame: Value = serde_json::from_str(&text).map_err(|error| {
+                ExecutionError::Adapter(format!("decode DSH approval stream frame failed: {error}"))
+            })?;
+            if frame.get("streamId").and_then(Value::as_str) != Some(stream_id.as_str()) {
+                continue;
+            }
+            if frame.get("type").and_then(Value::as_str) == Some("error") {
+                return Err(ExecutionError::Adapter(format!(
+                    "DSH approval stream failed: {}",
+                    frame.get("error").cloned().unwrap_or(Value::Null)
+                )));
+            }
+            let Some(value) = frame.get("value") else {
+                continue;
+            };
+            match value.get("type").and_then(Value::as_str) {
+                Some("ready") => {
+                    client_id = value
+                        .get("clientId")
+                        .and_then(Value::as_str)
+                        .map(ToOwned::to_owned);
+                }
+                Some("waterfall")
+                    if value.get("event").and_then(Value::as_str) == Some("approval/request") =>
+                {
+                    let Some(client_id) = client_id.clone() else {
+                        return Err(ExecutionError::Adapter(
+                            "DSH approval stream sent a request before ready".into(),
+                        ));
+                    };
+                    let Some(event_id) = value.get("eventId").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    let Some(request) = value.get("request") else {
+                        continue;
+                    };
+                    let Some(session_id) = value.get("agentId").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    let approval = DshApprovalRequest {
+                        id: event_id.to_owned(),
+                        session_id: session_id.to_owned(),
+                        tool_name: request
+                            .get("toolName")
+                            .and_then(Value::as_str)
+                            .unwrap_or("未知工具")
+                            .to_owned(),
+                        call_id: request
+                            .get("callId")
+                            .and_then(Value::as_str)
+                            .map(ToOwned::to_owned),
+                        reason: request
+                            .get("reason")
+                            .and_then(Value::as_str)
+                            .map(ToOwned::to_owned),
+                    };
+                    approvals.upsert(PendingDshApproval {
+                        request: approval,
+                        client_id,
+                        event_id: event_id.to_owned(),
+                    });
+                }
+                Some("cancel") => {
+                    // DSH sends this when the host settles the waterfall or
+                    // releases its context. Do not leave a dead approval in
+                    // Magic's UI or allow a later click to reuse its id.
+                    if let Some(event_id) = value.get("eventId").and_then(Value::as_str) {
+                        approvals.remove(event_id);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn submit_prompt(
         &self,
         session_id: &str,
@@ -739,6 +982,71 @@ impl DshRemoteClient {
     }
 
     fn session_records(&self, session_id: &str) -> Result<Vec<Value>, ExecutionError> {
+        let mut records = None;
+        let address = self.session_address(session_id)?;
+        self.follow_session_address(address, |value| {
+            if value.get("type").and_then(Value::as_str) == Some("snapshot") {
+                records = value.get("records").and_then(Value::as_array).cloned();
+                return false;
+            }
+            true
+        })?;
+        records.ok_or_else(|| ExecutionError::Adapter("DSH session stream had no snapshot".into()))
+    }
+
+    fn session_address(&self, session_id: &str) -> Result<Value, ExecutionError> {
+        let sessions = self.sessions()?;
+        let Some(session) = sessions
+            .into_iter()
+            .find(|session| session.id == session_id)
+        else {
+            return Err(ExecutionError::Adapter(format!(
+                "DSH session {session_id} was not found"
+            )));
+        };
+        let Some(parent_session_id) = session.parent_id else {
+            return Ok(json!({ "kind": "session", "sessionId": session_id }));
+        };
+
+        // DSH rejects the ordinary session address for child Agents. Resolve
+        // the catalog entry so the follow stream carries the same durable
+        // parent address as session/page and subagents/prompt.
+        let catalog = self.rpc(
+            "subagents/list",
+            json!({ "parentSessionId": parent_session_id }),
+        )?;
+        let mode = catalog
+            .get("entries")
+            .or_else(|| catalog.get("value").and_then(|value| value.get("entries")))
+            .and_then(Value::as_array)
+            .and_then(|entries| {
+                entries
+                    .iter()
+                    .find(|entry| entry.get("id").and_then(Value::as_str) == Some(session_id))
+            })
+            .and_then(|entry| entry.get("mode").and_then(Value::as_str))
+            .unwrap_or("continuable");
+        if !matches!(mode, "one-shot" | "continuable") {
+            return Err(ExecutionError::Adapter(format!(
+                "DSH child session {session_id} has unsupported mode {mode}"
+            )));
+        }
+        Ok(json!({
+            "kind": "subagent",
+            "parentSessionId": parent_session_id,
+            "childSessionId": session_id,
+            "mode": mode,
+        }))
+    }
+
+    fn follow_session_address<F>(
+        &self,
+        address: Value,
+        mut on_frame: F,
+    ) -> Result<(), ExecutionError>
+    where
+        F: FnMut(Value) -> bool,
+    {
         let websocket_url = self.origin.replacen("http", "ws", 1) + "/api/remote.mux";
         let request = ClientRequestBuilder::new(websocket_url.parse().map_err(|error| {
             ExecutionError::Adapter(format!("invalid DSH WebSocket URL: {error}"))
@@ -757,7 +1065,7 @@ impl DshRemoteClient {
                     "payload": {
                         "args": {
                             "request": {
-                                "address": { "kind": "session", "sessionId": session_id },
+                                "address": address,
                                 "maxMessages": 500,
                             }
                         }
@@ -788,19 +1096,12 @@ impl DshRemoteClient {
                     frame.get("error").cloned().unwrap_or(Value::Null)
                 )));
             }
-            let Some(snapshot) = frame.get("value") else {
+            let Some(value) = frame.get("value").cloned() else {
                 continue;
             };
-            if snapshot.get("type").and_then(Value::as_str) != Some("snapshot") {
-                continue;
+            if !on_frame(value) {
+                return Ok(());
             }
-            let records = snapshot
-                .get("records")
-                .and_then(Value::as_array)
-                .ok_or_else(|| {
-                    ExecutionError::Adapter("DSH session snapshot has no records".into())
-                })?;
-            return Ok(records.clone());
         }
     }
 
@@ -1221,6 +1522,189 @@ fn project_tool_activities(records: &[Value]) -> Vec<DshToolActivity> {
     tools
 }
 
+fn project_session_artifacts(records: &[Value]) -> Vec<DshSessionArtifact> {
+    let mut artifacts = Vec::new();
+    for (index, record) in records.iter().enumerate() {
+        let Some(event) = record.get("event") else {
+            continue;
+        };
+        let event_type = event
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let data = event.get("data").unwrap_or(&Value::Null);
+        let id = record
+            .get("seq")
+            .and_then(Value::as_u64)
+            .map(|seq| seq.to_string())
+            .unwrap_or_else(|| index.to_string());
+        let event_seq = record.get("seq").and_then(Value::as_u64);
+        if event_type == "tool/result" {
+            let call_id = data
+                .get("message")
+                .and_then(|message| message.get("source"))
+                .and_then(|source| source.get("callId"))
+                .and_then(Value::as_str)
+                .filter(|call_id| !call_id.trim().is_empty())
+                .map(ToOwned::to_owned);
+            let Some(meta) = data.get("meta").filter(|value| value.is_object()) else {
+                continue;
+            };
+            let Some(card) = meta.get("card").and_then(Value::as_str) else {
+                continue;
+            };
+            match card {
+                "terminal" => {
+                    let output = meta
+                        .get("output")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let exit_code = meta.get("exitCode").and_then(Value::as_i64);
+                    artifacts.push(DshSessionArtifact {
+                        id,
+                        kind: "terminal".into(),
+                        title: meta
+                            .get("title")
+                            .and_then(Value::as_str)
+                            .unwrap_or("终端")
+                            .to_owned(),
+                        summary: exit_code
+                            .map(|code| format!("退出码 {code}"))
+                            .unwrap_or_else(|| "已返回终端输出".into()),
+                        detail: safe_text(output),
+                        call_id: call_id.clone(),
+                        event_seq,
+                    });
+                }
+                "diff" => {
+                    let Some(paths) = project_diff_summaries(meta.get("diffs")) else {
+                        // DSH's diff presentation is optional and opaque. Do
+                        // not invent a change row when its typed payload is
+                        // missing or malformed.
+                        continue;
+                    };
+                    artifacts.push(DshSessionArtifact {
+                        id,
+                        kind: "diff".into(),
+                        title: safe_text(
+                            meta.get("title")
+                                .and_then(Value::as_str)
+                                .unwrap_or("文件变更"),
+                        ),
+                        summary: format!("{} 个文件变更", paths.len()),
+                        // Keep the existing UI contract (an array of objects
+                        // with `path`) while excluding file contents and all
+                        // other raw diff fields from the adapter boundary.
+                        detail: Value::Array(paths).to_string(),
+                        call_id,
+                        event_seq,
+                    });
+                }
+                _ => {}
+            }
+        } else if event_type == "compaction/summary" {
+            let Some(summary) = data
+                .get("summary")
+                .and_then(Value::as_str)
+                .filter(|summary| !summary.trim().is_empty())
+            else {
+                continue;
+            };
+            artifacts.push(DshSessionArtifact {
+                id,
+                kind: "context".into(),
+                title: "上下文压缩".into(),
+                summary: "已生成上下文摘要".into(),
+                detail: safe_text(summary),
+                call_id: None,
+                event_seq,
+            });
+        } else if let Some(seqs) = event.get("sourceEventSeqs").and_then(Value::as_array) {
+            if !seqs.is_empty() && seqs.iter().all(Value::is_u64) {
+                artifacts.push(DshSessionArtifact {
+                    id,
+                    kind: "source".into(),
+                    title: "来源引用".into(),
+                    summary: format!("引用 {} 个事件", seqs.len()),
+                    detail: safe_event_value(event.get("sourceEventSeqs").unwrap_or(&Value::Null)),
+                    call_id: None,
+                    event_seq,
+                });
+            }
+        }
+    }
+    artifacts
+}
+
+/// Projects DSH's typed diff card into the smallest useful review payload.
+/// The frontend needs paths and a conservative change type to locate the real
+/// workspace diff; source text must stay in DSH and malformed cards must not
+/// become fabricated rows.
+fn project_diff_summaries(value: Option<&Value>) -> Option<Vec<Value>> {
+    let diffs = value?.as_array()?;
+    if diffs.is_empty() {
+        return None;
+    }
+
+    let mut path_order = Vec::new();
+    let mut change_types = HashMap::new();
+    for diff in diffs {
+        let Some(diff) = diff.as_object() else {
+            return None;
+        };
+        let Some(path) = diff.get("path").and_then(Value::as_str) else {
+            return None;
+        };
+        let path = path.trim();
+        if path.is_empty() || path.chars().any(char::is_control) {
+            return None;
+        }
+        let Some(old_text) = diff.get("oldText") else {
+            return None;
+        };
+        if !old_text.is_null() && !old_text.is_string() {
+            return None;
+        }
+        if diff.get("newText").and_then(Value::as_str).is_none() {
+            return None;
+        }
+        let change_type = match (old_text, diff.get("newText")) {
+            (Value::String(old), Some(Value::String(new)))
+                if !old.is_empty() && !new.is_empty() =>
+            {
+                "modified"
+            }
+            _ => "unknown",
+        };
+        let path = path.to_owned();
+        if !change_types.contains_key(&path) {
+            path_order.push(path.clone());
+            change_types.insert(path, change_type);
+        } else if change_type == "modified" {
+            // A file may have several hunks. An insertion-style hunk alone is
+            // ambiguous, but a later ordinary before/after hunk proves the
+            // file was modified.
+            change_types.insert(path, "modified");
+        }
+    }
+    if path_order.is_empty() {
+        return None;
+    }
+    Some(
+        path_order
+            .into_iter()
+            .map(|path| {
+                let change_type = change_types.get(&path).copied().unwrap_or("unknown");
+                json!({ "path": path, "change_type": change_type })
+            })
+            .collect(),
+    )
+}
+
+fn safe_event_value(value: &Value) -> String {
+    safe_text(&redacted_json(value).to_string())
+}
+
 fn project_usage_stats(records: &[Value]) -> Option<DshUsageStats> {
     let mut turns = HashSet::new();
     let mut steps = HashSet::new();
@@ -1231,7 +1715,10 @@ fn project_usage_stats(records: &[Value]) -> Option<DshUsageStats> {
     let mut saw_chunk_usage = false;
 
     for event in records.iter().filter_map(|record| record.get("event")) {
-        let event_type = event.get("type").and_then(Value::as_str).unwrap_or_default();
+        let event_type = event
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let data = event.get("data").unwrap_or(&Value::Null);
         if let Some(turn) = data.get("turn").and_then(Value::as_u64) {
             if event_type == "turn/start" {
@@ -1261,8 +1748,14 @@ fn project_usage_stats(records: &[Value]) -> Option<DshUsageStats> {
             None
         };
         let Some(usage) = usage else { continue };
-        input_tokens += usage.get("inputTokens").and_then(Value::as_u64).unwrap_or_default();
-        output_tokens += usage.get("outputTokens").and_then(Value::as_u64).unwrap_or_default();
+        input_tokens += usage
+            .get("inputTokens")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        output_tokens += usage
+            .get("outputTokens")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
         cache_read_tokens += usage
             .get("cacheReadTokens")
             .and_then(Value::as_u64)
@@ -1498,6 +1991,122 @@ mod tests {
     }
 
     #[test]
+    fn projects_typed_tool_details_context_and_sources() {
+        let records = vec![
+            json!({
+                "seq": 4,
+                "event": { "type": "tool/result", "data": {
+                    "meta": { "card": "terminal", "title": "运行测试", "output": "ok\n", "exitCode": 0 }
+                }}
+            }),
+            json!({
+                "seq": 5,
+                "event": { "type": "tool/result", "data": {
+                    "message": { "source": { "callId": "call-edit" } },
+                    "meta": { "card": "diff", "title": "编辑文件", "diffs": [
+                        { "path": "a.txt", "oldText": "secret-before", "newText": "secret-after" },
+                        { "path": "src/lib.rs", "oldText": null, "newText": "secret-source" }
+                    ] }
+                }}
+            }),
+            json!({
+                "seq": 6,
+                "event": { "type": "compaction/summary", "data": { "summary": "保留最近任务" } }
+            }),
+            json!({
+                "seq": 7,
+                "event": { "type": "assistant/message", "sourceEventSeqs": [1, 2], "data": {} }
+            }),
+        ];
+        let artifacts = project_session_artifacts(&records);
+        assert_eq!(artifacts.len(), 4);
+        assert_eq!(artifacts[0].kind, "terminal");
+        assert_eq!(artifacts[0].summary, "退出码 0");
+        assert_eq!(artifacts[0].call_id, None);
+        assert_eq!(artifacts[0].event_seq, Some(4));
+        assert_eq!(artifacts[1].kind, "diff");
+        assert_eq!(artifacts[1].call_id.as_deref(), Some("call-edit"));
+        assert_eq!(artifacts[1].event_seq, Some(5));
+        assert_eq!(artifacts[1].summary, "2 个文件变更");
+        assert_eq!(
+            artifacts[1].detail,
+            r#"[{"path":"a.txt","change_type":"modified"},{"path":"src/lib.rs","change_type":"unknown"}]"#
+        );
+        assert!(!artifacts[1].detail.contains("secret-before"));
+        assert!(!artifacts[1].detail.contains("secret-source"));
+        assert_eq!(artifacts[2].kind, "context");
+        assert_eq!(artifacts[2].detail, "保留最近任务");
+        assert_eq!(artifacts[3].kind, "source");
+        assert_eq!(artifacts[3].summary, "引用 2 个事件");
+    }
+
+    #[test]
+    fn diff_projection_is_honest_about_missing_sources_and_invalid_cards() {
+        let records = vec![
+            json!({
+                "event": { "type": "tool/result", "data": {
+                    "meta": { "card": "diff", "diffs": [
+                        { "path": "src/main.rs", "oldText": "old", "newText": "new" }
+                    ] }
+                }}
+            }),
+            json!({
+                "seq": 11,
+                "event": { "type": "tool/result", "data": {
+                    "message": { "source": { "callId": "call-invalid" } },
+                    "meta": { "card": "diff", "diffs": "not-an-array" }
+                }}
+            }),
+            json!({
+                "seq": 12,
+                "event": { "type": "tool/result", "data": {
+                    "meta": { "card": "diff", "diffs": [
+                        { "path": "", "oldText": null, "newText": "ignored" }
+                    ] }
+                }}
+            }),
+            json!({
+                "seq": 13,
+                "event": { "type": "compaction/summary", "data": {} }
+            }),
+            json!({
+                "seq": 14,
+                "event": { "type": "assistant/message", "sourceEventSeqs": [1, "bad"], "data": {} }
+            }),
+        ];
+
+        let artifacts = project_session_artifacts(&records);
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].call_id, None);
+        assert_eq!(artifacts[0].event_seq, None);
+        assert_eq!(
+            artifacts[0].detail,
+            r#"[{"path":"src/main.rs","change_type":"modified"}]"#
+        );
+    }
+
+    #[test]
+    fn diff_projection_does_not_guess_added_or_deleted_from_hunks() {
+        let records = vec![json!({
+            "seq": 20,
+            "event": { "type": "tool/result", "data": {
+                "message": { "source": { "callId": "call-ambiguous" } },
+                "meta": { "card": "diff", "diffs": [
+                    { "path": "new-or-overwritten.txt", "oldText": null, "newText": "content" },
+                    { "path": "empty-or-deleted.txt", "oldText": "content", "newText": "" }
+                ] }
+            }}
+        })];
+
+        let artifacts = project_session_artifacts(&records);
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(
+            artifacts[0].detail,
+            r#"[{"path":"new-or-overwritten.txt","change_type":"unknown"},{"path":"empty-or-deleted.txt","change_type":"unknown"}]"#
+        );
+    }
+
+    #[test]
     fn job_projection_requires_complete_dsh_row() {
         let job = dsh_session_job(&json!({
             "id": "job-1",
@@ -1527,5 +2136,34 @@ mod tests {
     fn remote_id_validation_rejects_blank_values() {
         assert!(ensure_remote_id("agentId", "   ").is_err());
         assert!(ensure_remote_id("agentId", "session-1").is_ok());
+    }
+
+    #[test]
+    fn approval_broker_replaces_replayed_requests_and_removes_cancelled_ones() {
+        let broker = DshApprovalBroker::default();
+        let request = DshApprovalRequest {
+            id: "approval-1".into(),
+            session_id: "session-1".into(),
+            tool_name: "terminal".into(),
+            call_id: Some("call-1".into()),
+            reason: Some("需要执行命令".into()),
+        };
+        broker.upsert(PendingDshApproval {
+            request: request.clone(),
+            client_id: "client-old".into(),
+            event_id: "approval-1".into(),
+        });
+        broker.upsert(PendingDshApproval {
+            request,
+            client_id: "client-new".into(),
+            event_id: "approval-1".into(),
+        });
+        assert_eq!(broker.pending.lock().unwrap().len(), 1);
+        assert_eq!(
+            broker.pending.lock().unwrap()["approval-1"].client_id,
+            "client-new"
+        );
+        broker.remove("approval-1");
+        assert!(broker.pending.lock().unwrap().is_empty());
     }
 }

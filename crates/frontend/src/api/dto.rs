@@ -96,6 +96,19 @@ pub struct SessionJobActivity {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionActivityArtifact {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub summary: String,
+    pub detail: String,
+    #[serde(default)]
+    pub call_id: Option<String>,
+    #[serde(default)]
+    pub event_seq: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SessionUsageStats {
     pub turns: u32,
     pub steps: u32,
@@ -108,10 +121,26 @@ pub struct SessionUsageStats {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SessionActivityResponse {
     pub tools: Vec<SessionToolActivity>,
+    #[serde(default)]
+    pub artifacts: Vec<SessionActivityArtifact>,
     pub jobs: Vec<SessionJobActivity>,
     #[serde(default)]
     pub stats: Option<SessionUsageStats>,
     pub jobs_available: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionApprovalRequest {
+    pub id: String,
+    pub session_id: String,
+    pub tool_name: String,
+    pub call_id: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SessionApprovalResponse {
+    pub items: Vec<SessionApprovalRequest>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
