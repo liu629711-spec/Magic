@@ -1,0 +1,3 @@
+- insert:
+    - id: magic-ceo-ui
+      name: '@magic/dsh-ceo-ui'

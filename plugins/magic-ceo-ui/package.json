@@ -1,8 +1,8 @@
 {
-  "name": "@magic/dsh-work-mode",
+  "name": "@magic/dsh-ceo-ui",
   "version": "0.1.0",
   "private": true,
-  "description": "Magic agent and CEO work-mode plugin for DeepSeek Harness",
+  "description": "Magic CEO team graph client plugin for DeepSeek Harness",
   "license": "MIT",
   "type": "module",
   "main": "src/index.ts",
@@ -19,9 +19,10 @@
   "dsh": {
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-layout"
       ],
       "platform": "web"
     },
@@ -31,10 +32,13 @@
   },
   "scripts": {
     "build": "node scripts/build-client.mjs",
-    "typecheck": "node --test tests/work-mode.test.ts tests/client.test.ts",
-    "test": "node --test tests/work-mode.test.ts tests/client.test.ts"
+    "typecheck": "node --test tests/team.test.ts tests/flow.test.ts tests/definition.test.ts tests/client.test.ts tests/selection.test.ts tests/processView.test.ts",
+    "test": "node --test tests/team.test.ts tests/flow.test.ts tests/definition.test.ts tests/client.test.ts tests/selection.test.ts tests/processView.test.ts"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.1 <5.0.0"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.11.6"
   }
 }

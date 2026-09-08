@@ -1,0 +1,30 @@
+{
+  "name": "@magic/dsh-ceo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Magic CEO host plugin for DeepSeek Harness",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "node --test tests/ceo.test.ts tests/plan.test.ts tests/journal.test.ts tests/process.test.ts",
+    "typecheck": "node --test tests/ceo.test.ts tests/plan.test.ts tests/journal.test.ts tests/process.test.ts",
+    "test": "node --test tests/ceo.test.ts tests/plan.test.ts tests/journal.test.ts tests/process.test.ts"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1 <5.0.0"
+  }
+}

@@ -1,8 +1,17 @@
-# Load Magic product plugins into a DSH web profile.
-# Usage:
-#   dsh web --patch ./patches/web.patch.yml
+# Load Magic work-mode into a DSH web profile.
+# Plugin `name` must be a path (not an npm package). Paths starting with
+# ./ or ../ are resolved against this file by DSH
+# (reference-project/deepseek-harness/packages/boot/app-boot/src/index.ts
+# anchorInsertedPluginNames).
+#
+# Engineering is postponed; do not insert @magic/dsh-engineering here.
+#
+# Usage from a DSH source checkout:
+#   pnpm dsh web --patch <absolute-path-to-this-file>
 - insert:
     - id: magic-work-mode
-      name: '@magic/dsh-work-mode'
-    - id: magic-engineering
-      name: '@magic/dsh-engineering'
+      name: ../plugins/magic-work-mode/src/index.ts
+    - id: magic-ceo
+      name: ../plugins/magic-ceo/src/index.ts
+    - id: magic-ceo-ui
+      name: ../plugins/magic-ceo-ui/src/index.ts

@@ -2,45 +2,80 @@ export const name = 'magic-work-mode'
 
 export const inject = ['systemPrompt', 'commands']
 
-export type WorkMode = 'agent' | 'ceo'
+export type { MagicWorkModeState, WorkMode } from './mode.ts'
+export {
+  applyModeCommand,
+  describeMode,
+  parseModeCommand,
+  resolveMode,
+} from './mode.ts'
 
-export interface MagicWorkModeState {
-  sessionMode: WorkMode
-  inputMode: WorkMode | null
-}
+import {
+  applyModeCommand,
+  clearInputMode,
+  defaultWorkModeState,
+  describeMode,
+  MODE_COMMAND_ERROR,
+  parseModeCommand,
+  resolveMode,
+  type MagicWorkModeState,
+  type WorkMode,
+} from './mode.ts'
 
 const sessionModes = new Map<string, MagicWorkModeState>()
 
-function parseMode(rawInput: string): WorkMode | null {
-  const value = rawInput.trim().toLowerCase()
-  if (value === 'agent' || value === 'ceo') return value
-  return null
+type PromptAssembleContext = {
+  agent?: { session?: { id?: string } }
 }
 
-function resolveMode(state: MagicWorkModeState | undefined): WorkMode {
-  return state?.inputMode ?? state?.sessionMode ?? 'agent'
+function stateOf(sessionId: string): MagicWorkModeState {
+  return sessionModes.get(sessionId) ?? defaultWorkModeState()
 }
 
-function describeMode(mode: WorkMode): string {
+function sessionIdOf(context: PromptAssembleContext | undefined): string | undefined {
+  const id = context?.agent?.session?.id
+  return typeof id === 'string' && id !== '' ? id : undefined
+}
+
+export function workModePrompt(mode: WorkMode): string {
   if (mode === 'ceo') {
     return [
-      'Current work mode: CEO.',
-      'The session lead owns division of labor, dependencies, reporting, blockers, and a single delivery.',
-      'Members are working agents, not reduced tools.',
-      'Using CEO does not create an engineering organization.',
+      'Magic work-mode rules:',
+      '- Current work mode: CEO. This session (or this input) is already CEO. Do not behave as a solo agent.',
+      '- You are the session lead: divide work, track dependencies, report blockers, and deliver one result.',
+      '- Members are working agents, not reduced tools.',
+      '- Using CEO does not create an engineering organization.',
+      '- Creating an engineering organization requires a separate explicit user confirmation.',
     ].join('\n')
   }
-
   return [
-    'Current work mode: agent.',
-    'The session lead understands, plans, executes, verifies, and delivers the user goal.',
-    'Internal collaborators stay inside this session and do not become long-lived members.',
+    'Magic work-mode rules:',
+    '- Current work mode: agent.',
+    '- Default to agent mode. Do not upgrade to CEO because a task is large, slow, or uses extra agents.',
+    '- Enter CEO only when the user explicitly asks for CEO or the session default is CEO.',
+    '- A once-CEO choice applies only to the current input. After that turn ends, return to the session default.',
+    '- CEO organizes work packages and reports a single result. It is not a permanent organization.',
+    '- Creating an engineering organization requires a separate explicit user confirmation.',
   ].join('\n')
 }
 
+export function getSessionWorkMode(sessionId: string): WorkMode {
+  return resolveMode(sessionModes.get(sessionId))
+}
+
+export function getSessionWorkModeState(sessionId: string): MagicWorkModeState {
+  return stateOf(sessionId)
+}
+
 export function apply(ctx: {
+  provide?: (name: string, value: unknown) => unknown
+  on?: (event: string, listener: (...args: unknown[]) => unknown) => unknown
   systemPrompt: {
-    section: (section: { name: string; order: number; text: string | (() => string) }) => unknown
+    section: (section: {
+      name: string
+      order: number
+      text: string | ((context?: PromptAssembleContext) => string)
+    }) => unknown
   }
   commands: {
     register: (definition: {
@@ -51,45 +86,61 @@ export function apply(ctx: {
     }) => unknown
   }
 }) {
+  console.log('[magic-work-mode] plugin loaded')
+
+  ctx.provide?.('magicWorkMode', {
+    getMode: getSessionWorkMode,
+    getState: getSessionWorkModeState,
+  })
+
+  ctx.on?.('session/event', (session, event) => {
+    const subject = session as { id?: string }
+    const payload = event as { type?: string }
+    if (typeof subject.id !== 'string') return
+    if (payload.type !== 'turn/end') return
+    const current = sessionModes.get(subject.id)
+    if (current === undefined || current.inputMode === null) return
+    sessionModes.set(subject.id, clearInputMode(current))
+  })
+
   ctx.systemPrompt.section({
     name: 'magic-work-mode',
     order: 250,
-    text: () => [
-      'Magic work-mode rules:',
-      '- Default to agent mode. Do not upgrade to CEO because a task is large, slow, or uses extra agents.',
-      '- Enter CEO only when the user explicitly asks for CEO or the session default is CEO.',
-      '- CEO organizes work packages and reports a single result. It is not a permanent organization.',
-      '- Creating an engineering organization requires a separate explicit user confirmation.',
-    ].join('\n'),
+    text: (context) => {
+      const sessionId = sessionIdOf(context)
+      const mode = sessionId === undefined ? 'agent' : getSessionWorkMode(sessionId)
+      return workModePrompt(mode)
+    },
   })
 
   ctx.commands.register({
     name: 'mode',
-    description: 'Show or set the Magic work mode for this session',
-    input: { hint: '[agent|ceo]' },
+    description: 'Show or set the Magic work mode for this session or this input',
+    input: { hint: '[agent|ceo|once agent|once ceo]' },
     handler: ({ agent, rawInput }) => {
       const sessionId = agent.session.id
-      const current = sessionModes.get(sessionId) ?? { sessionMode: 'agent', inputMode: null }
-      const requested = parseMode(rawInput)
+      const current = stateOf(sessionId)
+      const command = parseModeCommand(rawInput)
 
-      if (rawInput.trim() === '') {
+      if (command.kind === 'show') {
         return {
           kind: 'success',
-          text: describeMode(resolveMode(current)),
+          text: describeMode(current),
         }
       }
 
-      if (requested === null) {
+      if (command.kind === 'invalid') {
         return {
           kind: 'error',
-          text: 'Use `/mode`, `/mode agent`, or `/mode ceo`.',
+          text: MODE_COMMAND_ERROR,
         }
       }
 
-      sessionModes.set(sessionId, { sessionMode: requested, inputMode: null })
+      const next = applyModeCommand(current, command)
+      sessionModes.set(sessionId, next)
       return {
         kind: 'success',
-        text: describeMode(requested),
+        text: describeMode(next),
       }
     },
   })
