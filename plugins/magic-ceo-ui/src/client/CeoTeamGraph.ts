@@ -73,6 +73,34 @@ ${xyflowCss}
   background: var(--dsw-alias-border-l4, #5a5a5a);
 }
 .magic-ceo-canvas .react-flow__attribution { display: none; }
+.magic-ceo-canvas .react-flow__node {
+  animation: magic-ceo-node-enter 360ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.magic-ceo-canvas .magic-ceo-node-running {
+  animation: magic-ceo-node-pulse 1.8s ease-in-out infinite;
+}
+.magic-ceo-canvas .magic-ceo-edge-active .react-flow__edge-path {
+  stroke-dasharray: 7 7;
+  animation: magic-ceo-edge-flow 1.1s linear infinite;
+}
+@keyframes magic-ceo-node-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes magic-ceo-node-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 0%, transparent)); }
+  50% { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 30%, transparent)); }
+}
+@keyframes magic-ceo-edge-flow {
+  to { stroke-dashoffset: -14; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .magic-ceo-canvas .react-flow__node,
+  .magic-ceo-canvas .magic-ceo-node-running,
+  .magic-ceo-canvas .magic-ceo-edge-active .react-flow__edge-path {
+    animation: none;
+  }
+}
 `
 
 let canvasCssInjected = false
@@ -146,11 +174,13 @@ function GoalNode({ data }: NodeProps<Node<GoalNodeData>>) {
 
 function MemberNode({ data }: NodeProps<Node<MemberNodeData>>) {
   const presentation = presentCeoMember(data.member)
+  const activity = data.member.activity
   return h('div', {
     'data-magic-ceo-member': data.member.memberId ?? data.member.callId,
     'data-magic-ceo-node': 'member',
     'data-status': presentation.viewStatus,
     'data-selected': data.selected ? 'true' : undefined,
+    className: presentation.viewStatus === 'running' ? 'magic-ceo-node-running' : undefined,
     style: cardStyle(data.selected, presentation.needsDecision),
   },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
@@ -208,6 +238,13 @@ function MemberNode({ data }: NodeProps<Node<MemberNodeData>>) {
           : null,
       )
       : null,
+    activity || (presentation.viewStatus === 'queued' && data.member.dependsOn.length > 0)
+      ? h('div', { style: { fontSize: 10, color: 'var(--dsw-alias-label-tertiary, #9a9a9a)' } },
+        activity?.phase === 'tool' ? `工具: ${activity.toolName ?? '运行中'}`
+          : activity?.phase === 'thinking' ? '正在分析'
+            : activity?.phase === 'winding_down' ? '正在收尾'
+              : '等待依赖')
+      : null,
     ...handles('member'),
   )
 }
@@ -260,7 +297,11 @@ function Canvas(props: {
   openDetails: () => void
   t: Translate
 }) {
-  const layout = layoutCeoTeamFlow(props.members)
+  const visibleMembers = props.members.filter(member => {
+    const status = presentCeoMember(member).viewStatus
+    return status !== 'failed' && status !== 'error'
+  })
+  const layout = layoutCeoTeamFlow(visibleMembers)
   const sinkStatus = ceoTeamSinkStatus(props.members)
   const flow = useMemo(() => {
     const nodes: CanvasNode[] = layout.nodes.map((node) => {
@@ -304,11 +345,19 @@ function Canvas(props: {
         selectable: false,
       }
     })
+    const runningIds = new Set(
+      visibleMembers
+        .filter(member => presentCeoMember(member).viewStatus === 'running')
+        .map(member => `member:${member.callId}`),
+    )
     const edges: Edge[] = layout.edges.map((edge) => ({
       id: edge.id,
       source: edge.from,
       target: edge.to,
       type: 'default',
+      className: runningIds.has(edge.source) || runningIds.has(edge.target)
+        ? 'magic-ceo-edge-active'
+        : undefined,
       selectable: false,
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
       style: {
@@ -317,7 +366,7 @@ function Canvas(props: {
       },
     }))
     return { nodes, edges }
-  }, [layout, props.selectedCallId, props.t, sinkStatus])
+  }, [layout, props.selectedCallId, props.t, sinkStatus, visibleMembers])
 
   const height = Math.min(420, Math.max(240, layout.height + 48))
   const instanceRef = useRef<ReactFlowInstance | null>(null)
@@ -398,6 +447,10 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
   const members = turnMembers.map(member =>
     roster.find(item => item.callId === member.callId) ?? member,
   )
+  const visibleMembers = members.filter(member => {
+    const status = presentCeoMember(member).viewStatus
+    return status !== 'failed' && status !== 'error'
+  })
 
   useEffect(() => { ensureCanvasCss() }, [])
   useEffect(() => {
@@ -415,6 +468,21 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
       padding: '8px 0 12px',
     },
   },
+    props.node.data.plan
+      ? h('div', {
+        'data-magic-ceo-plan': true,
+        style: {
+          padding: '10px 12px',
+          borderRadius: 10,
+          border: '1px solid var(--dsw-alias-border-l2, #2a2a2a)',
+          background: 'var(--dsw-alias-bg-module-platform, #161616)',
+        },
+      },
+        h('strong', { style: { display: 'block', fontSize: 13, marginBottom: 4 } }, `${props.t('plan.title')} · v${props.node.data.plan.version}`),
+        h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, #c8c8c8)' } }, props.node.data.plan.summary),
+        h('div', { style: { marginTop: 6, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary, #9a9a9a)', whiteSpace: 'pre-wrap' } }, props.node.data.plan.analysis),
+      )
+      : null,
     h('header', {
       style: {
         display: 'flex',
@@ -428,15 +496,26 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
       props.t('graph.title'),
       h('span', {
         style: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #9a9a9a)' },
-      }, props.t('graph.members', { count: members.length })),
+    }, `${props.t('graph.members', { count: visibleMembers.length })} · ${props.node.data.progress.completed}/${props.node.data.progress.total}`),
     ),
-    h(ReactFlowProvider, null,
-      h(Canvas, {
-        members,
-        selectedCallId: selected?.callId,
-        openDetails: props.openDetails,
-        t: props.t,
-      }),
-    ),
+    visibleMembers.length > 0
+      ? h(ReactFlowProvider, null,
+        h(Canvas, {
+          members: visibleMembers,
+          selectedCallId: selected?.callId,
+          openDetails: props.openDetails,
+          t: props.t,
+        }),
+      )
+      : h('div', {
+        'data-magic-ceo-plan-status': true,
+        style: {
+          padding: '18px 12px',
+          borderRadius: 10,
+          border: '1px dashed var(--dsw-alias-border-l3, #3a3a3a)',
+          color: 'var(--dsw-alias-label-secondary, #c8c8c8)',
+          fontSize: 12,
+        },
+      }, props.t('plan.ready')),
   )
 }

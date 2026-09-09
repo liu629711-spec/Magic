@@ -1,6 +1,43 @@
 import type { RunPhase, RunPlan, RunState } from './plan.ts'
 
 export const CEO_RUN_JOURNAL = 'ceo/run-journal'
+export const CEO_PLAN = 'ceo/plan'
+export const CEO_PLAN_REVISED = 'ceo/plan-revised'
+export const CEO_RUN_PHASE = 'ceo/run-phase'
+export const CEO_RUN_PROGRESS = 'ceo/run-progress'
+
+export interface CeoPlanTask {
+  id?: string
+  role: string
+  task: string
+  dependsOn: string[]
+}
+
+export interface CeoPlanData {
+  turn: number
+  planId: string
+  version: number
+  summary: string
+  analysis: string
+  teamBrief?: string
+  tasks: CeoPlanTask[]
+}
+
+export interface CeoRunPhaseData {
+  turn: number
+  callId: string
+  runId: string
+  memberId: string
+  phase: 'thinking' | 'tool' | 'waiting' | 'winding_down'
+  toolName?: string
+}
+
+export interface CeoRunProgressData {
+  turn: number
+  callId: string
+  completed: number
+  total: number
+}
 
 export interface CeoRunJournalRun {
   runId: string
@@ -97,7 +134,44 @@ export function appendRunJournal(
   }
 }
 
+/** Persist the CEO's pre-delegation plan as an ignorable session event. */
+export function appendCeoPlan(session: JournalSession, data: CeoPlanData): void {
+  try {
+    appendIgnorable(session, CEO_PLAN, data)
+  } catch {
+    // Planning is useful context; it must not make delegation fail.
+  }
+}
+
+/** Persist a replacement plan separately so replay can retain prior versions. */
+export function appendCeoPlanRevision(session: JournalSession, data: CeoPlanData): void {
+  try {
+    appendIgnorable(session, CEO_PLAN_REVISED, data)
+  } catch {
+    // A revision is explanatory state and must not interrupt planning.
+  }
+}
+
+/** Persist the worker's current activity; lifecycle state remains in ceo/run-journal. */
+export function appendCeoRunPhase(session: JournalSession, data: CeoRunPhaseData): void {
+  try {
+    appendIgnorable(session, CEO_RUN_PHASE, data)
+  } catch {
+    // Activity indicators are observational.
+  }
+}
+
+/** Persist a deterministic scheduler progress snapshot for live and replay views. */
+export function appendCeoRunProgress(session: JournalSession, data: CeoRunProgressData): void {
+  try {
+    appendIgnorable(session, CEO_RUN_PROGRESS, data)
+  } catch {
+    // Progress must not affect scheduling.
+  }
+}
+
 export const CEO_RUN_PROCESS = 'ceo/run-process'
+export const CEO_MEMBER_RESULT = 'ceo/member-result'
 
 export interface CeoSearchSource {
   url: string
@@ -117,6 +191,25 @@ export interface CeoRunProcessData {
   runId: string
   memberId: string
   op: CeoProcessOp
+}
+
+export interface CeoMemberResultData {
+  turn: number
+  callId: string
+  runId: string
+  memberId: string
+  output: string
+  stopReason: string
+  status?: 'completed' | 'blocked' | 'failed' | 'partial'
+}
+
+/** Persist the worker's final output independently of send_message delivery. */
+export function appendCeoMemberResult(session: JournalSession, data: CeoMemberResultData): void {
+  try {
+    appendIgnorable(session, CEO_MEMBER_RESULT, data)
+  } catch {
+    // Result projection is observational; the scheduler still owns execution truth.
+  }
 }
 
 export function appendRunProcess(

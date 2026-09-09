@@ -1,9 +1,15 @@
 export const CEO_RUN_JOURNAL = 'ceo/run-journal'
 export const CEO_RUN_PROCESS = 'ceo/run-process'
+export const CEO_PLAN = 'ceo/plan'
+export const CEO_MEMBER_RESULT = 'ceo/member-result'
+export const CEO_PLAN_REVISED = 'ceo/plan-revised'
+export const CEO_RUN_PHASE = 'ceo/run-phase'
+export const CEO_RUN_PROGRESS = 'ceo/run-progress'
 
 export type CeoMemberStatus = 'queued' | 'running' | 'ok' | 'error'
 export type CeoReportStatus = 'completed' | 'blocked' | 'failed' | 'partial'
 export type CeoRunPhase = 'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
+export type CeoActivityPhase = 'thinking' | 'tool' | 'waiting' | 'winding_down'
 export type CeoMemberViewStatus =
   | 'queued'
   | 'running'
@@ -65,6 +71,7 @@ export interface CeoTeamMember {
   lastMessage?: string
   answeredDecision?: string
   process?: CeoProcessStep[]
+  activity?: { phase: CeoActivityPhase; toolName?: string }
 }
 
 export type CeoAttentionKind = 'decision' | 'blocker' | 'failed'
@@ -83,11 +90,26 @@ export interface CeoMemberPresentation {
 export interface CeoTeamState {
   turn: number
   members: CeoTeamMember[]
+  plan?: CeoPlanView
+  progress: { completed: number; total: number }
+  planHistory: CeoPlanView[]
 }
 
 export interface CeoTeamView {
   turn: number
   members: CeoTeamMember[]
+  plan?: CeoPlanView
+  progress: { completed: number; total: number }
+  planHistory: CeoPlanView[]
+}
+
+export interface CeoPlanView {
+  planId: string
+  version: number
+  summary: string
+  analysis: string
+  teamBrief?: string
+  tasks: Array<{ id?: string; role: string; task: string; dependsOn: string[] }>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -329,11 +351,11 @@ export function presentCeoMember(member: CeoTeamMember): CeoMemberPresentation {
   const needsDecision = (member.report?.userDecisions ?? '').trim() !== ''
     && (member.answeredDecision ?? '').trim() === ''
   const hasBlocker = member.report?.status === 'blocked'
-  if (member.status === 'error') {
-    return { viewStatus: 'error', needsDecision, hasBlocker }
-  }
   if (member.report?.status !== undefined) {
     return { viewStatus: member.report.status, needsDecision, hasBlocker }
+  }
+  if (member.status === 'error') {
+    return { viewStatus: 'error', needsDecision, hasBlocker }
   }
   if (member.status === 'running') {
     return { viewStatus: 'running', needsDecision, hasBlocker }
@@ -540,7 +562,7 @@ export function parseCeoDelegateRuns(text: string): Array<{
 }
 
 export function startCeoTeam(turn: number): CeoTeamState {
-  return { turn, members: [] }
+  return { turn, members: [], progress: { completed: 0, total: 0 }, planHistory: [] }
 }
 
 export function applyCeoDelegateCall(
@@ -798,8 +820,78 @@ export function applyCeoDelegateResult(
 }
 
 export function projectCeoTeam(state: CeoTeamState): CeoTeamView | null {
-  if (state.members.length === 0) return null
-  return { turn: state.turn, members: state.members }
+  if (state.members.length === 0 && state.plan === undefined) return null
+  return {
+    turn: state.turn,
+    members: state.members,
+    progress: state.progress,
+    planHistory: state.planHistory,
+    ...state.plan === undefined ? {} : { plan: state.plan },
+  }
+}
+
+/** Fold the authoritative final worker output; this does not depend on send_message. */
+export function applyCeoMemberResult(
+  state: CeoTeamState,
+  event: { callId: string; runId: string; memberId: string; seq: number; output: string; stopReason?: string; status?: CeoReportStatus },
+): CeoTeamState {
+  const parsed = parseCeoMemberReport(event.output)
+  return {
+    ...state,
+    members: state.members.map(member => {
+      if (member.batchCallId !== event.callId || (member.memberId !== event.memberId && member.runId !== event.runId)) return member
+      const status = parsed?.status
+      return {
+        ...member,
+        seq: event.seq,
+        memberId: event.memberId,
+        lastMessage: event.output.trim() || member.lastMessage,
+        report: mergeReports(member.report, event.status === 'blocked' || event.status === 'failed'
+          ? { ...parsed, status: event.status }
+          : parsed),
+        status: status === 'blocked' || status === 'failed' ? 'ok' as const : member.status,
+      }
+    }),
+  }
+}
+
+export function applyCeoPlan(
+  state: CeoTeamState,
+  event: { planId: string; version?: number; summary: string; analysis: string; teamBrief?: string; tasks: unknown },
+): CeoTeamState {
+  if (!event.planId || !event.summary || !event.analysis || !Array.isArray(event.tasks)) return state
+  const tasks = event.tasks.flatMap((item) => {
+    if (!isRecord(item) || typeof item.role !== 'string' || typeof item.task !== 'string') return []
+    return [{
+      ...typeof item.id === 'string' && item.id.trim() !== '' ? { id: item.id.trim() } : {},
+      role: item.role.trim(),
+      task: item.task.trim(),
+      dependsOn: idList(item.dependsOn),
+    }]
+  })
+  const plan = {
+    planId: event.planId,
+    version: typeof event.version === 'number' ? event.version : (state.plan?.version ?? 0) + 1,
+    summary: event.summary,
+    analysis: event.analysis,
+    ...event.teamBrief === undefined ? {} : { teamBrief: event.teamBrief },
+    tasks,
+  }
+  return {
+    ...state,
+    plan,
+    planHistory: [...state.planHistory, plan].slice(-8),
+  }
+}
+
+export function applyCeoRunProgress(state: CeoTeamState, event: { callId: string; completed: number; total: number; seq: number }): CeoTeamState {
+  if (!event.callId || event.total < 0 || event.completed < 0) return state
+  return { ...state, progress: { completed: Math.min(event.completed, event.total), total: event.total } }
+}
+
+export function applyCeoRunPhase(state: CeoTeamState, event: { callId: string; runId: string; memberId: string; phase: CeoActivityPhase; toolName?: string; seq: number }): CeoTeamState {
+  if (!event.callId || !event.runId || !event.memberId) return state
+  return { ...state, members: state.members.map(member => member.batchCallId === event.callId && (member.runId === event.runId || member.memberId === event.memberId) ? { ...member, seq: event.seq, activity: { phase: event.phase, ...event.toolName ? { toolName: event.toolName } : {} } } : member) }
 }
 
 export function memberDepth(member: CeoTeamMember, members: readonly CeoTeamMember[]): number {

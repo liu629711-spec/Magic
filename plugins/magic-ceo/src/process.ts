@@ -1,4 +1,4 @@
-import { appendRunProcess, type CeoProcessOp, type JournalSession } from './journal.ts'
+import { appendCeoRunPhase, appendRunProcess, type CeoProcessOp, type JournalSession } from './journal.ts'
 
 const FLUSH_MS = 120
 const RESULT_LIMIT = 2000
@@ -30,6 +30,7 @@ interface Mirror {
   flushedContent: string
   lastSeq: number
   timer: ReturnType<typeof setTimeout> | undefined
+  phase: 'thinking' | 'tool' | 'waiting' | 'winding_down' | undefined
 }
 
 const mirrors = new Map<string, Mirror>()
@@ -111,6 +112,19 @@ function emit(mirror: Mirror, op: CeoProcessOp): void {
   })
 }
 
+function emitPhase(mirror: Mirror, phase: Mirror['phase'], toolName?: string): void {
+  if (phase === undefined || (mirror.phase === phase && phase !== 'tool')) return
+  mirror.phase = phase
+  appendCeoRunPhase(mirror.parent, {
+    turn: mirror.turn,
+    callId: mirror.callId,
+    runId: mirror.runId,
+    memberId: mirror.memberId,
+    phase,
+    ...phase === 'tool' && toolName ? { toolName } : {},
+  })
+}
+
 function startFresh(mirror: Mirror): void {
   mirror.reasoning = ''
   mirror.content = ''
@@ -145,11 +159,13 @@ function applyChunk(mirror: Mirror, data: unknown): void {
   const chunk = asRecord(asRecord(data)?.chunk)
   if (chunk === undefined) return
   if (chunk.type === 'reasoning-delta' && typeof chunk.text === 'string') {
+    emitPhase(mirror, 'thinking')
     mirror.reasoning += chunk.text
     schedule(mirror)
     return
   }
   if (chunk.type === 'text-delta' && typeof chunk.text === 'string') {
+    emitPhase(mirror, 'winding_down')
     mirror.content += chunk.text
     schedule(mirror)
     return
@@ -180,6 +196,7 @@ function applyEvent(mirror: Mirror, event: ChildSessionEvent): void {
     const data = asRecord(event.data)
     const toolCallId = typeof data?.callId === 'string' ? data.callId : ''
     const name = typeof data?.name === 'string' ? data.name : 'tool'
+    emitPhase(mirror, 'tool', name)
     if (toolCallId === '') return
     const args = typeof data?.arguments === 'string' ? clip(data.arguments, ARGS_LIMIT) : undefined
     emit(mirror, {
@@ -202,6 +219,7 @@ function applyEvent(mirror: Mirror, event: ChildSessionEvent): void {
     ...parsed.sources === undefined ? {} : { sources: parsed.sources },
     ...parsed.isError ? { isError: true } : {},
   })
+  emitPhase(mirror, 'thinking')
 }
 
 export function resetProcessMirrorsForTests(): void {
@@ -234,8 +252,10 @@ export function attachRunProcessMirror(input: {
     flushedContent: '',
     lastSeq: -1,
     timer: undefined,
+    phase: undefined,
   }
   mirrors.set(input.childSessionId, mirror)
+  emitPhase(mirror, 'thinking')
   for (const event of input.child?.snapshotEvents?.() ?? []) {
     ingestChildSessionEvent(input.childSessionId, event)
   }

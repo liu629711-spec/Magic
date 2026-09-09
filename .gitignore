@@ -15,6 +15,7 @@
 .tmp-*/
 .tmp-magic-real.db*
 .magic-dsh/
+.magic-dsh-live/
 .magic-dsh-validation/
 .codegraph/
 .cursor/

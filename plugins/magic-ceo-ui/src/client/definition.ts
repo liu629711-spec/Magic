@@ -1,6 +1,10 @@
 import {
   applyCeoDelegateCall,
   applyCeoDelegateResult,
+  applyCeoMemberResult,
+  applyCeoPlan,
+  applyCeoRunPhase,
+  applyCeoRunProgress,
   applyCeoRunJournal,
   applyCeoRunProcess,
   parseCeoProcessOp,
@@ -10,7 +14,12 @@ import {
   startCeoTeam,
   textFromContent,
   CEO_RUN_JOURNAL,
+  CEO_PLAN,
+  CEO_MEMBER_RESULT,
   CEO_RUN_PROCESS,
+  CEO_PLAN_REVISED,
+  CEO_RUN_PHASE,
+  CEO_RUN_PROGRESS,
   type CeoTeamState,
 } from '../team.ts'
 import { applyCeoRosterMessage } from './selection.ts'
@@ -29,17 +38,25 @@ export const ceoTeamDefinition = {
       name?: unknown
       callId?: unknown
       arguments?: unknown
+      planId?: unknown
+      summary?: unknown
+      analysis?: unknown
+      teamBrief?: unknown
+      tasks?: unknown
       message?: unknown
     }
   }) => {
     const turn = event.data?.turn
     if (typeof turn !== 'number') return null
     if (event.type === 'turn/start') return { id: String(turn), role: 'start' as const }
+    if (event.type === CEO_PLAN || event.type === CEO_PLAN_REVISED) return { id: String(turn), role: 'update' as const }
     if (event.type === 'tool/call' && event.data?.name === 'ceo_delegate') {
       return { id: String(turn), role: 'update' as const }
     }
     if (event.type === CEO_RUN_JOURNAL) return { id: String(turn), role: 'update' as const }
     if (event.type === CEO_RUN_PROCESS) return { id: String(turn), role: 'update' as const }
+    if (event.type === CEO_MEMBER_RESULT) return { id: String(turn), role: 'update' as const }
+    if (event.type === CEO_RUN_PHASE || event.type === CEO_RUN_PROGRESS) return { id: String(turn), role: 'update' as const }
     if (event.type === 'tool/result') return { id: String(turn), role: 'update' as const }
     return null
   },
@@ -58,6 +75,19 @@ export const ceoTeamDefinition = {
         runId?: unknown
         memberId?: unknown
         op?: unknown
+        planId?: unknown
+        summary?: unknown
+        analysis?: unknown
+        teamBrief?: unknown
+        tasks?: unknown
+        output?: unknown
+        stopReason?: unknown
+        status?: unknown
+        version?: unknown
+        phase?: unknown
+        toolName?: unknown
+        completed?: unknown
+        total?: unknown
         message?: {
           content?: unknown[]
           source?: { callId?: unknown }
@@ -66,6 +96,24 @@ export const ceoTeamDefinition = {
     }
   }) => {
     const event = match.event
+    if (event.type === CEO_PLAN || event.type === CEO_PLAN_REVISED) {
+      return applyCeoPlan(context.state, {
+        planId: String(event.data.planId ?? ''),
+        version: typeof event.data.version === 'number' ? event.data.version : undefined,
+        summary: String(event.data.summary ?? ''),
+        analysis: String(event.data.analysis ?? ''),
+        ...typeof event.data.teamBrief === 'string' ? { teamBrief: event.data.teamBrief } : {},
+        tasks: event.data.tasks,
+      })
+    }
+    if (event.type === CEO_RUN_PROGRESS) {
+      return applyCeoRunProgress(context.state, { callId: String(event.data.callId ?? ''), completed: Number(event.data.completed ?? 0), total: Number(event.data.total ?? 0), seq: event.seq })
+    }
+    if (event.type === CEO_RUN_PHASE) {
+      const phase = event.data.phase
+      if (phase !== 'thinking' && phase !== 'tool' && phase !== 'waiting' && phase !== 'winding_down') return context.state
+      return applyCeoRunPhase(context.state, { callId: String(event.data.callId ?? ''), runId: String(event.data.runId ?? ''), memberId: String(event.data.memberId ?? ''), phase, ...typeof event.data.toolName === 'string' ? { toolName: event.data.toolName } : {}, seq: event.seq })
+    }
     if (event.type === 'tool/call') {
       if (event.data.name !== 'ceo_delegate') return context.state
       return applyCeoDelegateCall(context.state, {
@@ -90,6 +138,19 @@ export const ceoTeamDefinition = {
         runId: typeof event.data.runId === 'string' ? event.data.runId : undefined,
         memberId: typeof event.data.memberId === 'string' ? event.data.memberId : undefined,
         op,
+      })
+    }
+    if (event.type === CEO_MEMBER_RESULT) {
+      return applyCeoMemberResult(context.state, {
+        callId: String(event.data.callId ?? ''),
+        runId: String(event.data.runId ?? ''),
+        memberId: String(event.data.memberId ?? ''),
+        seq: event.seq,
+        output: String(event.data.output ?? ''),
+        stopReason: typeof event.data.stopReason === 'string' ? event.data.stopReason : undefined,
+        status: event.data.status === 'blocked' || event.data.status === 'failed' || event.data.status === 'partial' || event.data.status === 'completed'
+          ? event.data.status
+          : undefined,
       })
     }
     if (event.type !== 'tool/result') return context.state

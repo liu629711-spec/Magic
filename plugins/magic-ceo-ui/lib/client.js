@@ -207,6 +207,11 @@ var import_react = require("react");
 // src/team.ts
 var CEO_RUN_JOURNAL = "ceo/run-journal";
 var CEO_RUN_PROCESS = "ceo/run-process";
+var CEO_PLAN = "ceo/plan";
+var CEO_MEMBER_RESULT = "ceo/member-result";
+var CEO_PLAN_REVISED = "ceo/plan-revised";
+var CEO_RUN_PHASE = "ceo/run-phase";
+var CEO_RUN_PROGRESS = "ceo/run-progress";
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -399,11 +404,11 @@ ${line}` : line;
 function presentCeoMember(member) {
   const needsDecision = (member.report?.userDecisions ?? "").trim() !== "" && (member.answeredDecision ?? "").trim() === "";
   const hasBlocker = member.report?.status === "blocked";
-  if (member.status === "error") {
-    return { viewStatus: "error", needsDecision, hasBlocker };
-  }
   if (member.report?.status !== void 0) {
     return { viewStatus: member.report.status, needsDecision, hasBlocker };
+  }
+  if (member.status === "error") {
+    return { viewStatus: "error", needsDecision, hasBlocker };
   }
   if (member.status === "running") {
     return { viewStatus: "running", needsDecision, hasBlocker };
@@ -557,7 +562,7 @@ function parseCeoDelegateRuns(text) {
   return runs;
 }
 function startCeoTeam(turn) {
-  return { turn, members: [] };
+  return { turn, members: [], progress: { completed: 0, total: 0 }, planHistory: [] };
 }
 function applyCeoDelegateCall(state, event) {
   const tasks = parseCeoDelegateTasks(event.argsRaw);
@@ -763,8 +768,65 @@ function applyCeoDelegateResult(state, event) {
   return { ...state, members };
 }
 function projectCeoTeam(state) {
-  if (state.members.length === 0) return null;
-  return { turn: state.turn, members: state.members };
+  if (state.members.length === 0 && state.plan === void 0) return null;
+  return {
+    turn: state.turn,
+    members: state.members,
+    progress: state.progress,
+    planHistory: state.planHistory,
+    ...state.plan === void 0 ? {} : { plan: state.plan }
+  };
+}
+function applyCeoMemberResult(state, event) {
+  const parsed = parseCeoMemberReport(event.output);
+  return {
+    ...state,
+    members: state.members.map((member) => {
+      if (member.batchCallId !== event.callId || member.memberId !== event.memberId && member.runId !== event.runId) return member;
+      const status = parsed?.status;
+      return {
+        ...member,
+        seq: event.seq,
+        memberId: event.memberId,
+        lastMessage: event.output.trim() || member.lastMessage,
+        report: mergeReports(member.report, event.status === "blocked" || event.status === "failed" ? { ...parsed, status: event.status } : parsed),
+        status: status === "blocked" || status === "failed" ? "ok" : member.status
+      };
+    })
+  };
+}
+function applyCeoPlan(state, event) {
+  if (!event.planId || !event.summary || !event.analysis || !Array.isArray(event.tasks)) return state;
+  const tasks = event.tasks.flatMap((item) => {
+    if (!isRecord(item) || typeof item.role !== "string" || typeof item.task !== "string") return [];
+    return [{
+      ...typeof item.id === "string" && item.id.trim() !== "" ? { id: item.id.trim() } : {},
+      role: item.role.trim(),
+      task: item.task.trim(),
+      dependsOn: idList(item.dependsOn)
+    }];
+  });
+  const plan = {
+    planId: event.planId,
+    version: typeof event.version === "number" ? event.version : (state.plan?.version ?? 0) + 1,
+    summary: event.summary,
+    analysis: event.analysis,
+    ...event.teamBrief === void 0 ? {} : { teamBrief: event.teamBrief },
+    tasks
+  };
+  return {
+    ...state,
+    plan,
+    planHistory: [...state.planHistory, plan].slice(-8)
+  };
+}
+function applyCeoRunProgress(state, event) {
+  if (!event.callId || event.total < 0 || event.completed < 0) return state;
+  return { ...state, progress: { completed: Math.min(event.completed, event.total), total: event.total } };
+}
+function applyCeoRunPhase(state, event) {
+  if (!event.callId || !event.runId || !event.memberId) return state;
+  return { ...state, members: state.members.map((member) => member.batchCallId === event.callId && (member.runId === event.runId || member.memberId === event.memberId) ? { ...member, seq: event.seq, activity: { phase: event.phase, ...event.toolName ? { toolName: event.toolName } : {} } } : member) };
 }
 
 // src/client/CeoDelegateRow.ts
@@ -10137,6 +10199,34 @@ ${style_default3}
   background: var(--dsw-alias-border-l4, #5a5a5a);
 }
 .magic-ceo-canvas .react-flow__attribution { display: none; }
+.magic-ceo-canvas .react-flow__node {
+  animation: magic-ceo-node-enter 360ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.magic-ceo-canvas .magic-ceo-node-running {
+  animation: magic-ceo-node-pulse 1.8s ease-in-out infinite;
+}
+.magic-ceo-canvas .magic-ceo-edge-active .react-flow__edge-path {
+  stroke-dasharray: 7 7;
+  animation: magic-ceo-edge-flow 1.1s linear infinite;
+}
+@keyframes magic-ceo-node-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes magic-ceo-node-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 0%, transparent)); }
+  50% { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 30%, transparent)); }
+}
+@keyframes magic-ceo-edge-flow {
+  to { stroke-dashoffset: -14; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .magic-ceo-canvas .react-flow__node,
+  .magic-ceo-canvas .magic-ceo-node-running,
+  .magic-ceo-canvas .magic-ceo-edge-active .react-flow__edge-path {
+    animation: none;
+  }
+}
 `;
 var canvasCssInjected = false;
 function ensureCanvasCss() {
@@ -10199,6 +10289,7 @@ function GoalNode({ data }) {
 }
 function MemberNode({ data }) {
   const presentation = presentCeoMember(data.member);
+  const activity = data.member.activity;
   return (0, import_react4.createElement)(
     "div",
     {
@@ -10206,6 +10297,7 @@ function MemberNode({ data }) {
       "data-magic-ceo-node": "member",
       "data-status": presentation.viewStatus,
       "data-selected": data.selected ? "true" : void 0,
+      className: presentation.viewStatus === "running" ? "magic-ceo-node-running" : void 0,
       style: cardStyle(data.selected, presentation.needsDecision)
     },
     (0, import_react4.createElement)(
@@ -10261,6 +10353,11 @@ function MemberNode({ data }) {
         }
       }, data.t("badge.blocker")) : null
     ) : null,
+    activity || presentation.viewStatus === "queued" && data.member.dependsOn.length > 0 ? (0, import_react4.createElement)(
+      "div",
+      { style: { fontSize: 10, color: "var(--dsw-alias-label-tertiary, #9a9a9a)" } },
+      activity?.phase === "tool" ? `\u5DE5\u5177: ${activity.toolName ?? "\u8FD0\u884C\u4E2D"}` : activity?.phase === "thinking" ? "\u6B63\u5728\u5206\u6790" : activity?.phase === "winding_down" ? "\u6B63\u5728\u6536\u5C3E" : "\u7B49\u5F85\u4F9D\u8D56"
+    ) : null,
     ...handles("member")
   );
 }
@@ -10308,7 +10405,11 @@ function zoomButton(label, onClick) {
   }, label === "\u9002\u5E94\u753B\u5E03" || label === "Fit" ? "\u2922" : label === "\u653E\u5927" || label === "Zoom in" ? "+" : "\u2212");
 }
 function Canvas(props) {
-  const layout = layoutCeoTeamFlow(props.members);
+  const visibleMembers = props.members.filter((member) => {
+    const status = presentCeoMember(member).viewStatus;
+    return status !== "failed" && status !== "error";
+  });
+  const layout = layoutCeoTeamFlow(visibleMembers);
   const sinkStatus = ceoTeamSinkStatus(props.members);
   const flow = (0, import_react4.useMemo)(() => {
     const nodes = layout.nodes.map((node) => {
@@ -10352,11 +10453,15 @@ function Canvas(props) {
         selectable: false
       };
     });
+    const runningIds = new Set(
+      visibleMembers.filter((member) => presentCeoMember(member).viewStatus === "running").map((member) => `member:${member.callId}`)
+    );
     const edges = layout.edges.map((edge) => ({
       id: edge.id,
       source: edge.from,
       target: edge.to,
       type: "default",
+      className: runningIds.has(edge.source) || runningIds.has(edge.target) ? "magic-ceo-edge-active" : void 0,
       selectable: false,
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
       style: {
@@ -10365,7 +10470,7 @@ function Canvas(props) {
       }
     }));
     return { nodes, edges };
-  }, [layout, props.selectedCallId, props.t, sinkStatus]);
+  }, [layout, props.selectedCallId, props.t, sinkStatus, visibleMembers]);
   const height = Math.min(420, Math.max(240, layout.height + 48));
   const instanceRef = (0, import_react4.useRef)(null);
   return (0, import_react4.createElement)(
@@ -10457,6 +10562,10 @@ function CeoTeamGraph(props) {
   const members = turnMembers.map(
     (member) => roster2.find((item) => item.callId === member.callId) ?? member
   );
+  const visibleMembers = members.filter((member) => {
+    const status = presentCeoMember(member).viewStatus;
+    return status !== "failed" && status !== "error";
+  });
   (0, import_react4.useEffect)(() => {
     ensureCanvasCss();
   }, []);
@@ -10476,6 +10585,21 @@ function CeoTeamGraph(props) {
         padding: "8px 0 12px"
       }
     },
+    props.node.data.plan ? (0, import_react4.createElement)(
+      "div",
+      {
+        "data-magic-ceo-plan": true,
+        style: {
+          padding: "10px 12px",
+          borderRadius: 10,
+          border: "1px solid var(--dsw-alias-border-l2, #2a2a2a)",
+          background: "var(--dsw-alias-bg-module-platform, #161616)"
+        }
+      },
+      (0, import_react4.createElement)("strong", { style: { display: "block", fontSize: 13, marginBottom: 4 } }, `${props.t("plan.title")} \xB7 v${props.node.data.plan.version}`),
+      (0, import_react4.createElement)("div", { style: { fontSize: 12, lineHeight: "18px", color: "var(--dsw-alias-label-secondary, #c8c8c8)" } }, props.node.data.plan.summary),
+      (0, import_react4.createElement)("div", { style: { marginTop: 6, fontSize: 12, lineHeight: "18px", color: "var(--dsw-alias-label-tertiary, #9a9a9a)", whiteSpace: "pre-wrap" } }, props.node.data.plan.analysis)
+    ) : null,
     (0, import_react4.createElement)(
       "header",
       {
@@ -10491,18 +10615,27 @@ function CeoTeamGraph(props) {
       props.t("graph.title"),
       (0, import_react4.createElement)("span", {
         style: { marginLeft: "auto", fontSize: 11, color: "var(--dsw-alias-label-tertiary, #9a9a9a)" }
-      }, props.t("graph.members", { count: members.length }))
+      }, `${props.t("graph.members", { count: visibleMembers.length })} \xB7 ${props.node.data.progress.completed}/${props.node.data.progress.total}`)
     ),
-    (0, import_react4.createElement)(
+    visibleMembers.length > 0 ? (0, import_react4.createElement)(
       ReactFlowProvider,
       null,
       (0, import_react4.createElement)(Canvas, {
-        members,
+        members: visibleMembers,
         selectedCallId: selected3?.callId,
         openDetails: props.openDetails,
         t: props.t
       })
-    )
+    ) : (0, import_react4.createElement)("div", {
+      "data-magic-ceo-plan-status": true,
+      style: {
+        padding: "18px 12px",
+        borderRadius: 10,
+        border: "1px dashed var(--dsw-alias-border-l3, #3a3a3a)",
+        color: "var(--dsw-alias-label-secondary, #c8c8c8)",
+        fontSize: 12
+      }
+    }, props.t("plan.ready"))
   );
 }
 
@@ -12202,11 +12335,14 @@ var ceoTeamDefinition = {
     const turn = event.data?.turn;
     if (typeof turn !== "number") return null;
     if (event.type === "turn/start") return { id: String(turn), role: "start" };
+    if (event.type === CEO_PLAN || event.type === CEO_PLAN_REVISED) return { id: String(turn), role: "update" };
     if (event.type === "tool/call" && event.data?.name === "ceo_delegate") {
       return { id: String(turn), role: "update" };
     }
     if (event.type === CEO_RUN_JOURNAL) return { id: String(turn), role: "update" };
     if (event.type === CEO_RUN_PROCESS) return { id: String(turn), role: "update" };
+    if (event.type === CEO_MEMBER_RESULT) return { id: String(turn), role: "update" };
+    if (event.type === CEO_RUN_PHASE || event.type === CEO_RUN_PROGRESS) return { id: String(turn), role: "update" };
     if (event.type === "tool/result") return { id: String(turn), role: "update" };
     return null;
   },
@@ -12215,6 +12351,24 @@ var ceoTeamDefinition = {
   },
   update: (context, match) => {
     const event = match.event;
+    if (event.type === CEO_PLAN || event.type === CEO_PLAN_REVISED) {
+      return applyCeoPlan(context.state, {
+        planId: String(event.data.planId ?? ""),
+        version: typeof event.data.version === "number" ? event.data.version : void 0,
+        summary: String(event.data.summary ?? ""),
+        analysis: String(event.data.analysis ?? ""),
+        ...typeof event.data.teamBrief === "string" ? { teamBrief: event.data.teamBrief } : {},
+        tasks: event.data.tasks
+      });
+    }
+    if (event.type === CEO_RUN_PROGRESS) {
+      return applyCeoRunProgress(context.state, { callId: String(event.data.callId ?? ""), completed: Number(event.data.completed ?? 0), total: Number(event.data.total ?? 0), seq: event.seq });
+    }
+    if (event.type === CEO_RUN_PHASE) {
+      const phase = event.data.phase;
+      if (phase !== "thinking" && phase !== "tool" && phase !== "waiting" && phase !== "winding_down") return context.state;
+      return applyCeoRunPhase(context.state, { callId: String(event.data.callId ?? ""), runId: String(event.data.runId ?? ""), memberId: String(event.data.memberId ?? ""), phase, ...typeof event.data.toolName === "string" ? { toolName: event.data.toolName } : {}, seq: event.seq });
+    }
     if (event.type === "tool/call") {
       if (event.data.name !== "ceo_delegate") return context.state;
       return applyCeoDelegateCall(context.state, {
@@ -12239,6 +12393,17 @@ var ceoTeamDefinition = {
         runId: typeof event.data.runId === "string" ? event.data.runId : void 0,
         memberId: typeof event.data.memberId === "string" ? event.data.memberId : void 0,
         op
+      });
+    }
+    if (event.type === CEO_MEMBER_RESULT) {
+      return applyCeoMemberResult(context.state, {
+        callId: String(event.data.callId ?? ""),
+        runId: String(event.data.runId ?? ""),
+        memberId: String(event.data.memberId ?? ""),
+        seq: event.seq,
+        output: String(event.data.output ?? ""),
+        stopReason: typeof event.data.stopReason === "string" ? event.data.stopReason : void 0,
+        status: event.data.status === "blocked" || event.data.status === "failed" || event.data.status === "partial" || event.data.status === "completed" ? event.data.status : void 0
       });
     }
     if (event.type !== "tool/result") return context.state;
@@ -12301,6 +12466,8 @@ var zh = {
   "graph.goalHint": "\u7528\u6237\u4EA4\u7ED9 CEO \u7684\u8FD9\u4E00\u8F6E",
   "graph.ceo": "CEO \u6C47\u603B",
   "graph.members": "{count} \u4E2A\u6210\u5458",
+  "plan.title": "CEO \u5206\u6790\u4E0E\u6D3E\u53D1\u8BA1\u5212",
+  "plan.ready": "\u8BA1\u5212\u5DF2\u8BB0\u5F55\uFF0CCEO \u6B63\u5728\u51C6\u5907\u542F\u52A8\u6210\u5458\u3002",
   "graph.zoomIn": "\u653E\u5927",
   "graph.zoomOut": "\u7F29\u5C0F",
   "graph.fit": "\u9002\u5E94\u753B\u5E03",
@@ -12372,6 +12539,8 @@ var en = {
   "graph.goalHint": "The work the user gave the CEO",
   "graph.ceo": "CEO",
   "graph.members": "{count} members",
+  "plan.title": "CEO analysis and delegation plan",
+  "plan.ready": "The plan is recorded. CEO is preparing to start the team.",
   "graph.zoomIn": "Zoom in",
   "graph.zoomOut": "Zoom out",
   "graph.fit": "Fit",

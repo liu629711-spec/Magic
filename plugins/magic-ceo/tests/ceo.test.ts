@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { apply, listCeoMembers, resetCeoStateForTests, CEO_RUN_JOURNAL, CEO_RUN_PROCESS } from '../src/index.ts'
+import { apply, listCeoMembers, resetCeoStateForTests, CEO_MEMBER_RESULT, CEO_RUN_JOURNAL, CEO_RUN_PROCESS } from '../src/index.ts'
 
 function journalSession(id: string) {
   const events: Array<{ type: string; seq: number; time: number; data: unknown; ignorable?: true }> = [
@@ -27,7 +27,7 @@ function harness(mode: 'agent' | 'ceo' = 'ceo') {
     order: number
     text?: string | ((context?: { agent?: { session?: { id?: string } } }) => string)
   }> = []
-  let tool: Parameters<Parameters<typeof apply>[0]['tools']['register']>[0] | undefined
+  const tools = new Map<string, Parameters<Parameters<typeof apply>[0]['tools']['register']>[0]>()
   const started: Array<{ provider: string; label: string; prompt: string; parentId: string }> = []
   const release = new Map<string, () => void>()
   const listeners: Array<(session: { id: string }, event: unknown) => void> = []
@@ -43,7 +43,7 @@ function harness(mode: 'agent' | 'ceo' = 'ceo') {
     },
     tools: {
       register: (definition) => {
-        tool = definition
+        tools.set(definition.name, definition)
       },
     },
     subagents: {
@@ -59,10 +59,10 @@ function harness(mode: 'agent' | 'ceo' = 'ceo') {
         const result = new Promise<{ output: Array<{ type: 'text'; text: string }>; stopReason: string }>((next) => {
           resolve = next
         })
-        release.set(id, () => {
+        release.set(id, (output = `done by ${id}`, stopReason = 'completed') => {
           resolve({
-            output: [{ type: 'text', text: `done by ${id}` }],
-            stopReason: 'completed',
+            output: [{ type: 'text', text: output }],
+            stopReason,
           })
         })
         return {
@@ -87,13 +87,29 @@ function harness(mode: 'agent' | 'ceo' = 'ceo') {
     for (const listener of listeners) listener({ id }, event)
   }
 
-  return { sections, tool, started, release, emitChild }
+  return { sections, tool: () => tools.get('ceo_delegate'), plan: () => tools.get('ceo_plan'), started, release, emitChild }
+}
+
+async function recordPlan(
+  plan: ReturnType<typeof harness>['plan'],
+  tasks: unknown[],
+  session = journalSession('session-1'),
+) {
+  const tool = plan()
+  assert.ok(tool)
+  await tool.execute({
+    summary: 'Deliver a researched answer.',
+    analysis: 'Split independent evidence gathering, then synthesize only after sources and acceptance are clear.',
+    tasks,
+  }, { agent: { session }, signal: new AbortController().signal })
+  return session
 }
 
 test('registers a CEO prompt section and ceo_delegate tool', () => {
-  const { sections, tool } = harness()
+  const { sections, tool, plan } = harness()
   assert.equal(sections[0]?.name, 'magic-ceo')
-  assert.equal(tool?.name, 'ceo_delegate')
+  assert.equal(tool()?.name, 'ceo_delegate')
+  assert.equal(plan()?.name, 'ceo_plan')
   const text = typeof sections[0]?.text === 'function' ? sections[0].text() : ''
   assert.match(text, /tasks\[\]/)
   assert.match(text, /send_message/)
@@ -107,8 +123,9 @@ test('CEO session prompt hard-routes breadth research to ceo_delegate', () => {
   assert.equal(typeof textFn, 'function')
   const text = textFn({ agent: { session: { id: 'session-1' } } })
   assert.match(text, /in CEO mode now/)
-  assert.match(text, /call ceo_delegate immediately/)
-  assert.match(text, /Do not call web_search yourself/)
+  assert.match(text, /first stream a useful analysis/)
+  assert.match(text, /ceo_plan/)
+  assert.match(text, /Do not perform breadth web research yourself/)
   assert.match(text, /海内外/)
   assert.doesNotMatch(text, /Do not call ceo_delegate/)
 })
@@ -125,10 +142,11 @@ test('agent session prompt still forbids ceo_delegate', () => {
 
 test('rejects delegation unless the session is in CEO mode', async () => {
   const { tool } = harness('agent')
-  assert.ok(tool)
+  const delegate = tool()
+  assert.ok(delegate)
 
   await assert.rejects(
-    () => tool.execute(
+    () => delegate.execute(
       { tasks: [{ role: 'reviewer', task: 'Review the API.' }] },
       { agent: { session: { id: 'session-1' } }, signal: new AbortController().signal },
     ),
@@ -136,11 +154,44 @@ test('rejects delegation unless the session is in CEO mode', async () => {
   )
 })
 
-test('starts independent tasks together and records the run graph', async () => {
-  const { tool, started, release } = harness('ceo')
-  assert.ok(tool)
+test('requires a matching plan before complex delegation', async () => {
+  const { tool, plan } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
 
-  const pending = tool.execute(
+  const tasks = [
+    { role: 'market researcher', task: 'Survey the market', id: 'market' },
+    { role: 'source reviewer', task: 'Validate the sources', id: 'sources' },
+  ]
+  await assert.rejects(
+    () => delegate.execute(
+      { tasks },
+      { agent: { session: { id: 'session-1' } }, signal: new AbortController().signal },
+    ),
+    /requires ceo_plan first/,
+  )
+
+  await recordPlan(plan, tasks)
+  await assert.rejects(
+    () => delegate.execute(
+      { tasks: [{ role: 'market researcher', task: 'Survey another market', id: 'market' }] },
+      { agent: { session: { id: 'session-1' } }, signal: new AbortController().signal },
+    ),
+    /do not match the latest CEO plan/,
+  )
+})
+
+test('starts independent tasks together and records the run graph', async () => {
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+
+  await recordPlan(plan, [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+    { role: 'reviewer', task: 'List risks', id: 'risks' },
+  ])
+
+  const pending = delegate.execute(
     {
       tasks: [
         { role: 'researcher', task: 'Survey options', id: 'survey' },
@@ -165,10 +216,16 @@ test('starts independent tasks together and records the run graph', async () => 
 })
 
 test('does not start a dependent task until the producer finishes', async () => {
-  const { tool, started, release } = harness('ceo')
-  assert.ok(tool)
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
 
-  const pending = tool.execute(
+  await recordPlan(plan, [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+    { role: 'implementer', task: 'Build it', depends_on: ['survey'] },
+  ])
+
+  const pending = delegate.execute(
     {
       tasks: [
         { role: 'researcher', task: 'Survey options', id: 'survey' },
@@ -194,11 +251,16 @@ test('does not start a dependent task until the producer finishes', async () => 
 })
 
 test('appends an ignorable run journal while the graph is in flight', async () => {
-  const { tool, started, release } = harness('ceo')
-  assert.ok(tool)
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
   const session = journalSession('session-1')
+  await recordPlan(plan, [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+    { role: 'implementer', task: 'Build it', id: 'build', depends_on: ['survey'] },
+  ], session)
 
-  const pending = tool.execute(
+  const pending = delegate.execute(
     {
       tasks: [
         { role: 'researcher', task: 'Survey options', id: 'survey' },
@@ -237,11 +299,34 @@ test('appends an ignorable run journal while the graph is in flight', async () =
   assert.ok(journals().every(event => event.ignorable === true))
 })
 
-test('stamps memberId while the child is still running and mirrors its process', async () => {
-  const { tool, started, release, emitChild } = harness('ceo')
-  assert.ok(tool)
+test('records the final worker output without relying on send_message and blocks unverified research', async () => {
+  const { tool, plan, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
   const session = journalSession('session-1')
-  const pending = tool.execute(
+  const tasks = [{ role: 'market researcher', task: 'Survey the market', id: 'market' }]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session }, callId: 'call-1', signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.(
+    '{"status":"partial","done":"Drafted a report","risks_or_blockers":"无法联网核验核心数字，仅估计"}',
+  )
+  const result = await pending
+  assert.equal(result.runs[0]?.phase, 'failed')
+  const event = session.events.find(item => item.type === CEO_MEMBER_RESULT)
+  assert.equal(event?.ignorable, true)
+  assert.match(String((event?.data as { output?: string } | undefined)?.output), /无法联网核验/)
+})
+
+test('stamps memberId while the child is still running and mirrors its process', async () => {
+  const { tool, plan, started, release, emitChild } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  await recordPlan(plan, [{ role: 'researcher', task: 'Survey options', id: 'survey' }], session)
+  const pending = delegate.execute(
     { tasks: [{ role: 'researcher', task: 'Survey options', id: 'survey' }] },
     {
       agent: { session },

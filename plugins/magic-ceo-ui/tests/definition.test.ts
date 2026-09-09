@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ceoMemberReportDefinition, ceoTeamDefinition } from '../src/client/definition.ts'
-import { CEO_RUN_JOURNAL, CEO_RUN_PROCESS } from '../src/team.ts'
+import { CEO_PLAN, CEO_RUN_JOURNAL, CEO_RUN_PROCESS } from '../src/team.ts'
 import {
   getCeoRoster,
   publishCeoTeam,
@@ -112,6 +112,28 @@ test('folds a turn of ceo_delegate events into one visible team node', () => {
   assert.equal(node?.data.members[0]?.memberId, 'member-1')
   assert.equal(node?.data.members[0]?.task, 'Survey options')
   assert.equal(node?.data.members[0]?.status, 'ok')
+})
+
+test('projects a pre-delegation CEO plan before members exist', () => {
+  const start = { event: { type: 'turn/start', seq: 1, data: { turn: 9 } }, role: 'start', location: { kind: 'turn' } }
+  let state = ceoTeamDefinition.start(undefined, start)
+  assert.deepEqual(ceoTeamDefinition.match({ type: CEO_PLAN, data: { turn: 9 } }), { id: '9', role: 'update' })
+  state = ceoTeamDefinition.update({ state }, {
+    event: {
+      type: CEO_PLAN,
+      seq: 2,
+      data: {
+        turn: 9,
+        planId: 'plan-1',
+        summary: 'Research the market',
+        analysis: 'Check scope and evidence before dispatch.',
+        tasks: [{ id: 'research', role: 'researcher', task: 'Collect sources', dependsOn: [] }],
+      },
+    },
+  })
+  const node = ceoTeamDefinition.buildViewNode({ key: 'ceo-team:9', id: '9', state, start })
+  assert.equal(node?.data.plan?.planId, 'plan-1')
+  assert.equal(node?.data.members.length, 0)
 })
 
 test('ignores unrelated tools and keeps a failed member visible', () => {
