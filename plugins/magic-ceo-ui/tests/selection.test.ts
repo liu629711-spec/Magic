@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import {
   applyCeoRosterMessage,
   getCeoRoster,
+  getCeoRosterSessionId,
   getSelectedCeoMember,
   publishCeoTeam,
   recordCeoUserDecision,
@@ -49,6 +50,20 @@ test('selects a member and refreshes it from a later team snapshot', () => {
   resetCeoRoster()
 })
 
+test('a later session snapshot replaces the previous roster', () => {
+  resetCeoRoster()
+  publishCeoTeam([member()], 'session-a')
+  selectCeoMember(getCeoRoster()[0] ?? null)
+  assert.equal(getCeoRosterSessionId(), 'session-a')
+  publishCeoTeam([member({ callId: 'call-9:n0', batchCallId: 'call-9' })], 'session-b')
+  assert.equal(getCeoRosterSessionId(), 'session-b')
+  assert.equal(getCeoRoster().length, 1)
+  assert.equal(getCeoRoster()[0]?.callId, 'call-9:n0')
+  assert.equal(getSelectedCeoMember(), null)
+  resetCeoRoster()
+  assert.equal(getCeoRosterSessionId(), undefined)
+})
+
 test('applies a later member report and keeps unmatched messages until the member appears', () => {
   resetCeoRoster()
   applyCeoRosterMessage({
@@ -68,6 +83,14 @@ test('applies a later member report and keeps unmatched messages until the membe
     memberId: 'member-1',
     seq: 10,
     text: 'Background subagent member-1 finished and will do no further work unless you send it more.\nIts closing message:\nstatus: blocked',
+    sourceKind: 'subagent-settled',
+  })
+  assert.equal(getSelectedCeoMember()?.report?.status, 'blocked')
+
+  applyCeoRosterMessage({
+    memberId: 'member-1',
+    seq: 11,
+    text: 'Background subagent member-1 was stopped before it finished.\nIts closing message:\nstatus: completed\ndone: surveyed',
     sourceKind: 'subagent-settled',
   })
   assert.equal(getSelectedCeoMember()?.report?.status, 'blocked')

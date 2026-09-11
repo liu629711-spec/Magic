@@ -9,7 +9,27 @@ export type RunProgress = (
   snapshot: ReadonlyMap<string, RunState>,
 ) => void | Promise<void>
 
-const FAILED = new Set(['failed', 'skipped', 'cancelled'])
+export type WaveYieldReason = 'decision' | 'bind'
+
+const FAILED = new Set(['failed', 'skipped', 'cancelled', 'unverified', 'unknown_after_restart'])
+
+/** Nodes the user halted mid-run. They must not be re-dispatched by this run(). */
+const halted = new Set<string>()
+
+/** Request cancellation of one running node. The executor observes it via the
+ *  shared abort signal it was handed; wave() then marks the node cancelled and
+ *  downstream dependents are skipped like any other failed dependency. */
+export function haltRun(runId: string): void {
+  halted.add(runId)
+}
+
+export function isRunHalted(runId: string): boolean {
+  return halted.has(runId)
+}
+
+export function clearHaltedRuns(): void {
+  halted.clear()
+}
 
 function snapshotOf(
   plan: RunPlan,
@@ -45,7 +65,10 @@ async function emitProgress(
 }
 
 function depsReady(spec: RunSpec, completed: ReadonlyMap<string, RunState>): boolean {
-  return spec.dependsOn.every(dep => completed.has(dep))
+  return spec.dependsOn.every(dep => {
+    const state = completed.get(dep)
+    return state !== undefined && state.phase !== 'blocked'
+  })
 }
 
 function shouldSkip(spec: RunSpec, completed: ReadonlyMap<string, RunState>): boolean {
@@ -55,15 +78,44 @@ function shouldSkip(spec: RunSpec, completed: ReadonlyMap<string, RunState>): bo
   })
 }
 
+function bindPending(
+  plan: RunPlan,
+  completed: ReadonlyMap<string, RunState>,
+  inFlight: ReadonlyMap<string, Promise<void>>,
+): RunSpec[] {
+  return plan.nodes.filter(node =>
+    node.bindAfterDeps === true
+    && !completed.has(node.runId)
+    && !inFlight.has(node.runId)
+    && depsReady(node, completed)
+    && !shouldSkip(node, completed),
+  )
+}
+
+function yieldReasonOf(
+  plan: RunPlan,
+  completed: ReadonlyMap<string, RunState>,
+  inFlight: ReadonlyMap<string, Promise<void>>,
+): WaveYieldReason | undefined {
+  if (inFlight.size > 0) return undefined
+  if ([...completed.values()].some(state => state.phase === 'blocked')) return 'decision'
+  if (bindPending(plan, completed, inFlight).length > 0) return 'bind'
+  return undefined
+}
+
 export class WaveScheduler {
+  yielded: WaveYieldReason | undefined
+
   async run(
     plan: RunPlan,
     executor: RunExecutor,
     signal?: AbortSignal,
     onProgress?: RunProgress,
+    seed?: ReadonlyMap<string, RunState>,
   ): Promise<Map<string, RunState>> {
     plan.waves()
-    const completed = new Map<string, RunState>()
+    this.yielded = undefined
+    const completed = new Map<string, RunState>(seed)
     const inFlight = new Map<string, Promise<void>>()
 
     const dispatch = (): void => {
@@ -79,6 +131,7 @@ export class WaveScheduler {
             progressed = true
             continue
           }
+          if (node.bindAfterDeps === true) continue
           const upstream = new Map(
             node.dependsOn.flatMap(dep => {
               const state = completed.get(dep)
@@ -88,10 +141,14 @@ export class WaveScheduler {
           inFlight.set(node.runId, executor(node, upstream).then((state) => {
             completed.set(node.runId, state)
           }, (error: unknown) => {
-            completed.set(node.runId, {
-              phase: 'failed',
-              error: error instanceof Error ? error.message : String(error),
-            })
+            // A user halt surfaces as an executor abort; record it as cancelled
+            // so dependents skip and the node is honestly not-success.
+            completed.set(node.runId, isRunHalted(node.runId)
+              ? { phase: 'cancelled', error: 'stopped by user' }
+              : {
+                phase: 'failed',
+                error: error instanceof Error ? error.message : String(error),
+              })
           }).finally(() => {
             inFlight.delete(node.runId)
           }))
@@ -106,11 +163,16 @@ export class WaveScheduler {
       await Promise.race(inFlight.values())
       dispatch()
       await emitProgress(onProgress, plan, completed, inFlight)
+      const reason = yieldReasonOf(plan, completed, inFlight)
+      if (reason !== undefined) {
+        this.yielded = reason
+        await emitProgress(onProgress, plan, completed, inFlight)
+        return completed
+      }
     }
-    // Completions can settle while `onProgress` is awaited, draining inFlight
-    // and skipping the skip-tail / terminal snapshot.
     dispatch()
     await emitProgress(onProgress, plan, completed, inFlight)
+    this.yielded = yieldReasonOf(plan, completed, inFlight)
     return completed
   }
 }

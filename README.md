@@ -1,21 +1,21 @@
 # Magic
 
-Magic is a product layer on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). DSH owns agent execution, tools, files, terminals, and sessions. Magic owns work mode, engineering organization, task ledger, responsibility, and delivery.
+Magic is a product layer on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). DSH owns agent execution, tools, files, terminals, sessions, storage, and workspaces. Magic owns work mode, orchestration, the delivery contract, memory, task ledger, responsibility, and delivery.
 
-This `main` branch is a DSH plugin workspace. The previous Rust/Tauri desktop stack is archived on [`old-design`](https://github.com/liu629711-spec/Magic/tree/old-design).
+This `main` branch is a DSH plugin workspace. The previous Rust/Tauri desktop stack is archived on [`old-design`](https://github.com/liu629711-spec/Magic/tree/old-design). Engineering organization is postponed.
 
 ## Product
 
-Canonical product rules live in `docs/01-产品/PRD-01` through `PRD-05`.
+Canonical product rules live in `docs/01-产品/PRD-01` through `PRD-05`; the document map is in [`docs/README.md`](docs/README.md). PRD-03 (engineering organization) is **deferred**. Technical implementation constraints and the AgentCore capability map live in [`docs/02-实现`](docs/02-实现).
 
 | Plugin | Product meaning | User command |
 | --- | --- | --- |
 | `@magic/dsh-work-mode` | Agent vs CEO for the current session or current input | `/mode`, `/mode agent`, `/mode ceo`, `/mode once ceo` |
 | `@magic/dsh-ceo` | CEO work-package delegation | `ceo_delegate` |
 | `@magic/dsh-ceo-ui` | CEO team graph and right-column member workspace | — |
-| `@magic/dsh-engineering` | Long-lived engineering organization | `/engineering status`, `/engineering confirm <name>` |
+| `@magic/dsh-engineering` | Long-lived engineering organization (deferred, not loaded) | — |
 
-CEO mode does not create engineering. Engineering requires a separate explicit confirmation.
+CEO mode does not create engineering. Engineering is postponed and needs a separate explicit decision before it is restarted.
 
 ## Layout
 
@@ -23,9 +23,10 @@ CEO mode does not create engineering. Engineering requires a separate explicit c
 plugins/magic-work-mode      agent / CEO work-mode plugin
 plugins/magic-ceo            CEO host plugin
 plugins/magic-ceo-ui         CEO team graph client plugin
-plugins/magic-engineering    engineering plugin (not loaded yet)
+plugins/magic-engineering    engineering plugin (deferred, not loaded)
 patches/web.patch.yml        DSH web overlay
 docs/01-产品                 canonical PRDs
+docs/02-实现                 implementation constraints and AgentCore capability map
 ```
 
 ## Run

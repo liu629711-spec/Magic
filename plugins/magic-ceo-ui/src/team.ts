@@ -5,10 +5,30 @@ export const CEO_MEMBER_RESULT = 'ceo/member-result'
 export const CEO_PLAN_REVISED = 'ceo/plan-revised'
 export const CEO_RUN_PHASE = 'ceo/run-phase'
 export const CEO_RUN_PROGRESS = 'ceo/run-progress'
+export const CEO_MEMBER_USAGE = 'ceo/member-usage'
+export const CEO_MEMBER_CONTEXT = 'ceo/member-context'
+export const CEO_MEMBER_HALTED = 'ceo/member-halted'
+export const CEO_MEMBER_REDIRECTED = 'ceo/member-redirected'
+export const CEO_CHECKPOINT = 'ceo/checkpoint'
 
 export type CeoMemberStatus = 'queued' | 'running' | 'ok' | 'error'
-export type CeoReportStatus = 'completed' | 'blocked' | 'failed' | 'partial'
-export type CeoRunPhase = 'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
+export type CeoReportStatus =
+  | 'completed'
+  | 'blocked'
+  | 'failed'
+  | 'partial'
+  | 'unverified'
+  | 'unknown_after_restart'
+export type CeoRunPhase =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled'
+  | 'unverified'
+  | 'unknown_after_restart'
+  | 'blocked'
 export type CeoActivityPhase = 'thinking' | 'tool' | 'waiting' | 'winding_down'
 export type CeoMemberViewStatus =
   | 'queued'
@@ -18,6 +38,8 @@ export type CeoMemberViewStatus =
   | 'blocked'
   | 'failed'
   | 'partial'
+  | 'unverified'
+  | 'unknown_after_restart'
   | 'error'
 
 export interface CeoMemberReport {
@@ -72,9 +94,27 @@ export interface CeoTeamMember {
   answeredDecision?: string
   process?: CeoProcessStep[]
   activity?: { phase: CeoActivityPhase; toolName?: string }
+  usage?: CeoTokenUsageView
+  contextChannels?: CeoContextChannelView[]
+  halted?: boolean
+  redirectedNote?: string
 }
 
-export type CeoAttentionKind = 'decision' | 'blocker' | 'failed'
+export interface CeoTokenUsageView {
+  inputTokens: number
+  outputTokens: number
+  totalTokens?: number
+  cacheReadTokens?: number
+  reasoningTokens?: number
+}
+
+export interface CeoContextChannelView {
+  channel: string
+  chars: number
+  truncated: boolean
+}
+
+export type CeoAttentionKind = 'decision' | 'blocker' | 'failed' | 'unverified' | 'unknown_after_restart'
 
 export interface CeoAttentionItem {
   kind: CeoAttentionKind
@@ -191,7 +231,20 @@ export function parseCeoDelegateArgs(argsRaw: unknown): CeoDelegateTask {
   return parseCeoDelegateTasks(argsRaw)[0] ?? { role: 'member', task: 'task', dependsOn: [] }
 }
 
-const REPORT_STATUS = new Set<CeoReportStatus>(['completed', 'blocked', 'failed', 'partial'])
+const REPORT_STATUS = new Set<CeoReportStatus>([
+  'completed',
+  'blocked',
+  'failed',
+  'partial',
+  'unverified',
+  'unknown_after_restart',
+])
+const HONEST_STATUS = new Set<CeoReportStatus>([
+  'blocked',
+  'failed',
+  'unverified',
+  'unknown_after_restart',
+])
 
 function reportStatusOf(value: unknown): CeoReportStatus | undefined {
   return typeof value === 'string' && REPORT_STATUS.has(value.trim() as CeoReportStatus)
@@ -210,6 +263,101 @@ function fieldText(value: unknown): string | undefined {
   return undefined
 }
 
+const EMPTY_DECISION = /^(none|n\/a|na|null|nil|empty|-|无|没有|暂无|无需|不需要|空|\[\]|\{\}|\[\s*\]|\{\s*\})$/i
+
+const ROLE_DISPLAY: Record<string, string> = {
+  research: '调研',
+  researcher: '调研',
+  survey: '调研',
+  synthesis: '汇总',
+  synthesizer: '汇总',
+  synthesize: '汇总',
+  review: '审阅',
+  reviewer: '审阅',
+  implementation: '实现',
+  implementer: '实现',
+  implement: '实现',
+  writer: '撰写',
+  analysis: '分析',
+  analyst: '分析',
+  member: '成员',
+}
+
+const GENERIC_SEATS = new Set([
+  ...Object.keys(ROLE_DISPLAY),
+  ...Object.values(ROLE_DISPLAY),
+])
+
+const TASK_LEAD = /^(?:请你|请您|请|帮我|帮忙)?(?:完成|进行|做一下|做)?(?:调研一下|研究一下|分析一下|对比一下|汇总一下|撰写一下)?(?:调研|研究|分析|撰写|汇总|对比|调查|搜集|收集)?/u
+
+/** Canvas / dock title for a graph seat. Plan `role` stays unchanged. */
+export function displayCeoRole(role: string): string {
+  const key = role.trim()
+  if (key === '') return '成员'
+  return ROLE_DISPLAY[key.toLowerCase()] ?? key
+}
+
+function isGenericSeat(role: string): boolean {
+  const key = role.trim()
+  if (key === '') return true
+  return GENERIC_SEATS.has(key.toLowerCase()) || GENERIC_SEATS.has(key)
+}
+
+function seatTitleFromTask(task: string): string | undefined {
+  const raw = task.trim()
+  if (raw === '') return undefined
+  const hasDomestic = /国内|中国市场|海内/.test(raw)
+    || (/中国大陆/.test(raw) && /除中国/.test(raw) === false)
+  const hasOverseas = /海外|境外|国际|全球除中|除中国/.test(raw)
+  if (/汇总|综合|综述|合成/.test(raw)) return '结论汇总'
+  if (hasDomestic && hasOverseas) return '对比'
+  if (hasDomestic) return '国内市场'
+  if (hasOverseas) return '海外市场'
+  if (/欧洲/.test(raw)) return '欧洲市场'
+  if (/北美|美国/.test(raw)) return '北美市场'
+  if (/日本/.test(raw)) return '日本市场'
+  if (/竞品/.test(raw)) return '竞品'
+  if (/对比|比较/.test(raw)) return '对比'
+  let text = raw.replace(TASK_LEAD, '').trim()
+  text = (text.split(/[。.\n；;]/u)[0] ?? text).trim()
+  text = (text.split(/[，,、]/u)[0] ?? text).trim()
+  text = text.replace(/^(?:一下|下)\s*/u, '').replace(/^(?:\d{4}(?:\s*[-~]\s*\d{4})?年)/u, '').trim()
+  const chars = Array.from(text)
+  if (chars.length > 8) text = chars.slice(0, 8).join('')
+  return text.length >= 2 ? text : undefined
+}
+
+export function seatNameOf(role: string, task: string): string {
+  const trimmedRole = role.trim()
+  if (trimmedRole !== '' && isGenericSeat(trimmedRole) === false) {
+    return displayCeoRole(trimmedRole)
+  }
+  return seatTitleFromTask(task) ?? displayCeoRole(trimmedRole)
+}
+
+/** Unique canvas / dock title. Generic roles like 调研 fall back to the task. */
+export function displayCeoSeat(
+  member: Pick<CeoTeamMember, 'role' | 'task' | 'callId'>,
+  roster: readonly Pick<CeoTeamMember, 'role' | 'task' | 'callId'>[] = [],
+): string {
+  const base = seatNameOf(member.role, member.task)
+  if (roster.length === 0) return base
+  const same = roster.filter(item => seatNameOf(item.role, item.task) === base)
+  if (same.length <= 1) return base
+  const index = same.findIndex(item => item.callId === member.callId)
+  return index <= 0 ? base : `${base}${String(index + 1)}`
+}
+
+export function hasUserDecision(text: string | undefined): boolean {
+  const value = (text ?? '').trim().replace(/[。.\s]+$/u, '').trim()
+  return value !== '' && EMPTY_DECISION.test(value) === false
+}
+
+function decisionText(value: unknown): string | undefined {
+  const text = fieldText(value)
+  return hasUserDecision(text) ? text : undefined
+}
+
 function reportFromRecord(parsed: Record<string, unknown>): CeoMemberReport | undefined {
   const report: CeoMemberReport = {
     status: reportStatusOf(parsed.status),
@@ -219,7 +367,7 @@ function reportFromRecord(parsed: Record<string, unknown>): CeoMemberReport | un
     evidence: fieldText(parsed.evidence),
     risksOrBlockers: fieldText(parsed.risks_or_blockers ?? parsed.risksOrBlockers),
     next: fieldText(parsed.next),
-    userDecisions: fieldText(parsed.user_decisions ?? parsed.userDecisions),
+    userDecisions: decisionText(parsed.user_decisions ?? parsed.userDecisions),
   }
   return Object.values(report).some(value => value !== undefined) ? report : undefined
 }
@@ -239,10 +387,14 @@ const REPORT_LABELS: Record<string, keyof CeoMemberReport> = {
 }
 
 const FIELD_LINE = /^[-*]?\s*(?:\*\*|__|`)?([A-Za-z][A-Za-z0-9_]*)(?:\*\*|__|`)?\s*[:：]\s*(.*)$/
+const CN_DECISION_LINE = /^[-*]?\s*(?:用户决策|待用户决策)[:：]\s*(.*)$/u
 const LEAD_IN_NOISE = /[，,;；:：]?\s*(?:以下为结构化结果|结构化结果如下|structured result follows)\s*[:：]?\s*$/i
 
 function fieldLineOf(line: string): { key: keyof CeoMemberReport; value: string } | undefined {
-  const labeled = FIELD_LINE.exec(line.trim())
+  const trimmed = line.trim()
+  const chinese = CN_DECISION_LINE.exec(trimmed)
+  if (chinese !== null) return { key: 'userDecisions', value: (chinese[1] ?? '').trim() }
+  const labeled = FIELD_LINE.exec(trimmed)
   if (labeled === null) return undefined
   const key = REPORT_LABELS[labeled[1].toLowerCase()]
   if (key === undefined) return undefined
@@ -256,6 +408,19 @@ export function looksLikeMemberReport(text: string): boolean {
   return report.status !== undefined || filled >= 2
 }
 
+export function looksLikeStructuredDump(text: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed === '') return false
+  if (looksLikeMemberReport(trimmed)) return true
+  if (/```(?:json|jsonc)?\s*\r?\n\s*\{/i.test(trimmed) && /["']?status["']?\s*:/.test(trimmed)) {
+    return true
+  }
+  const jsonStart = trimmed.indexOf('{')
+  return jsonStart >= 0
+    && jsonStart < 80
+    && /"(?:status|done|user_decisions|not_done)"\s*:/.test(trimmed)
+}
+
 export function reportLeadIn(text: string): string | undefined {
   const lines: string[] = []
   for (const raw of text.split(/\r?\n/)) {
@@ -266,7 +431,7 @@ export function reportLeadIn(text: string): string | undefined {
   return lead === '' ? undefined : lead
 }
 
-export function clipDebriefSummary(text: string, limit = 160): string {
+export function clipDebriefSummary(text: string, limit = 220): string {
   const paragraph = text.split(/\n\n/)[0]?.trim() ?? text.trim()
   const sentences = paragraph.split(/(?<=[。.!？?])\s*/).filter(item => item.trim() !== '')
   let sentence = sentences[0]?.trim() || paragraph
@@ -281,10 +446,21 @@ export function debriefSummaryOf(
   report: CeoMemberReport | undefined,
   lastMessage?: string,
 ): string {
-  const lead = lastMessage === undefined ? undefined : reportLeadIn(lastMessage)
-  if (lead !== undefined) return clipDebriefSummary(lead)
+  const source = lastMessage === undefined ? undefined : unwrapReportText(lastMessage)
+  const lead = source === undefined ? undefined : reportLeadIn(source)
+  if (
+    lead !== undefined
+    && looksLikeStructuredDump(lead) === false
+    && lead.trimStart().startsWith('{') === false
+  ) {
+    return clipDebriefSummary(lead)
+  }
   if ((report?.done ?? '').trim() !== '') return clipDebriefSummary(report!.done!)
-  if ((lastMessage ?? '').trim() !== '' && looksLikeMemberReport(lastMessage!) === false) {
+  if (
+    (lastMessage ?? '').trim() !== ''
+    && looksLikeMemberReport(lastMessage!) === false
+    && looksLikeStructuredDump(lastMessage!) === false
+  ) {
     return clipDebriefSummary(lastMessage!)
   }
   return ''
@@ -313,8 +489,15 @@ export function presentCeoMemberReport(
   )
 }
 
+function unwrapReportText(text: string): string {
+  return text.trim().replace(
+    /```(?:json|jsonc)?\s*\r?\n([\s\S]*?)\r?\n```/i,
+    (_match, inner: string) => inner.trim(),
+  )
+}
+
 export function parseCeoMemberReport(text: string): CeoMemberReport | undefined {
-  const trimmed = text.trim()
+  const trimmed = unwrapReportText(text)
   if (trimmed === '') return undefined
   const jsonStart = trimmed.indexOf('{')
   if (jsonStart >= 0 && jsonStart < 80) {
@@ -344,15 +527,19 @@ export function parseCeoMemberReport(text: string): CeoMemberReport | undefined 
       report[current] = previous ? `${previous}\n${line}` : line
     }
   }
+  if (hasUserDecision(report.userDecisions) === false) report.userDecisions = undefined
   return Object.values(report).some(value => value !== undefined) ? report : undefined
 }
 
 export function presentCeoMember(member: CeoTeamMember): CeoMemberPresentation {
-  const needsDecision = (member.report?.userDecisions ?? '').trim() !== ''
+  const needsDecision = hasUserDecision(member.report?.userDecisions)
     && (member.answeredDecision ?? '').trim() === ''
   const hasBlocker = member.report?.status === 'blocked'
   if (member.report?.status !== undefined) {
     return { viewStatus: member.report.status, needsDecision, hasBlocker }
+  }
+  if (member.halted === true) {
+    return { viewStatus: 'unverified', needsDecision, hasBlocker }
   }
   if (member.status === 'error') {
     return { viewStatus: 'error', needsDecision, hasBlocker }
@@ -380,6 +567,14 @@ export function ceoAttentionItems(members: readonly CeoTeamMember[]): CeoAttenti
     }
     if (presentation.viewStatus === 'failed' || presentation.viewStatus === 'error') {
       items.push({ kind: 'failed', member })
+      continue
+    }
+    if (presentation.viewStatus === 'unverified') {
+      items.push({ kind: 'unverified', member })
+      continue
+    }
+    if (presentation.viewStatus === 'unknown_after_restart') {
+      items.push({ kind: 'unknown_after_restart', member })
     }
   }
   return items
@@ -414,14 +609,44 @@ export function unwrapMemberMessage(memberId: string, text: string): string {
   return ''
 }
 
+/**
+ * Map a DSH subagent-settled notice onto a delivery status.
+ * A completed stop without a structured result is unverified.
+ * Interrupted stops (aborted / max tokens) are unverified, not success.
+ * Platform failure notices stay failed.
+ */
 export function settlementStatusOf(text: string): CeoReportStatus | undefined {
-  if (text.includes('finished and will do no further work')) return 'completed'
-  if (text.includes('was stopped before it finished')) return 'failed'
-  if (text.includes('ran out of room before it finished')) return 'partial'
+  if (text.includes('was stopped before it finished')) return 'unverified'
+  if (text.includes('ran out of room before it finished')) return 'unverified'
+  if (text.includes('finished and will do no further work')) return 'unverified'
   if (text.includes('declined the task')) return 'failed'
   if (text.includes('failed before it finished')) return 'failed'
   if (text.includes('ended abnormally')) return 'failed'
   return undefined
+}
+
+function settlementContradictsSuccess(text: string): CeoReportStatus | undefined {
+  if (text.includes('was stopped before it finished')) return 'unverified'
+  if (text.includes('ran out of room before it finished')) return 'unverified'
+  if (text.includes('declined the task')) return 'failed'
+  if (text.includes('failed before it finished')) return 'failed'
+  if (text.includes('ended abnormally')) return 'failed'
+  return undefined
+}
+
+function mergeStatus(
+  existing: CeoReportStatus | undefined,
+  incoming: CeoReportStatus | undefined,
+): CeoReportStatus | undefined {
+  if (incoming === undefined) return existing
+  if (
+    existing !== undefined
+    && HONEST_STATUS.has(existing)
+    && (incoming === 'completed' || incoming === 'partial')
+  ) {
+    return existing
+  }
+  return incoming
 }
 
 function mergeReports(
@@ -430,8 +655,8 @@ function mergeReports(
 ): CeoMemberReport | undefined {
   if (incoming === undefined) return existing
   if (existing === undefined) return incoming
-  return {
-    status: incoming.status ?? existing.status,
+  const next: CeoMemberReport = {
+    status: mergeStatus(existing.status, incoming.status),
     done: incoming.done ?? existing.done,
     notDone: incoming.notDone ?? existing.notDone,
     artifacts: incoming.artifacts ?? existing.artifacts,
@@ -440,15 +665,32 @@ function mergeReports(
     next: incoming.next ?? existing.next,
     userDecisions: incoming.userDecisions ?? existing.userDecisions,
   }
+  if (
+    next.status === existing.status
+    && next.done === existing.done
+    && next.notDone === existing.notDone
+    && next.artifacts === existing.artifacts
+    && next.evidence === existing.evidence
+    && next.risksOrBlockers === existing.risksOrBlockers
+    && next.next === existing.next
+    && next.userDecisions === existing.userDecisions
+  ) {
+    return existing
+  }
+  return next
 }
 
 export function mergeCeoMember(existing: CeoTeamMember, incoming: CeoTeamMember): CeoTeamMember {
-  const report = incoming.report ?? existing.report
+  const report = mergeReports(existing.report, incoming.report)
   const lastMessage = incoming.lastMessage ?? existing.lastMessage
   const memberId = incoming.memberId ?? existing.memberId
   const seq = incoming.seq > existing.seq ? incoming.seq : existing.seq
   const answeredDecision = incoming.answeredDecision ?? existing.answeredDecision
   const process = incoming.process ?? existing.process
+  const usage = incoming.usage ?? existing.usage
+  const contextChannels = incoming.contextChannels ?? existing.contextChannels
+  const halted = incoming.halted === true || existing.halted === true
+  const redirectedNote = incoming.redirectedNote ?? existing.redirectedNote
   const status = incoming.status === 'error' || existing.status === 'error'
     ? 'error' as const
     : incoming.status === 'running' && report !== undefined
@@ -467,6 +709,10 @@ export function mergeCeoMember(existing: CeoTeamMember, incoming: CeoTeamMember)
     && existing.lastMessage === lastMessage
     && existing.answeredDecision === answeredDecision
     && existing.process === process
+    && existing.usage === usage
+    && existing.contextChannels === contextChannels
+    && existing.halted === halted
+    && existing.redirectedNote === redirectedNote
   ) {
     return existing
   }
@@ -479,6 +725,10 @@ export function mergeCeoMember(existing: CeoTeamMember, incoming: CeoTeamMember)
     lastMessage,
     answeredDecision,
     process,
+    usage,
+    contextChannels,
+    halted,
+    redirectedNote,
   }
 }
 
@@ -496,11 +746,33 @@ export function applyCeoMemberMessage(
   const settlement = event.sourceKind === 'subagent-settled'
     ? settlementStatusOf(event.text)
     : undefined
-  const incoming = parsed ?? (settlement !== undefined ? { status: settlement } : undefined)
+  const contradiction = event.sourceKind === 'subagent-settled'
+    ? settlementContradictsSuccess(event.text)
+    : undefined
   let found = false
   const next = members.map((member) => {
     if (member.memberId !== event.memberId) return member
     found = true
+    const existing = member.report?.status
+    const existingHonest = existing !== undefined && HONEST_STATUS.has(existing)
+    const declared = parsed?.status
+    const incoming = parsed !== undefined
+      ? (
+        !existingHonest
+        && contradiction !== undefined
+        && (declared === 'completed' || declared === 'partial' || declared === undefined)
+          ? { ...parsed, status: contradiction }
+          : (declared === undefined && existing === undefined && settlement !== undefined
+            ? { ...parsed, status: settlement }
+            : parsed)
+      )
+      : (
+        !existingHonest && contradiction !== undefined
+          ? { status: contradiction }
+          : (settlement !== undefined && existing === undefined
+            ? { status: settlement }
+            : undefined)
+      )
     const report = mergeReports(member.report, incoming)
     const questionChanged = incoming?.userDecisions !== undefined
       && incoming.userDecisions !== member.report?.userDecisions
@@ -520,13 +792,15 @@ export function applyCeoMemberMessage(
 
 export function formatCeoDecisionMessage(member: CeoTeamMember, answer: string): string {
   const who = member.memberId ?? member.role
+  const runId = member.rawId ?? member.runId ?? who
   const question = (member.report?.userDecisions ?? '').trim()
   const lines = [
-    `User decision for member ${who} (${member.role} · ${member.task}):`,
+    `User decision for member ${who} (${member.role} · ${member.task}).`,
   ]
   if (question !== '') lines.push(`Question: ${question}`)
   lines.push(`Decision: ${answer.trim()}`)
-  lines.push('Forward this to the member with send_message. Do not rewrite their work as success.')
+  lines.push(`Call ceo_replan with continue run_id ${runId} and this answer.`)
+  lines.push('Do not send_message the member. Do not call ceo_delegate again. Do not rewrite their work as success.')
   return lines.join('\n')
 }
 
@@ -587,7 +861,17 @@ export function applyCeoDelegateCall(
   return { ...state, members: [...others, ...batch] }
 }
 
-const RUN_PHASES = new Set<CeoRunPhase>(['queued', 'running', 'completed', 'failed', 'skipped', 'cancelled'])
+const RUN_PHASES = new Set<CeoRunPhase>([
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'skipped',
+  'cancelled',
+  'unverified',
+  'unknown_after_restart',
+  'blocked',
+])
 
 export interface CeoRunJournalRun {
   runId: string
@@ -624,20 +908,25 @@ export function parseCeoRunJournalRuns(value: unknown): CeoRunJournalRun[] {
 function journalStatus(phase: string): CeoMemberStatus {
   if (phase === 'queued') return 'queued'
   if (phase === 'running') return 'running'
-  if (phase === 'failed' || phase === 'cancelled' || phase === 'error' || phase === 'skipped') return 'error'
+  if (phase === 'blocked') return 'ok'
+  if (phase === 'failed' || phase === 'error' || phase === 'skipped') return 'error'
   return 'ok'
 }
 
 function phaseStatus(phase: string): CeoMemberStatus {
   if (phase === 'queued') return 'queued'
   if (phase === 'running') return 'running'
-  if (phase === 'failed' || phase === 'cancelled' || phase === 'error' || phase === 'skipped') return 'error'
+  if (phase === 'blocked') return 'ok'
+  if (phase === 'failed' || phase === 'error' || phase === 'skipped') return 'error'
   return 'ok'
 }
 
 function phaseReport(phase: string): CeoMemberReport | undefined {
   if (phase === 'completed') return { status: 'completed' }
-  if (phase === 'failed' || phase === 'cancelled' || phase === 'skipped') return { status: 'failed' }
+  if (phase === 'blocked') return { status: 'blocked' }
+  if (phase === 'unverified' || phase === 'cancelled') return { status: 'unverified' }
+  if (phase === 'unknown_after_restart') return { status: 'unknown_after_restart' }
+  if (phase === 'failed' || phase === 'skipped') return { status: 'failed' }
   return undefined
 }
 
@@ -663,27 +952,47 @@ export function applyCeoRunJournal(
     }))
     return { ...state, members: [...state.members, ...members] }
   }
-  return {
-    ...state,
-    members: state.members.map((member) => {
-      if (member.batchCallId !== event.callId) return member
-      const index = batch.findIndex(item => item.callId === member.callId)
-      const run = event.runs.find(item =>
-        item.rawId === member.rawId || item.runId === member.runId,
-      ) ?? event.runs[index]
-      if (run === undefined) return member
-      return {
-        ...member,
-        seq: event.seq,
-        runId: run.runId,
-        rawId: run.rawId,
-        memberId: run.memberId ?? member.memberId,
-        status: member.status === 'error' ? 'error' as const : journalStatus(run.phase),
-        report: member.report ?? phaseReport(run.phase),
-        process: member.process,
-      }
-    }),
-  }
+  const members = state.members.map((member) => {
+    if (member.batchCallId !== event.callId) return member
+    const index = batch.findIndex(item => item.callId === member.callId)
+    const run = event.runs.find(item =>
+      item.rawId === member.rawId || item.runId === member.runId,
+    ) ?? event.runs[index]
+    if (run === undefined) return member
+    return {
+      ...member,
+      seq: event.seq,
+      runId: run.runId,
+      rawId: run.rawId,
+      memberId: run.memberId ?? member.memberId,
+      status: member.status === 'error'
+        ? 'error' as const
+        : member.report?.status === 'unknown_after_restart' && run.phase === 'running'
+          ? member.status
+          : journalStatus(run.phase),
+      report: member.report?.status === 'unknown_after_restart' && run.phase === 'running'
+        ? member.report
+        : mergeReports(member.report, phaseReport(run.phase)),
+      process: member.process,
+    }
+  })
+  const extras = event.runs.flatMap((run) => {
+    if (batch.some(member => member.rawId === run.rawId || member.runId === run.runId)) return []
+    return [{
+      callId: `${event.callId}:${run.rawId}`,
+      batchCallId: event.callId,
+      seq: event.seq,
+      role: run.role,
+      task: run.task,
+      dependsOn: run.dependsOn,
+      rawId: run.rawId,
+      runId: run.runId,
+      memberId: run.memberId,
+      status: journalStatus(run.phase),
+      report: phaseReport(run.phase),
+    }]
+  })
+  return extras.length === 0 ? { ...state, members } : { ...state, members: [...members, ...extras] }
 }
 
 function replaceTrailing(
@@ -813,7 +1122,7 @@ export function applyCeoDelegateResult(
       runId: run?.runId ?? member.runId,
       memberId: run?.memberId ?? member.memberId,
       status: event.isError ? 'error' as const : (run === undefined ? member.status : phaseStatus(run.phase)),
-      report: member.report ?? (run === undefined ? undefined : phaseReport(run.phase)),
+      report: mergeReports(member.report, run === undefined ? undefined : phaseReport(run.phase)),
     }
   })
   return { ...state, members }
@@ -836,20 +1145,27 @@ export function applyCeoMemberResult(
   event: { callId: string; runId: string; memberId: string; seq: number; output: string; stopReason?: string; status?: CeoReportStatus },
 ): CeoTeamState {
   const parsed = parseCeoMemberReport(event.output)
+  const declared = event.status ?? parsed?.status
+  const contradictory = event.stopReason !== undefined
+    && event.stopReason !== 'completed'
+    && (declared === 'completed' || declared === 'partial')
+  const status = contradictory ? 'unverified' as const : declared
   return {
     ...state,
     members: state.members.map(member => {
       if (member.batchCallId !== event.callId || (member.memberId !== event.memberId && member.runId !== event.runId)) return member
-      const status = parsed?.status
       return {
         ...member,
         seq: event.seq,
         memberId: event.memberId,
         lastMessage: event.output.trim() || member.lastMessage,
-        report: mergeReports(member.report, event.status === 'blocked' || event.status === 'failed'
-          ? { ...parsed, status: event.status }
-          : parsed),
-        status: status === 'blocked' || status === 'failed' ? 'ok' as const : member.status,
+        report: mergeReports(member.report, {
+          ...parsed,
+          ...status === undefined ? {} : { status },
+        }),
+        status: status !== undefined && HONEST_STATUS.has(status)
+          ? 'ok' as const
+          : member.status,
       }
     }),
   }
@@ -892,6 +1208,111 @@ export function applyCeoRunProgress(state: CeoTeamState, event: { callId: string
 export function applyCeoRunPhase(state: CeoTeamState, event: { callId: string; runId: string; memberId: string; phase: CeoActivityPhase; toolName?: string; seq: number }): CeoTeamState {
   if (!event.callId || !event.runId || !event.memberId) return state
   return { ...state, members: state.members.map(member => member.batchCallId === event.callId && (member.runId === event.runId || member.memberId === event.memberId) ? { ...member, seq: event.seq, activity: { phase: event.phase, ...event.toolName ? { toolName: event.toolName } : {} } } : member) }
+}
+
+function usageNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+function parseUsage(value: unknown): CeoTokenUsageView | undefined {
+  if (!isRecord(value)) return undefined
+  const inputTokens = usageNumber(value.inputTokens)
+  const outputTokens = usageNumber(value.outputTokens)
+  if (inputTokens === undefined && outputTokens === undefined) return undefined
+  const usage: CeoTokenUsageView = { inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 }
+  const total = usageNumber(value.totalTokens)
+  if (total !== undefined) usage.totalTokens = total
+  const cacheRead = usageNumber(value.cacheReadTokens)
+  if (cacheRead !== undefined) usage.cacheReadTokens = cacheRead
+  const reasoning = usageNumber(value.reasoningTokens)
+  if (reasoning !== undefined) usage.reasoningTokens = reasoning
+  return usage
+}
+
+function parseContextChannels(value: unknown): CeoContextChannelView[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const channels = value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.channel !== 'string') return []
+    return [{
+      channel: item.channel,
+      chars: usageNumber(item.chars) ?? 0,
+      truncated: item.truncated === true,
+    }]
+  })
+  return channels.length > 0 ? channels : undefined
+}
+
+/** Fold a member's cumulative usage event; later events replace earlier ones. */
+export function applyCeoMemberUsage(
+  state: CeoTeamState,
+  event: { callId: string; runId: string; memberId: string; usage: unknown; seq: number },
+): CeoTeamState {
+  if (!event.callId || !event.runId) return state
+  const usage = parseUsage(event.usage)
+  if (usage === undefined) return state
+  return {
+    ...state,
+    members: state.members.map(member =>
+      member.batchCallId === event.callId && (member.runId === event.runId || member.memberId === event.memberId)
+        ? { ...member, seq: event.seq, usage }
+        : member,
+    ),
+  }
+}
+
+/** Fold a member's prompt provenance event. */
+export function applyCeoMemberContext(
+  state: CeoTeamState,
+  event: { callId: string; runId: string; memberId: string; channels: unknown; seq: number },
+): CeoTeamState {
+  if (!event.callId || !event.runId) return state
+  const contextChannels = parseContextChannels(event.channels)
+  if (contextChannels === undefined) return state
+  return {
+    ...state,
+    members: state.members.map(member =>
+      member.batchCallId === event.callId && (member.runId === event.runId || member.memberId === event.memberId)
+        ? { ...member, seq: event.seq, contextChannels }
+        : member,
+    ),
+  }
+}
+
+export function applyCeoMemberHalted(
+  state: CeoTeamState,
+  event: { callId: string; runId: string; memberId?: string; seq: number },
+): CeoTeamState {
+  if (!event.callId || !event.runId) return state
+  return {
+    ...state,
+    members: state.members.map(member =>
+      member.batchCallId === event.callId && (member.runId === event.runId || (event.memberId !== undefined && member.memberId === event.memberId))
+        ? { ...member, seq: event.seq, halted: true }
+        : member,
+    ),
+  }
+}
+
+export function applyCeoMemberRedirected(
+  state: CeoTeamState,
+  event: { callId: string; runId: string; note: string; seq: number },
+): CeoTeamState {
+  if (!event.callId || !event.runId || event.note.trim() === '') return state
+  return {
+    ...state,
+    members: state.members.map(member =>
+      member.batchCallId === event.callId && member.runId === event.runId
+        ? { ...member, seq: event.seq, redirectedNote: event.note.trim() }
+        : member,
+    ),
+  }
+}
+
+/** Human-readable token count, e.g. 12.3k. */
+export function formatTokenCount(value: number): string {
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`
+  return String(value)
 }
 
 export function memberDepth(member: CeoTeamMember, members: readonly CeoTeamMember[]): number {

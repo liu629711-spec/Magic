@@ -7,7 +7,12 @@ import {
   applyCeoRunProgress,
   applyCeoRunJournal,
   applyCeoRunProcess,
+  applyCeoMemberUsage,
+  applyCeoMemberContext,
+  applyCeoMemberHalted,
+  applyCeoMemberRedirected,
   parseCeoProcessOp,
+  parseCeoDelegateRuns,
   parseCeoRunJournalRuns,
   projectCeoTeam,
   senderSessionIdOf,
@@ -20,6 +25,10 @@ import {
   CEO_PLAN_REVISED,
   CEO_RUN_PHASE,
   CEO_RUN_PROGRESS,
+  CEO_MEMBER_USAGE,
+  CEO_MEMBER_CONTEXT,
+  CEO_MEMBER_HALTED,
+  CEO_MEMBER_REDIRECTED,
   type CeoTeamState,
 } from '../team.ts'
 import { applyCeoRosterMessage } from './selection.ts'
@@ -50,12 +59,16 @@ export const ceoTeamDefinition = {
     if (typeof turn !== 'number') return null
     if (event.type === 'turn/start') return { id: String(turn), role: 'start' as const }
     if (event.type === CEO_PLAN || event.type === CEO_PLAN_REVISED) return { id: String(turn), role: 'update' as const }
-    if (event.type === 'tool/call' && event.data?.name === 'ceo_delegate') {
+    if (event.type === 'tool/call' && (event.data?.name === 'ceo_delegate' || event.data?.name === 'ceo_replan')) {
       return { id: String(turn), role: 'update' as const }
     }
     if (event.type === CEO_RUN_JOURNAL) return { id: String(turn), role: 'update' as const }
     if (event.type === CEO_RUN_PROCESS) return { id: String(turn), role: 'update' as const }
     if (event.type === CEO_MEMBER_RESULT) return { id: String(turn), role: 'update' as const }
+    if (event.type === CEO_MEMBER_USAGE || event.type === CEO_MEMBER_CONTEXT
+      || event.type === CEO_MEMBER_HALTED || event.type === CEO_MEMBER_REDIRECTED) {
+      return { id: String(turn), role: 'update' as const }
+    }
     if (event.type === CEO_RUN_PHASE || event.type === CEO_RUN_PROGRESS) return { id: String(turn), role: 'update' as const }
     if (event.type === 'tool/result') return { id: String(turn), role: 'update' as const }
     return null
@@ -115,6 +128,7 @@ export const ceoTeamDefinition = {
       return applyCeoRunPhase(context.state, { callId: String(event.data.callId ?? ''), runId: String(event.data.runId ?? ''), memberId: String(event.data.memberId ?? ''), phase, ...typeof event.data.toolName === 'string' ? { toolName: event.data.toolName } : {}, seq: event.seq })
     }
     if (event.type === 'tool/call') {
+      if (event.data.name === 'ceo_replan') return context.state
       if (event.data.name !== 'ceo_delegate') return context.state
       return applyCeoDelegateCall(context.state, {
         callId: String(event.data.callId),
@@ -140,6 +154,40 @@ export const ceoTeamDefinition = {
         op,
       })
     }
+    if (event.type === CEO_MEMBER_USAGE) {
+      return applyCeoMemberUsage(context.state, {
+        callId: String(event.data.callId ?? ''),
+        runId: String(event.data.runId ?? ''),
+        memberId: String(event.data.memberId ?? ''),
+        usage: event.data.usage,
+        seq: event.seq,
+      })
+    }
+    if (event.type === CEO_MEMBER_CONTEXT) {
+      return applyCeoMemberContext(context.state, {
+        callId: String(event.data.callId ?? ''),
+        runId: String(event.data.runId ?? ''),
+        memberId: String(event.data.memberId ?? ''),
+        channels: event.data.channels,
+        seq: event.seq,
+      })
+    }
+    if (event.type === CEO_MEMBER_HALTED) {
+      return applyCeoMemberHalted(context.state, {
+        callId: String(event.data.callId ?? ''),
+        runId: String(event.data.runId ?? ''),
+        memberId: typeof event.data.memberId === 'string' ? event.data.memberId : undefined,
+        seq: event.seq,
+      })
+    }
+    if (event.type === CEO_MEMBER_REDIRECTED) {
+      return applyCeoMemberRedirected(context.state, {
+        callId: String(event.data.callId ?? ''),
+        runId: String(event.data.runId ?? ''),
+        note: typeof event.data.note === 'string' ? event.data.note : '',
+        seq: event.seq,
+      })
+    }
     if (event.type === CEO_MEMBER_RESULT) {
       return applyCeoMemberResult(context.state, {
         callId: String(event.data.callId ?? ''),
@@ -148,19 +196,38 @@ export const ceoTeamDefinition = {
         seq: event.seq,
         output: String(event.data.output ?? ''),
         stopReason: typeof event.data.stopReason === 'string' ? event.data.stopReason : undefined,
-        status: event.data.status === 'blocked' || event.data.status === 'failed' || event.data.status === 'partial' || event.data.status === 'completed'
+        status: event.data.status === 'blocked'
+          || event.data.status === 'failed'
+          || event.data.status === 'partial'
+          || event.data.status === 'completed'
+          || event.data.status === 'unverified'
+          || event.data.status === 'unknown_after_restart'
           ? event.data.status
           : undefined,
       })
     }
     if (event.type !== 'tool/result') return context.state
     const callId = String(event.data.message?.source?.callId)
-    if (!context.state.members.some(member => member.batchCallId === callId || member.callId === callId)) return context.state
     const result = event.data.message?.content?.[0] as { isError?: boolean; content?: unknown } | undefined
+    const text = resultText(result?.content)
+    const known = context.state.members.some(member => member.batchCallId === callId || member.callId === callId)
+    if (known) {
+      return applyCeoDelegateResult(context.state, {
+        callId,
+        seq: event.seq,
+        text,
+        isError: result?.isError === true,
+      })
+    }
+    if (context.state.members.length === 0) return context.state
+    const runs = parseCeoDelegateRuns(text)
+    if (runs.length === 0) return context.state
+    const graphCallId = context.state.members[0]?.batchCallId
+    if (graphCallId === undefined || graphCallId === '') return context.state
     return applyCeoDelegateResult(context.state, {
-      callId,
+      callId: graphCallId,
       seq: event.seq,
-      text: resultText(result?.content),
+      text,
       isError: result?.isError === true,
     })
   },

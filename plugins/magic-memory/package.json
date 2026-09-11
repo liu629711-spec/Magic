@@ -1,0 +1,30 @@
+{
+  "name": "@magic/dsh-memory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Magic memory host plugin for DeepSeek Harness",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "node --test tests/record.test.ts tests/memory.test.ts tests/inject.test.ts",
+    "typecheck": "node --test tests/record.test.ts tests/memory.test.ts tests/inject.test.ts",
+    "test": "node --test tests/record.test.ts tests/memory.test.ts tests/inject.test.ts"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1 <5.0.0"
+  }
+}

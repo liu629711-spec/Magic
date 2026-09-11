@@ -1,13 +1,13 @@
 import { presentCeoMember, type CeoMemberViewStatus, type CeoTeamMember } from './team.ts'
 
 export const CEO_FLOW = {
-  goal: { width: 120, height: 72 },
-  member: { width: 188, height: 92 },
-  ceo: { width: 120, height: 72 },
-  columnGap: 56,
-  rowGap: 14,
-  padX: 12,
-  padY: 12,
+  goal: { width: 210, height: 110 },
+  member: { width: 210, height: 110 },
+  ceo: { width: 210, height: 110 },
+  columnGap: 40,
+  rowGap: 16,
+  padX: 24,
+  padY: 36,
 } as const
 
 export type CeoFlowNodeKind = 'goal' | 'member' | 'ceo'
@@ -24,6 +24,7 @@ export interface CeoFlowNode extends CeoFlowBox {
   readonly id: string
   readonly kind: CeoFlowNodeKind
   readonly member?: CeoTeamMember
+  readonly enterIndex: number
 }
 
 export interface CeoFlowEdge {
@@ -33,11 +34,24 @@ export interface CeoFlowEdge {
   readonly kind: CeoFlowEdgeKind
 }
 
+/** Backdrop band behind one wave column, AgentCore WaveLanes style. */
+export interface CeoFlowLane {
+  readonly id: string
+  readonly label: string
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+  readonly labelX: number
+  readonly labelY: number
+}
+
 export interface CeoFlowLayout {
   readonly width: number
   readonly height: number
   readonly nodes: readonly CeoFlowNode[]
   readonly edges: readonly CeoFlowEdge[]
+  readonly lanes: readonly CeoFlowLane[]
 }
 
 export function ceoFlowMemberId(callId: string): string {
@@ -51,6 +65,8 @@ export function ceoTeamSinkStatus(members: readonly CeoTeamMember[]): CeoMemberV
   if (presentations.some(item => item.needsDecision || item.viewStatus === 'blocked')) return 'blocked'
   if (presentations.some(item => item.viewStatus === 'error' || item.viewStatus === 'failed')) return 'failed'
   if (presentations.some(item => item.viewStatus === 'partial')) return 'partial'
+  if (presentations.some(item => item.viewStatus === 'unverified')) return 'unverified'
+  if (presentations.some(item => item.viewStatus === 'unknown_after_restart')) return 'unknown_after_restart'
   if (presentations.length > 0 && presentations.every(item => item.viewStatus === 'completed')) {
     return 'completed'
   }
@@ -112,7 +128,7 @@ export function ceoFlowEdgePath(from: CeoFlowBox, to: CeoFlowBox): string {
 
 export function layoutCeoTeamFlow(members: readonly CeoTeamMember[]): CeoFlowLayout {
   if (members.length === 0) {
-    return { width: 0, height: 0, nodes: [], edges: [] }
+    return { width: 0, height: 0, nodes: [], edges: [], lanes: [] }
   }
 
   const memo = new Map<string, number>()
@@ -150,6 +166,7 @@ export function layoutCeoTeamFlow(members: readonly CeoTeamMember[]): CeoFlowLay
       kind: 'goal',
       x: colX[0]!,
       y: stacked(1, CEO_FLOW.goal.height, height)[0]!,
+      enterIndex: 0,
       ...sizeOf('goal'),
     },
   ]
@@ -163,6 +180,7 @@ export function layoutCeoTeamFlow(members: readonly CeoTeamMember[]): CeoFlowLay
         member,
         x: colX[column + 1]!,
         y: ys[index]!,
+        enterIndex: column + 1,
         ...sizeOf('member'),
       })
     }
@@ -173,6 +191,7 @@ export function layoutCeoTeamFlow(members: readonly CeoTeamMember[]): CeoFlowLay
     kind: 'ceo',
     x: colX[colX.length - 1]!,
     y: stacked(1, CEO_FLOW.ceo.height, height)[0]!,
+    enterIndex: memberColumnCount + 1,
     ...sizeOf('ceo'),
   })
 
@@ -203,5 +222,29 @@ export function layoutCeoTeamFlow(members: readonly CeoTeamMember[]): CeoFlowLay
     edges.push({ id: `${from}->ceo`, from, to: 'ceo', kind: 'report' })
   }
 
-  return { width, height, nodes, edges }
+  const WAVE_PAD = 8
+  const lanes: CeoFlowLane[] = []
+  for (const [column, columnMembers] of byColumn.entries()) {
+    if (columnMembers.length === 0) continue
+    const columnNodes = nodes.filter(node =>
+      node.kind === 'member'
+      && columnMembers.some(item => item.callId === node.member?.callId),
+    )
+    if (columnNodes.length === 0) continue
+    const x0 = colX[column + 1]!
+    const y0 = Math.min(...columnNodes.map(node => node.y))
+    const y1 = Math.max(...columnNodes.map(node => node.y + node.height))
+    lanes.push({
+      id: `lane:${String(column)}`,
+      label: `第 ${String(column + 1)} 波`,
+      x: x0 - WAVE_PAD,
+      y: y0 - WAVE_PAD,
+      w: CEO_FLOW.member.width + WAVE_PAD * 2,
+      h: y1 - y0 + WAVE_PAD * 2,
+      labelX: x0 + 8,
+      labelY: y0 - WAVE_PAD - 16,
+    })
+  }
+
+  return { width, height, nodes, edges, lanes }
 }

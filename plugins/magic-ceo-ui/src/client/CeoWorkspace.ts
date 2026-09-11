@@ -8,12 +8,12 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react'
-import { ceoAttentionItems, presentCeoMember, type CeoAttentionKind, type CeoTeamMember } from '../team.ts'
+import { ceoAttentionItems, displayCeoSeat, presentCeoMember, type CeoAttentionKind, type CeoTeamMember } from '../team.ts'
 import { CeoMemberInspector } from './CeoMemberInspector.ts'
+import { ink, line, surface } from './theme.ts'
 import {
   getCeoRoster,
   getSelectedCeoMember,
-  resetCeoRoster,
   selectCeoMember,
   subscribeCeoSelection,
 } from './selection.ts'
@@ -21,7 +21,8 @@ import {
 export interface CeoWorkspaceProps {
   sessionId?: string
   closeDetails: () => void
-  promptSession?: (sessionId: string, text: string) => Promise<{ ok: boolean; error?: string }>
+  /** Send a per-member intervention (halt/redirect/resume) into the parent chat. */
+  sendIntervention?: (message: string) => void
   t: (key: string, params?: Record<string, unknown>) => string
 }
 
@@ -160,13 +161,18 @@ function ToBottomButton({
 }
 
 function attentionTone(kind: CeoAttentionKind): string {
-  if (kind === 'decision') return 'var(--dsw-alias-state-warning, #d97706)'
+  if (kind === 'decision' || kind === 'unverified' || kind === 'unknown_after_restart') {
+    return 'var(--dsw-alias-state-warning, #d97706)'
+  }
   return 'var(--dsw-alias-state-danger, #dc2626)'
 }
 
 function attentionPreview(member: CeoTeamMember, kind: CeoAttentionKind): string {
   if (kind === 'decision') return member.report?.userDecisions ?? member.task
   if (kind === 'blocker') return member.report?.risksOrBlockers ?? member.task
+  if (kind === 'unverified' || kind === 'unknown_after_restart') {
+    return member.lastMessage ?? member.report?.done ?? member.task
+  }
   return member.report?.notDone ?? member.lastMessage ?? member.task
 }
 
@@ -189,11 +195,11 @@ function rowButton(
       width: '100%',
       padding: '10px 10px',
       border: tone === undefined
-        ? '0.5px solid var(--dsw-alias-border-l2, #2a2a2a)'
+        ? `0.5px solid ${line.subtle}`
         : `0.5px solid ${tone}`,
       borderRadius: 10,
-      background: 'var(--dsw-alias-bg-module-platform, #161616)',
-      color: 'var(--dsw-alias-label-primary, #f5f5f5)',
+      background: surface.layer2,
+      color: ink.primary,
       textAlign: 'left',
       cursor: 'pointer',
     },
@@ -204,7 +210,7 @@ function rowButton(
         style: {
           marginLeft: 'auto',
           fontSize: 11,
-          color: tone ?? 'var(--dsw-alias-label-tertiary, #9a9a9a)',
+          color: tone ?? ink.tertiary,
         },
       }, meta),
     ),
@@ -212,7 +218,7 @@ function rowButton(
       style: {
         fontSize: 12,
         lineHeight: '18px',
-        color: 'var(--dsw-alias-label-secondary, #c8c8c8)',
+        color: ink.secondary,
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         display: '-webkit-box',
@@ -230,18 +236,18 @@ function overview(
   const attention = ceoAttentionItems(roster)
   if (roster.length === 0) {
     return h('div', {
-      style: { fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary, #9a9a9a)' },
+      style: { fontSize: 13, lineHeight: '20px', color: ink.tertiary },
     }, t('workspace.empty'))
   }
   return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
     attention.length > 0
       ? h('section', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
         h('div', {
-          style: { fontSize: 12, fontWeight: 510, color: 'var(--dsw-alias-label-tertiary, #9a9a9a)' },
+          style: { fontSize: 12, fontWeight: 510, color: ink.tertiary },
         }, t('attention.title')),
         ...attention.map(item => rowButton(
           `${item.kind}-${item.member.callId}`,
-          item.member.role,
+          displayCeoSeat(item.member, roster),
           attentionPreview(item.member, item.kind),
           t(`attention.${item.kind}`),
           attentionTone(item.kind),
@@ -251,20 +257,24 @@ function overview(
       : null,
     h('section', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
       h('div', {
-        style: { fontSize: 12, fontWeight: 510, color: 'var(--dsw-alias-label-tertiary, #9a9a9a)' },
+          style: { fontSize: 12, fontWeight: 510, color: ink.tertiary },
       }, t('roster.title')),
       ...roster.map((member) => {
         const presentation = presentCeoMember(member)
         return rowButton(
           member.callId,
-          member.role,
+          displayCeoSeat(member, roster),
           member.task,
           t(`status.${presentation.viewStatus}`),
           presentation.needsDecision
             ? attentionTone('decision')
             : presentation.hasBlocker || presentation.viewStatus === 'failed' || presentation.viewStatus === 'error'
               ? attentionTone('failed')
-              : undefined,
+              : presentation.viewStatus === 'unverified'
+                ? attentionTone('unverified')
+                : presentation.viewStatus === 'unknown_after_restart'
+                  ? attentionTone('unknown_after_restart')
+                  : undefined,
           () => { selectCeoMember(member) },
         )
       }),
@@ -272,10 +282,9 @@ function overview(
   )
 }
 
-export function CeoWorkspace({ sessionId, closeDetails, promptSession, t }: CeoWorkspaceProps) {
+export function CeoWorkspace({ sessionId, closeDetails, sendIntervention, t }: CeoWorkspaceProps) {
   const selected = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember)
   const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster)
-  useEffect(() => () => { resetCeoRoster() }, [sessionId])
   const close = () => {
     if (selected !== null) {
       selectCeoMember(null)
@@ -288,9 +297,18 @@ export function CeoWorkspace({ sessionId, closeDetails, promptSession, t }: CeoW
     : h(CeoMemberInspector, {
       key: selected.callId,
       member: selected,
-      sendDecision: sessionId !== undefined && promptSession !== undefined
-        ? (text: string) => promptSession(sessionId, text)
-        : undefined,
+      roster,
+      onIntervene: sendIntervention === undefined
+        ? undefined
+        : (action: 'halt' | 'redirect' | 'resume', note: string) => {
+          const runId = selected.runId ?? selected.rawId ?? selected.callId
+          const message = action === 'halt'
+            ? `Call ceo_replan with halt run_id ${runId}. The member was stopped by the user; do not rewrite its work as success.`
+            : action === 'resume'
+              ? `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.`
+              : note
+          sendIntervention(message)
+        },
       t,
     })
   const { scrollRef, contentRef, atBottom, jumpToBottom } = useStickToBottom(
@@ -307,9 +325,9 @@ export function CeoWorkspace({ sessionId, closeDetails, promptSession, t }: CeoW
       height: '100%',
       minWidth: 0,
       overflow: 'hidden',
-      borderLeft: '0.5px solid var(--dsw-alias-border-l2, #2a2a2a)',
-      background: 'var(--dsw-alias-bg-base, #111)',
-      color: 'var(--dsw-alias-label-primary, #f5f5f5)',
+      borderLeft: `0.5px solid ${line.subtle}`,
+      background: surface.base,
+      color: ink.primary,
     },
   },
   selected === null
@@ -319,7 +337,7 @@ export function CeoWorkspace({ sessionId, closeDetails, promptSession, t }: CeoW
         alignItems: 'center',
         gap: 8,
         padding: '14px 16px 12px',
-        borderBottom: '0.5px solid var(--dsw-alias-border-l2, #2a2a2a)',
+        borderBottom: `0.5px solid ${line.subtle}`,
       },
     },
       h('div', {
@@ -343,7 +361,7 @@ export function CeoWorkspace({ sessionId, closeDetails, promptSession, t }: CeoW
           border: 0,
           borderRadius: 99,
           background: 'transparent',
-          color: 'var(--dsw-alias-label-secondary, #c8c8c8)',
+          color: ink.secondary,
           cursor: 'pointer',
           fontSize: 11,
         },
@@ -366,7 +384,7 @@ export function CeoWorkspace({ sessionId, closeDetails, promptSession, t }: CeoW
           border: 0,
           borderRadius: 99,
           background: 'transparent',
-          color: 'var(--dsw-alias-label-tertiary, #9a9a9a)',
+          color: ink.tertiary,
           cursor: 'pointer',
           fontSize: 16,
           lineHeight: '28px',

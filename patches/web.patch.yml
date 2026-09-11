@@ -1,5 +1,5 @@
-# Load Magic work-mode into a DSH web profile.
-# Plugin `name` must be a path (not an npm package). Paths starting with
+# Load Magic into a DSH web profile.
+# Plugin `name` may be a path (not an npm package). Paths starting with
 # ./ or ../ are resolved against this file by DSH
 # (reference-project/deepseek-harness/packages/boot/app-boot/src/index.ts
 # anchorInsertedPluginNames).
@@ -8,9 +8,85 @@
 #
 # Usage from a DSH source checkout:
 #   pnpm dsh web --patch <absolute-path-to-this-file>
+#
+# 本文件分两层，按顺序生效：
+#   1) 官方 Agent Teams 层（experimental）—— 团队服务（名册 / 持久信箱 / 任务板 / 崩溃恢复）+ 官方面板
+#   2) Magic 产品插件层 —— 工作方式、账本、记忆、CEO 编排与团队图
+# 回退官方层：删掉「官方 Agent Teams 层」到「Magic 产品插件层」之间的全部内容。
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── 官方 Agent Teams 层（experimental）──────────────────────────────────────
+#
+# 目录：reference-project/deepseek-harness = 官方 git origin/master
+# （HEAD c291e7961a，package 0.1.5-rc.2，tag dsh-v0.1.5-rc.2）。
+# 0.1.5 起官方包已发布 npm，并提供 profile bundle（agent-team-profile /
+# agent-team-web-profile）。本次仍用路径挂载：官方 host profile 会同时插入
+# tool-agent-team；CLI runtime 依赖闭包不含 experimental（只在 cli
+# devDependencies），healProfilesModuleFallback 不会给 --patch 包名建解析链接。
+#
+# 形态 A'：只挂官方「服务」与「面板」，**不挂官方工具**（tool-agent-team）。
+#
+# 为什么不挂官方工具：`tool-agent-team` 的安装门槛是「caller 不是 Team 成员就跳过」
+# （tool-agent-team/src/index.ts:405），而顶层会话默认就被判定为 lead
+# （agent-team/src/roster.ts:91-118 的兜底分支）。两者相乘 ⇒ 一旦挂上，
+# **每个普通会话**（哪怕只是随便问一句）都会看到那 10 个 Team 工具。
+# 官方插件没有「只在 CEO 模式下装」的开关，所以这是全局性的模型可见面改变。
+#
+# 【更正】此前本文件写过「必须 disabled 原生 tool-subagent-control，否则重名启动失败」。
+# 实测（dump-config）表明：在本 web profile 下，原生子代理工具组**本来就已被
+# @deepseek-ai/dsh-web-app 关闭**（tool-subagent-control / tool-subagent-list-agents /
+# tool-subagent / tool-subagent-fork 全部 disabled: true，dump 注释标着
+# 「patched by @deepseek-ai/dsh-web-app」）。所以官方 host patch 里那 4 行
+# 「先关原生、再挂工具」在本 profile 下是冗余的，本 patch 不复刻。
+#
+# 官方能力并未因此减少：那 10 个工具只是薄适配器（如
+# tool-agent-team/src/index.ts 里 send_message 直接转发 ctx.agentTeams.sendMessage），
+# 服务层（名册 / 信箱 / 任务板 / 恢复）完整保留，由 Magic 经 ctx.agentTeams 调用。
+#
+# 为什么用「路径」而不是包名：experimental 包已 publishConfig.public，但
+# `@deepseek-ai/dsh` 只把它们放在 cli *devDependencies*，runtime
+# `profileDependencyNames` 只扫 dependencies/peerDependencies
+# （packages/boot/app-boot/src/profile.ts:460-461）。因此它们仍不在
+# install-anchor 闭包里，也不是 web profile bundle 携带的包，
+# healProfilesModuleFallback 不会替 --patch 包名建解析链接
+# （packages/boot/app-boot/src/profile.ts:547-619）。按包名挂会在**运行期**
+# 报 Cannot find package —— 而 `--dump-config` 只解析配置、不 import 包，
+# 查不出这个问题。
+# 按路径挂由 anchorInsertedPluginNames 锚成 file:// URL，与 Magic 自己的插件同一机制；
+# 包内部依赖从各自的 node_modules 解析（三处的 @deepseek-ai/cordis 都指向
+# vendor/cordis 同一实体，不存在 DI 双实例）。
+#
+# 面板按路径挂不会丢：client-modules 对 file: 来源会向上找最近的 package.json
+# 再读 `dsh.client` 找 ./client 产物（packages/client/modules/src/index.ts:786-847）。
+
+# host 侧：团队服务（名册 / 持久信箱 / 任务板 / 崩溃恢复）
+- insert:
+    - id: agent-team
+      name: ../reference-project/deepseek-harness/packages/experimental/agent-team/lib/index.js
+      config:
+        maxMembers: 8
+        maxTasks: 256
+        maxPendingMessagesPerMember: 64
+        maxMessageBytes: 65536
+        disposalTimeoutMs: 5000
+
+# web 侧：团队面板（会话头部动作区）
+- insert:
+    - id: ui-agent-team
+      name: ../reference-project/deepseek-harness/packages/experimental/client-ui-agent-team/lib/index.js
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ── Magic 产品插件层 ────────────────────────────────────────────────────────
+# 顺序说明：ledger / memory 先于 ceo 加载，让「服务」在 CEO 用到之前就已就绪。
+# 但 CEO 侧用运行时 `ctx.get(...)` 读取，因此该顺序只是习惯，不是正确性前提。
+
 - insert:
     - id: magic-work-mode
       name: ../plugins/magic-work-mode/src/index.ts
+    - id: magic-ledger
+      name: ../plugins/magic-ledger/src/index.ts
+    - id: magic-memory
+      name: ../plugins/magic-memory/src/index.ts
     - id: magic-ceo
       name: ../plugins/magic-ceo/src/index.ts
     - id: magic-ceo-ui

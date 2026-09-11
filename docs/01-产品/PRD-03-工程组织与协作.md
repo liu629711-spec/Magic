@@ -1,12 +1,18 @@
 ---
-status: active
-version: 1.1
-date: 2026-09-01
+status: deferred
+version: 1.2
+date: 2026-09-11
 owner: Magic 项目 PM
 authority: canonical-product-prd
 ---
 
 # PRD-03 工程组织与协作
+
+> **【暂缓】** 工程（PM、项目成员、长期组织、资源治理）**不在首版范围**，当前不做。本文保留为未来方向，产品语义暂不生效，不代表当前实现，也不进入开发排期。
+>
+> 首版聚焦代理 / CEO 工作方式与 AgentCore 核心能力迁移，见 [PRD-01](PRD-01-Magic产品总览.md) §8 和 [DSH 契约面与 AgentCore 能力映射](../02-实现/01-DSH契约面与AgentCore能力映射.md)。工程与 AgentCore 的 folders / board / notes 有重叠，待工程重新立项时再对齐边界。
+>
+> 恢复条件：CEO 相关工作方式跑顺并验证过真实交付闭环之后，由用户明确确认重启本 PRD。
 
 ## 1. 目标
 

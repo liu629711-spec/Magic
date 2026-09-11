@@ -1,0 +1,3 @@
+- insert:
+    - id: magic-broken
+      name: '@magic/dsh-broken'

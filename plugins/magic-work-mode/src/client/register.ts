@@ -1,6 +1,7 @@
+import { workModeChangedDefinition, workModeEventDefinition } from './definition.ts'
 import { applyClientWorkModeDescription, applyClientWorkModeLine } from './state.ts'
 
-export const inject = ['slots', 'remote', 'remote.commands', 'locale']
+export const inject = ['slots', 'remote', 'remote.commands', 'locale', 'uiConversation']
 
 export const zh = {
   'chip.agent': '代理',
@@ -15,6 +16,11 @@ export const zh = {
   'menu.sessionCeo': 'CEO · 当前会话',
   'menu.sessionCeoHint': '后续输入都用 CEO，不因此建立工程',
   'error': '工作方式没有改成',
+  'confirm.title': '工作方式还没改',
+  'confirm.continue': '继续改',
+  'confirm.cancel': '先不改',
+  'changed.title': '工作方式已改变',
+  'changed.fromTo': '{from} → {to}',
 }
 
 export const en = {
@@ -30,9 +36,15 @@ export const en = {
   'menu.sessionCeo': 'CEO · this session',
   'menu.sessionCeoHint': 'Later inputs use CEO. This does not create engineering.',
   'error': 'Work mode did not change',
+  'confirm.title': 'Work mode has not changed yet',
+  'confirm.continue': 'Continue',
+  'confirm.cancel': 'Not now',
+  'changed.title': 'Work mode changed',
+  'changed.fromTo': '{from} → {to}',
 }
 
 export interface WorkModeUiContext {
+  uiConversation: { events: { register: (definition: unknown) => unknown } }
   locale: { register: (ns: string, dicts: { zh: typeof zh; en: typeof en }) => () => void }
   remote: {
     commands: {
@@ -55,7 +67,12 @@ export interface WorkModeUiContext {
   on?: (event: string, listener: (...args: unknown[]) => unknown) => unknown
 }
 
-export function registerWorkModeUi(ctx: WorkModeUiContext, component: unknown) {
+export function registerWorkModeUi(
+  ctx: WorkModeUiContext,
+  components: { chip: unknown; changed: unknown },
+) {
+  ctx.uiConversation.events.register(workModeEventDefinition)
+  ctx.uiConversation.events.register(workModeChangedDefinition)
   ctx.effect(() => ctx.locale.register('magicWorkMode', { zh, en }), 'magic-work-mode: dictionaries')
   ctx.on?.('command/executed', (sessionId, name, result) => {
     if (name !== 'mode') return
@@ -72,18 +89,26 @@ export function registerWorkModeUi(ctx: WorkModeUiContext, component: unknown) {
       sessionId,
       executeMode: async (line: string) => {
         const result = await ctx.remote.commands.execute(sessionId, line, [])
+        const commandText = result.value?.result?.text
+        if (result.value?.result?.kind === 'error') {
+          return typeof commandText === 'string' ? commandText : 'command failed'
+        }
         if (!result.ok) {
-          return `${result.error?.message ?? 'command failed'} (${result.error?.code ?? 'error'})`
+          return typeof commandText === 'string'
+            ? commandText
+            : `${result.error?.message ?? 'command failed'} (${result.error?.code ?? 'error'})`
         }
         if (result.value === undefined) return `unknown command: ${line}`
-        if (result.value.result?.kind === 'error') {
-          return result.value.result.text ?? 'command failed'
-        }
         const text = result.value.result?.text
         if (typeof text === 'string') applyClientWorkModeDescription(sessionId, text)
         else applyClientWorkModeLine(sessionId, line)
         return null
       },
     }),
-  }, component))
+  }, components.chip))
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+    name: 'conversation.chat.node',
+    key: 'magic-work-mode-changed',
+    locale: 'magicWorkMode',
+  }, components.changed))
 }

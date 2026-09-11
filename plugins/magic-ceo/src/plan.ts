@@ -1,4 +1,13 @@
-export type RunPhase = 'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
+export type RunPhase =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled'
+  | 'unverified'
+  | 'unknown_after_restart'
+  | 'blocked'
 
 export interface RunSpec {
   runId: string
@@ -6,6 +15,12 @@ export interface RunSpec {
   role: string
   task: string
   dependsOn: string[]
+  bindAfterDeps?: boolean
+  /**
+   * 可选交付契约（原始形态，由 magic-ledger 归一化）。
+   * 携带时该节点的完成判定由物证验收复核；缺省时行为与接入账本前完全一致。
+   */
+  contract?: unknown
 }
 
 export interface RunState {

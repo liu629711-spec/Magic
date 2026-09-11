@@ -7,7 +7,7 @@ export interface MagicWorkModeState {
 
 export type ModeCommand =
   | { kind: 'show' }
-  | { kind: 'session'; mode: WorkMode }
+  | { kind: 'session'; mode: WorkMode; confirmed: boolean }
   | { kind: 'once'; mode: WorkMode }
   | { kind: 'once-clear' }
   | { kind: 'invalid' }
@@ -25,17 +25,20 @@ export function parseWorkMode(value: string): WorkMode | null {
 export function parseModeCommand(rawInput: string): ModeCommand {
   const value = rawInput.trim().toLowerCase()
   if (value === '') return { kind: 'show' }
-  if (value === 'once' || value === 'once off' || value === 'once clear') {
-    return { kind: 'once-clear' }
+  const confirmed = value.endsWith(' confirm')
+  const rest = confirmed ? value.slice(0, -8).trim() : value
+  if (rest === 'once' || rest === 'once off' || rest === 'once clear') {
+    return confirmed ? { kind: 'invalid' } : { kind: 'once-clear' }
   }
-  if (value.startsWith('once ')) {
-    const mode = parseWorkMode(value.slice(5))
+  if (rest.startsWith('once ')) {
+    if (confirmed) return { kind: 'invalid' }
+    const mode = parseWorkMode(rest.slice(5))
     if (mode === null) return { kind: 'invalid' }
     return { kind: 'once', mode }
   }
-  const mode = parseWorkMode(value)
+  const mode = parseWorkMode(rest)
   if (mode === null) return { kind: 'invalid' }
-  return { kind: 'session', mode }
+  return { kind: 'session', mode, confirmed }
 }
 
 export function resolveMode(state: MagicWorkModeState | undefined): WorkMode {
@@ -46,7 +49,9 @@ export function applyModeCommand(
   state: MagicWorkModeState,
   command: ModeCommand,
 ): MagicWorkModeState {
-  if (command.kind === 'session') return { sessionMode: command.mode, inputMode: null }
+  if (command.kind === 'session') {
+    return { sessionMode: command.mode, inputMode: null }
+  }
   if (command.kind === 'once') return { sessionMode: state.sessionMode, inputMode: command.mode }
   if (command.kind === 'once-clear') return { sessionMode: state.sessionMode, inputMode: null }
   return state

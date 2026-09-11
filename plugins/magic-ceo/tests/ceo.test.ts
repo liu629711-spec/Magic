@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { apply, listCeoMembers, resetCeoStateForTests, CEO_MEMBER_RESULT, CEO_RUN_JOURNAL, CEO_RUN_PROCESS } from '../src/index.ts'
+import { apply, listCeoMembers, resetCeoStateForTests, CEO_MEMBER_RESULT, CEO_PLAN, CEO_RUN_JOURNAL, CEO_RUN_PROCESS } from '../src/index.ts'
 
 function journalSession(id: string) {
   const events: Array<{ type: string; seq: number; time: number; data: unknown; ignorable?: true }> = [
@@ -29,7 +29,9 @@ function harness(mode: 'agent' | 'ceo' = 'ceo') {
   }> = []
   const tools = new Map<string, Parameters<Parameters<typeof apply>[0]['tools']['register']>[0]>()
   const started: Array<{ provider: string; label: string; prompt: string; parentId: string }> = []
-  const release = new Map<string, () => void>()
+  const sent: Array<{ targetId: string; text: string }> = []
+  const seqByChild = new Map<string, number>()
+  const release = new Map<string, (output?: string, stopReason?: string) => void>()
   const listeners: Array<(session: { id: string }, event: unknown) => void> = []
 
   apply({
@@ -47,35 +49,39 @@ function harness(mode: 'agent' | 'ceo' = 'ceo') {
       },
     },
     subagents: {
-      start: async (provider, request) => {
+      startContinuable: async (spec) => {
         const id = `member-${String(started.length + 1)}`
         started.push({
-          provider,
-          label: request.label,
-          prompt: request.prompt[0]?.text ?? '',
-          parentId: request.parent.session.id,
+          provider: spec.provider,
+          label: spec.label,
+          prompt: spec.request.prompt[0]?.text ?? '',
+          parentId: spec.request.parent.session.id,
         })
-        let resolve!: (value: { output: Array<{ type: 'text'; text: string }>; stopReason: string }) => void
-        const result = new Promise<{ output: Array<{ type: 'text'; text: string }>; stopReason: string }>((next) => {
-          resolve = next
+        release.set(id, (output = `status: completed\ndone: done by ${id}`, stopReason = 'completed') => {
+          const messageSeq = (seqByChild.get(id) ?? 0) + 1
+          seqByChild.set(id, messageSeq)
+          for (const listener of listeners) {
+            listener({ id }, {
+              type: 'assistant/message',
+              seq: messageSeq,
+              data: { message: { content: [{ type: 'text', text: output }] } },
+            })
+          }
+          const endSeq = (seqByChild.get(id) ?? messageSeq) + 1
+          seqByChild.set(id, endSeq)
+          for (const listener of listeners) {
+            listener({ id }, {
+              type: 'turn/end',
+              seq: endSeq,
+              data: { turn: 1, reason: { kind: stopReason } },
+            })
+          }
         })
-        release.set(id, (output = `done by ${id}`, stopReason = 'completed') => {
-          resolve({
-            output: [{ type: 'text', text: output }],
-            stopReason,
-          })
-        })
-        return {
-          id,
-          localAgent: {
-            session: {
-              id,
-              snapshotEvents: () => [],
-            },
-          },
-          result,
-          dispose: async () => {},
-        }
+        return { childId: id }
+      },
+      sendMessage: async (_sender, targetId, content) => {
+        sent.push({ targetId, text: content[0]?.text ?? '' })
+        return `msg-${String(sent.length)}`
       },
     },
     on: (_event, listener) => {
@@ -84,10 +90,20 @@ function harness(mode: 'agent' | 'ceo' = 'ceo') {
   })
 
   const emitChild = (id: string, event: { type: string; seq: number; data: unknown }) => {
+    if (event.seq > (seqByChild.get(id) ?? 0)) seqByChild.set(id, event.seq)
     for (const listener of listeners) listener({ id }, event)
   }
 
-  return { sections, tool: () => tools.get('ceo_delegate'), plan: () => tools.get('ceo_plan'), started, release, emitChild }
+  return {
+    sections,
+    tool: () => tools.get('ceo_delegate'),
+    plan: () => tools.get('ceo_plan'),
+    replan: () => tools.get('ceo_replan'),
+    started,
+    sent,
+    release,
+    emitChild,
+  }
 }
 
 async function recordPlan(
@@ -112,7 +128,7 @@ test('registers a CEO prompt section and ceo_delegate tool', () => {
   assert.equal(plan()?.name, 'ceo_plan')
   const text = typeof sections[0]?.text === 'function' ? sections[0].text() : ''
   assert.match(text, /tasks\[\]/)
-  assert.match(text, /send_message/)
+  assert.match(text, /ceo_replan/)
   assert.match(text, /Do not paste JSON schemas/)
   assert.match(text, /Do not call ceo_delegate/)
 })
@@ -127,7 +143,10 @@ test('CEO session prompt hard-routes breadth research to ceo_delegate', () => {
   assert.match(text, /ceo_plan/)
   assert.match(text, /Do not perform breadth web research yourself/)
   assert.match(text, /海内外/)
-  assert.doesNotMatch(text, /Do not call ceo_delegate/)
+  assert.match(text, /Do not call ceo_delegate again/)
+  assert.match(text, /国内市场/)
+  assert.doesNotMatch(text, /English labels like research/)
+  assert.doesNotMatch(text, /in agent mode/)
 })
 
 test('agent session prompt still forbids ceo_delegate', () => {
@@ -185,11 +204,12 @@ test('starts independent tasks together and records the run graph', async () => 
   const { tool, plan, started, release } = harness('ceo')
   const delegate = tool()
   assert.ok(delegate)
+  const session = journalSession('session-1')
 
   await recordPlan(plan, [
     { role: 'researcher', task: 'Survey options', id: 'survey' },
     { role: 'reviewer', task: 'List risks', id: 'risks' },
-  ])
+  ], session)
 
   const pending = delegate.execute(
     {
@@ -198,7 +218,7 @@ test('starts independent tasks together and records the run graph', async () => 
         { role: 'reviewer', task: 'List risks', id: 'risks' },
       ],
     },
-    { agent: { session: { id: 'session-1' } }, signal: new AbortController().signal },
+    { agent: { session }, signal: new AbortController().signal },
   )
 
   await Promise.resolve()
@@ -206,6 +226,7 @@ test('starts independent tasks together and records the run graph', async () => 
   assert.equal(started[0]?.provider, 'spawn')
   assert.match(started[0]?.prompt ?? '', /status: completed \| blocked \| failed \| partial/)
   assert.match(started[0]?.prompt ?? '', /Survey options/)
+  assert.doesNotMatch(started[0]?.prompt ?? '', /Shared team brief/)
   release.get('member-1')?.()
   release.get('member-2')?.()
   const result = await pending
@@ -215,15 +236,42 @@ test('starts independent tasks together and records the run graph', async () => 
   assert.equal(listCeoMembers('session-1')[0]?.task, 'Survey options')
 })
 
+test('puts the CEO plan team brief on every worker prompt', async () => {
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  const planTool = plan()
+  assert.ok(delegate)
+  assert.ok(planTool)
+  const session = journalSession('session-1')
+  const tasks = [{ role: 'researcher', task: 'Survey options', id: 'survey' }]
+  await planTool.execute({
+    summary: 'Deliver a researched answer.',
+    analysis: 'Split independent evidence gathering, then synthesize only after sources and acceptance are clear.',
+    team_brief: 'Prefer primary sources over recaps.',
+    tasks,
+  }, { agent: { session }, signal: new AbortController().signal })
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  assert.match(started[0]?.prompt ?? '', /Shared team brief/)
+  assert.match(started[0]?.prompt ?? '', /Prefer primary sources over recaps/)
+  release.get('member-1')?.()
+  await pending
+})
+
 test('does not start a dependent task until the producer finishes', async () => {
   const { tool, plan, started, release } = harness('ceo')
   const delegate = tool()
   assert.ok(delegate)
+  const session = journalSession('session-1')
 
   await recordPlan(plan, [
     { role: 'researcher', task: 'Survey options', id: 'survey' },
     { role: 'implementer', task: 'Build it', depends_on: ['survey'] },
-  ])
+  ], session)
 
   const pending = delegate.execute(
     {
@@ -232,7 +280,7 @@ test('does not start a dependent task until the producer finishes', async () => 
         { role: 'implementer', task: 'Build it', depends_on: ['survey'] },
       ],
     },
-    { agent: { session: { id: 'session-1' } }, signal: new AbortController().signal },
+    { agent: { session }, signal: new AbortController().signal },
   )
 
   await Promise.resolve()
@@ -299,6 +347,130 @@ test('appends an ignorable run journal while the graph is in flight', async () =
   assert.ok(journals().every(event => event.ignorable === true))
 })
 
+test('restores the latest ceo_plan from session events after in-memory state is cleared', async () => {
+  const { tool, plan, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  const tasks = [
+    { role: 'market researcher', task: 'Survey the market', id: 'market' },
+    { role: 'source reviewer', task: 'Validate the sources', id: 'sources' },
+  ]
+  await recordPlan(plan, tasks, session)
+  assert.equal(session.events.some(event => event.type === CEO_PLAN), true)
+
+  resetCeoStateForTests()
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.()
+  release.get('member-2')?.()
+  const result = await pending
+  assert.equal(result.runs.length, 2)
+  assert.equal(result.runs[0]?.phase, 'completed')
+})
+
+test('treats declared completed plus a non-completed stop as unverified', async () => {
+  const { tool, plan, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  const tasks = [{ role: 'researcher', task: 'Survey options', id: 'survey' }]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.('status: completed\ndone: surveyed two options', 'aborted')
+  const result = await pending
+  assert.equal(result.runs[0]?.phase, 'unverified')
+  const event = session.events.find(item => item.type === CEO_MEMBER_RESULT)
+  assert.equal((event?.data as { status?: string } | undefined)?.status, 'unverified')
+})
+
+test('restamps in-flight journal nodes as unknown_after_restart after process restart', () => {
+  const { sections } = harness('ceo')
+  const session = journalSession('session-1')
+  session.events.push({
+    type: CEO_RUN_JOURNAL,
+    seq: 1,
+    time: 1,
+    data: {
+      turn: 4,
+      callId: 'call-1',
+      runs: [{
+        runId: 'del_1_survey',
+        rawId: 'survey',
+        role: 'researcher',
+        task: 'Survey options',
+        dependsOn: [],
+        phase: 'running',
+        memberId: 'member-1',
+      }],
+    },
+    ignorable: true,
+  })
+  const textFn = sections[0]?.text
+  assert.equal(typeof textFn, 'function')
+  textFn({ agent: { session } })
+  const journals = session.events.filter(event => event.type === CEO_RUN_JOURNAL)
+  const last = journals.at(-1)?.data as { runs: Array<{ phase: string }> }
+  assert.equal(last.runs[0]?.phase, 'unknown_after_restart')
+  assert.equal(journals.at(-1)?.ignorable, true)
+})
+
+test('does not rewrite a live in-flight journal as unknown', async () => {
+  const { tool, plan, release, sections } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  await recordPlan(plan, [{ role: 'researcher', task: 'Survey options', id: 'survey' }], session)
+  const pending = delegate.execute(
+    { tasks: [{ role: 'researcher', task: 'Survey options', id: 'survey' }] },
+    { agent: { session }, callId: 'call-1', signal: new AbortController().signal },
+  )
+  await Promise.resolve()
+  const textFn = sections[0]?.text
+  assert.equal(typeof textFn, 'function')
+  textFn({ agent: { session } })
+  const live = session.events.filter(event => event.type === CEO_RUN_JOURNAL).at(-1)?.data as {
+    runs: Array<{ phase: string }>
+  }
+  assert.equal(live.runs[0]?.phase, 'running')
+  release.get('member-1')?.()
+  await pending
+})
+
+test('treats unstructured completed output as unverified and skips dependents', async () => {
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  const tasks = [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+    { role: 'implementer', task: 'Build it', id: 'build', depends_on: ['survey'] },
+  ]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.('I looked at a few sites and wrote some notes.')
+  const result = await pending
+  assert.equal(started.length, 1)
+  assert.equal(result.runs[0]?.phase, 'unverified')
+  assert.equal(result.runs[1]?.phase, 'skipped')
+  const event = session.events.find(item => item.type === CEO_MEMBER_RESULT)
+  assert.equal((event?.data as { status?: string } | undefined)?.status, 'unverified')
+})
+
 test('records the final worker output without relying on send_message and blocks unverified research', async () => {
   const { tool, plan, release } = harness('ceo')
   const delegate = tool()
@@ -343,7 +515,7 @@ test('stamps memberId while the child is still running and mirrors its process',
 
   emitChild('member-1', {
     type: 'tool/call',
-    seq: 1,
+    seq: 0,
     data: { callId: 'tool-1', name: 'web_search', arguments: '{}' },
   })
   const process = session.events.filter(event => event.type === CEO_RUN_PROCESS)
@@ -354,4 +526,239 @@ test('stamps memberId while the child is still running and mirrors its process',
 
   release.get('member-1')?.()
   await pending
+})
+
+test('yields when a member asks for a user decision and continues the same child', async () => {
+  const { tool, plan, replan, started, sent, release } = harness('ceo')
+  const delegate = tool()
+  const resume = replan()
+  assert.ok(delegate)
+  assert.ok(resume)
+  const session = journalSession('session-1')
+  const tasks = [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+    { role: 'implementer', task: 'Build it', id: 'build', depends_on: ['survey'] },
+  ]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.(
+    'status: blocked\ndone: shortlisted two options\nuser_decisions: which option should we take?',
+  )
+  const yielded = await pending
+  assert.equal(started.length, 1)
+  assert.equal(yielded.yielded, 'decision')
+  assert.equal(yielded.runs[0]?.phase, 'blocked')
+  assert.equal(yielded.runs[1]?.phase, 'queued')
+  assert.equal(listCeoMembers('session-1')[0]?.memberId, 'member-1')
+
+  const continued = resume.execute({
+    continue: [{ run_id: 'survey', answer: 'take option A' }],
+  }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  assert.equal(started.length, 1)
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0]?.targetId, 'member-1')
+  assert.match(sent[0]?.text ?? '', /take option A/)
+  release.get('member-1')?.('status: completed\ndone: surveyed option A')
+  for (let i = 0; i < 20 && started.length < 2; i++) {
+    await new Promise<void>(resolve => { setImmediate(resolve) })
+  }
+  release.get('member-2')?.()
+  const result = await continued
+  assert.equal(result.runs[0]?.phase, 'completed')
+  assert.equal(result.runs[1]?.phase, 'completed')
+  assert.equal(result.runs[0]?.memberId, 'member-1')
+})
+
+test('does not yield on an empty 用户决策', async () => {
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  const tasks = [{ role: 'researcher', task: 'Survey options', id: 'survey' }]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.(
+    'status: completed\ndone: surveyed the market\n用户决策：无。',
+  )
+  const result = await pending
+  assert.equal(started.length, 1)
+  assert.equal(result.yielded, undefined)
+  assert.equal(result.runs[0]?.phase, 'completed')
+})
+
+test('yields a bind_after_deps node until ceo_replan binds it', async () => {
+  const { tool, plan, replan, started, release } = harness('ceo')
+  const delegate = tool()
+  const resume = replan()
+  assert.ok(delegate)
+  assert.ok(resume)
+  const session = journalSession('session-1')
+  const tasks = [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+    { role: 'synthesizer', task: 'placeholder', id: 'synth', depends_on: ['survey'], bind_after_deps: true },
+  ]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.()
+  const yielded = await pending
+  assert.equal(started.length, 1)
+  assert.equal(yielded.yielded, 'bind')
+  assert.equal(yielded.runs[1]?.phase, 'queued')
+
+  const bound = resume.execute({
+    binds: [{ run_id: 'synth', task: 'Synthesize the surveyed options' }],
+  }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  for (let i = 0; i < 20 && started.length < 2; i++) {
+    await new Promise<void>(resolve => { setImmediate(resolve) })
+  }
+  assert.equal(started.length, 2)
+  assert.match(started[1]?.prompt ?? '', /Synthesize the surveyed options/)
+  release.get('member-2')?.()
+  const result = await bound
+  assert.equal(result.runs[1]?.phase, 'completed')
+})
+
+test('ceo_replan add can depend on an existing graph node', async () => {
+  const { tool, plan, replan, started, release } = harness('ceo')
+  const delegate = tool()
+  const resume = replan()
+  assert.ok(delegate)
+  assert.ok(resume)
+  const session = journalSession('session-1')
+  const tasks = [{ role: 'researcher', task: 'Survey options', id: 'survey' }]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.()
+  const first = await pending
+  assert.equal(first.runs.length, 1)
+  assert.equal(first.runs[0]?.phase, 'completed')
+
+  const added = resume.execute({
+    add: [{ role: 'implementer', task: 'Build it', id: 'build', depends_on: ['survey'] }],
+  }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  for (let i = 0; i < 20 && started.length < 2; i++) {
+    await new Promise<void>(resolve => { setImmediate(resolve) })
+  }
+  assert.equal(started.length, 2)
+  assert.equal(started[1]?.label, 'implementer')
+  assert.match(started[1]?.prompt ?? '', /Upstream results/)
+  release.get('member-2')?.()
+  const result = await added
+  assert.equal(result.runs.length, 2)
+  assert.equal(result.runs[1]?.phase, 'completed')
+  assert.equal(listCeoMembers('session-1')[1]?.dependsOn[0], first.runs[0]?.runId)
+})
+
+test('restored graph carries member output into the next worker', async () => {
+  const { tool, plan, replan, started, release } = harness('ceo')
+  const delegate = tool()
+  const resume = replan()
+  assert.ok(delegate)
+  assert.ok(resume)
+  const session = journalSession('session-1')
+  const tasks = [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+    { role: 'synthesizer', task: 'placeholder', id: 'synth', depends_on: ['survey'], bind_after_deps: true },
+  ]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.('status: completed\ndone: surveyed option A from filings')
+  await pending
+  resetCeoStateForTests()
+
+  const bound = resume.execute({
+    binds: [{ run_id: 'synth', task: 'Synthesize the surveyed options' }],
+  }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  for (let i = 0; i < 20 && started.length < 2; i++) {
+    await new Promise<void>(resolve => { setImmediate(resolve) })
+  }
+  assert.equal(started.length, 2)
+  assert.match(started[1]?.prompt ?? '', /Upstream results/)
+  assert.match(started[1]?.prompt ?? '', /surveyed option A from filings/)
+  release.get('member-2')?.()
+  await bound
+})
+
+test('keeps queued journal nodes after restart so they can be redispatched', () => {
+  const { sections } = harness('ceo')
+  const session = journalSession('session-1')
+  session.events.push({
+    type: CEO_RUN_JOURNAL,
+    seq: 1,
+    time: 1,
+    data: {
+      turn: 4,
+      callId: 'call-1',
+      runs: [
+        {
+          runId: 'del_1_survey',
+          rawId: 'survey',
+          role: 'researcher',
+          task: 'Survey options',
+          dependsOn: [],
+          phase: 'running',
+          memberId: 'member-1',
+        },
+        {
+          runId: 'del_1_build',
+          rawId: 'build',
+          role: 'implementer',
+          task: 'Build it',
+          dependsOn: ['del_1_survey'],
+          phase: 'queued',
+        },
+      ],
+    },
+    ignorable: true,
+  })
+  const textFn = sections[0]?.text
+  assert.equal(typeof textFn, 'function')
+  textFn({ agent: { session } })
+  const last = session.events.filter(event => event.type === CEO_RUN_JOURNAL).at(-1)?.data as {
+    runs: Array<{ rawId: string; phase: string }>
+  }
+  assert.equal(last.runs[0]?.phase, 'unknown_after_restart')
+  assert.equal(last.runs[1]?.phase, 'queued')
 })

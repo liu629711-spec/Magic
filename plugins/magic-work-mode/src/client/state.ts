@@ -39,9 +39,21 @@ export function applyClientWorkModeLine(sessionId: string, line: string): MagicW
 export function applyClientWorkModeDescription(sessionId: string, text: string): MagicWorkModeState {
   const parsed = parseDescribedMode(text)
   if (parsed === null) return getClientWorkMode(sessionId)
-  states.set(sessionId, parsed)
+  return applyClientWorkModeState(sessionId, parsed)
+}
+
+export function applyClientWorkModeState(sessionId: string, state: MagicWorkModeState): MagicWorkModeState {
+  const current = states.get(sessionId)
+  if (
+    current !== undefined
+    && current.sessionMode === state.sessionMode
+    && current.inputMode === state.inputMode
+  ) {
+    return current
+  }
+  states.set(sessionId, state)
   notify()
-  return parsed
+  return state
 }
 
 export function subscribeClientWorkMode(listener: () => void): () => void {

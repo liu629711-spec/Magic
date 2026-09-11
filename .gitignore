@@ -7,6 +7,18 @@
 /*.7z
 /docs/*.zip
 
+# Local agent / editor scratch
+.workbuddy/
+_tmp_*
+tmp-*
+**/tmp-*.mjs
+**/tmp-*.html
+**/tmp-*.ps1
+
+# Generated profile install tree
+profiles/**/node_modules/
+profiles/**/node_modules.lock
+
 # Local secrets and generated clutter
 .env
 .env.*

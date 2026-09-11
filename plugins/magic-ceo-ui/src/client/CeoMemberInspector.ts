@@ -1,7 +1,9 @@
 import { createElement as h, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   debriefSummaryOf,
-  formatCeoDecisionMessage,
+  displayCeoSeat,
+  formatTokenCount,
+  hasUserDecision,
   presentCeoMember,
   presentCeoMemberReport,
   reportTextFromProcess,
@@ -10,27 +12,24 @@ import {
   type CeoTeamMember,
 } from '../team.ts'
 import { CeoProcessTimeline } from './CeoProcessTimeline.ts'
-import { recordCeoUserDecision } from './selection.ts'
-
-const wrap: CSSProperties = {
-  minWidth: 0,
-  overflowWrap: 'anywhere',
-  wordBreak: 'break-word',
-}
+import { ink, line, surface, wrap } from './theme.ts'
 
 const TASK_COLLAPSE_H = 144
-const MUTED = 'var(--dsw-alias-label-tertiary, #9a9a9a)'
-const PRIMARY = 'var(--dsw-alias-label-primary, #f5f5f5)'
-const SECONDARY = 'var(--dsw-alias-label-secondary, #c8c8c8)'
-const DANGER = 'var(--dsw-alias-state-danger, #dc2626)'
-const WARN = 'var(--dsw-alias-state-warning, #d97706)'
-const SUCCESS = 'var(--dsw-alias-state-success, #16a34a)'
-const ACCENT = 'var(--dsw-alias-state-business-primary, #3b82f6)'
+const FIELD_COLLAPSE_H = 168
+const MUTED = ink.tertiary
+const PRIMARY = ink.primary
+const SECONDARY = ink.secondary
+const DANGER = ink.danger
+const WARN = ink.warn
+const SUCCESS = ink.success
+const ACCENT = ink.accent
 
 export interface CeoMemberInspectorProps {
   member: CeoTeamMember
-  sendDecision?: (text: string) => Promise<{ ok: boolean; error?: string }>
+  roster?: readonly CeoTeamMember[]
   t: (key: string, params?: Record<string, unknown>) => string
+  /** Per-member intervention: ask the CEO to halt / redirect / resume this node. */
+  onIntervene?: (action: 'halt' | 'redirect' | 'resume', note: string) => void
 }
 
 const REPORT_FIELDS: Array<{ key: keyof CeoMemberReport; label: string }> = [
@@ -50,18 +49,18 @@ function badgeStyle(status: CeoMemberViewStatus): CSSProperties {
       ? SUCCESS
       : status === 'failed' || status === 'error' || status === 'blocked'
         ? DANGER
-        : status === 'partial'
+        : status === 'partial' || status === 'unverified'
           ? WARN
           : MUTED
   const fill = status === 'running'
-    ? 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 12%, transparent)'
+    ? 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #7aa2ff) 16%, transparent)'
     : status === 'completed' || status === 'delegated'
-      ? 'color-mix(in srgb, var(--dsw-alias-state-success, #16a34a) 12%, transparent)'
+      ? 'color-mix(in srgb, var(--dsw-alias-state-success, #4ade80) 16%, transparent)'
       : status === 'failed' || status === 'error' || status === 'blocked'
-        ? 'color-mix(in srgb, var(--dsw-alias-state-danger, #dc2626) 12%, transparent)'
-        : status === 'partial'
-          ? 'color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 12%, transparent)'
-          : 'var(--dsw-alias-bg-module, #1f1f1f)'
+        ? 'color-mix(in srgb, var(--dsw-alias-state-danger, #f87171) 16%, transparent)'
+        : status === 'partial' || status === 'unverified'
+          ? 'color-mix(in srgb, var(--dsw-alias-state-warning, #fbbf24) 16%, transparent)'
+          : surface.layer2
   return {
     flex: '0 0 auto',
     padding: '2px 8px',
@@ -148,7 +147,91 @@ function CollapsibleTask({
             right: 0,
             bottom: 0,
             height: 32,
-            background: 'linear-gradient(to top, var(--dsw-alias-bg-base, #111), transparent)',
+            background: `linear-gradient(to top, ${surface.base}, transparent)`,
+            pointerEvents: 'none',
+          },
+        })
+        : null,
+    ),
+    overflow
+      ? h('button', {
+        type: 'button',
+        onClick: () => { setOpen(current => !current) },
+        style: {
+          alignSelf: 'flex-start',
+          padding: 0,
+          border: 0,
+          background: 'transparent',
+          color: MUTED,
+          cursor: 'pointer',
+          fontSize: 12,
+        },
+      }, t(open ? 'task.collapse' : 'task.expand'))
+      : null,
+  )
+}
+
+function CollapsibleField({
+  label,
+  body,
+  tone,
+  t,
+}: {
+  label: string
+  body: string
+  tone?: 'danger' | 'warn'
+  t: CeoMemberInspectorProps['t']
+}): ReactNode {
+  const [open, setOpen] = useState(false)
+  const [overflow, setOverflow] = useState(false)
+  const measure = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    const el = measure.current
+    if (el === null) return
+    const check = () => { setOverflow(el.scrollHeight > FIELD_COLLAPSE_H + 4) }
+    check()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(check)
+    observer.observe(el)
+    return () => { observer.disconnect() }
+  }, [body])
+  return h('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 },
+  },
+    h('div', {
+      style: {
+        fontSize: 12,
+        fontWeight: 510,
+        color: tone === 'danger' ? DANGER : tone === 'warn' ? WARN : MUTED,
+      },
+    }, label),
+    h('div', { style: { position: 'relative', minWidth: 0 } },
+      h('div', {
+        style: open || overflow === false
+          ? undefined
+          : { maxHeight: FIELD_COLLAPSE_H, overflow: 'hidden' },
+      },
+        h('div', {
+          ref: measure,
+          style: {
+            ...wrap,
+            fontSize: 13,
+            lineHeight: '20px',
+            color: PRIMARY,
+            whiteSpace: 'pre-wrap',
+          },
+        }, body),
+      ),
+      overflow && open === false
+        ? h('div', {
+          'aria-hidden': true,
+          style: {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 28,
+            background: `linear-gradient(to top, ${surface.layer2}, transparent)`,
             pointerEvents: 'none',
           },
         })
@@ -185,7 +268,7 @@ function DebriefCard({
   const hasDetails = details.length > 0
   return h('section', {
     'data-magic-ceo-debrief': true,
-    style: { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, marginBottom: 16 },
+    style: { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, marginBottom: 16 },
   },
     sectionTitle(t('debrief.title')),
     h('div', {
@@ -193,87 +276,164 @@ function DebriefCard({
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
-        padding: 12,
-        borderRadius: 10,
-        background: 'var(--dsw-alias-bg-module, #1f1f1f)',
+        padding: '12px 14px',
+        borderRadius: 12,
+        border: `0.5px solid ${line.subtle}`,
+        background: surface.layer2,
       },
     },
+      h('div', {
+        style: {
+          ...wrap,
+          fontSize: 14,
+          lineHeight: '22px',
+          fontWeight: 510,
+          color: PRIMARY,
+          whiteSpace: 'pre-wrap',
+        },
+      }, summary),
+      hasDetails && open
+        ? details.map(item => h(CollapsibleField, {
+          key: item.label,
+          label: item.label,
+          body: item.body,
+          tone: item.tone,
+          t,
+        }))
+        : null,
       hasDetails
         ? h('button', {
           type: 'button',
           onClick: () => { setOpen(current => !current) },
           style: {
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 8,
-            width: '100%',
+            alignSelf: 'flex-start',
             padding: 0,
             border: 0,
             background: 'transparent',
-            color: PRIMARY,
+            color: MUTED,
             cursor: 'pointer',
-            textAlign: 'left',
+            fontSize: 12,
           },
-        },
-          h('span', {
-            'aria-hidden': true,
-            style: { flex: '0 0 auto', marginTop: 2, color: MUTED, fontSize: 12 },
-          }, open ? '∨' : '>'),
-          h('span', {
-            style: {
-              ...wrap,
-              flex: 1,
-              minWidth: 0,
-              fontSize: 13,
-              lineHeight: '20px',
-              display: open ? 'block' : '-webkit-box',
-              overflow: open ? undefined : 'hidden',
-              WebkitLineClamp: open ? undefined : 2,
-              WebkitBoxOrient: open ? undefined : 'vertical',
-            },
-          }, summary || t('debrief.expand')),
-        )
-        : h('div', {
-          style: { ...wrap, fontSize: 13, lineHeight: '20px', color: PRIMARY, whiteSpace: 'pre-wrap' },
-        }, summary),
-      open
-        ? details.map(item => h('div', {
-          key: item.label,
-          style: { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 },
-        },
-          h('div', {
-            style: {
-              fontSize: 12,
-              fontWeight: 510,
-              color: item.tone === 'danger' ? DANGER : item.tone === 'warn' ? WARN : MUTED,
-            },
-          }, item.label),
-          h('div', {
-            style: { ...wrap, fontSize: 13, lineHeight: '20px', color: PRIMARY, whiteSpace: 'pre-wrap' },
-          }, item.body),
-        ))
+        }, t(open ? 'debrief.collapse' : 'debrief.expand'))
         : null,
     ),
   )
 }
 
-export function CeoMemberInspector({ member, sendDecision, t }: CeoMemberInspectorProps) {
+/** AgentCore RunInterveneControls: 只停这个人 / 只改这个人的方向. Both actions
+ *  compose a ceo_replan instruction that the parent session sends to the CEO. */
+function InterveneControls({
+  member,
+  send,
+  t,
+}: {
+  member: CeoTeamMember
+  send: (message: string) => void
+  t: CeoMemberInspectorProps['t']
+}): ReactNode {
+  const running = member.status === 'running'
+  const [note, setNote] = useState('')
+  const draft = note.trim()
+  const runId = member.runId ?? member.rawId ?? member.callId
+  const button = (label: string, message: string, tone: 'danger' | 'accent', disabled: boolean): ReactNode =>
+    h('button', {
+      type: 'button',
+      disabled,
+      onClick: () => { send(message) },
+      style: {
+        flex: '1 1 0',
+        padding: '5px 8px',
+        borderRadius: 8,
+        border: 0,
+        background: tone === 'danger'
+          ? 'color-mix(in srgb, var(--dsw-alias-state-danger, #dc2626) 10%, transparent)'
+          : 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 12%, transparent)',
+        color: tone === 'danger'
+          ? 'var(--dsw-alias-state-danger, #dc2626)'
+          : 'var(--dsw-alias-state-business-primary, #3b82f6)',
+        cursor: disabled ? 'default' : 'pointer',
+        fontSize: 12,
+        fontWeight: 510,
+      },
+    }, label)
+  return h('div', {
+    'data-magic-ceo-intervene': member.callId,
+    style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 },
+  },
+    h('div', { style: { fontSize: 12, fontWeight: 510, color: MUTED } }, t('intervene.title')),
+    h('div', { style: { display: 'flex', gap: 6 } },
+      running
+        ? button(t('intervene.halt'), haltMessageFor(runId), 'danger', false)
+        : null,
+      !running && member.report?.status === 'unknown_after_restart'
+        ? button(t('intervene.resume'), resumeMessageFor(runId), 'accent', false)
+        : null,
+    ),
+    running
+      ? h('textarea', {
+        value: note,
+        rows: 2,
+        placeholder: t('intervene.placeholder'),
+        onChange: (event: { target: { value: string } }) => { setNote(event.target.value) },
+        style: {
+          width: '100%',
+          resize: 'vertical',
+          boxSizing: 'border-box',
+          padding: '6px 10px',
+          borderRadius: 8,
+          border: `0.5px solid ${line.subtle}`,
+          background: surface.layer3,
+          color: PRIMARY,
+          fontSize: 12,
+          lineHeight: '18px',
+        },
+      })
+      : null,
+    running && draft !== ''
+      ? h('button', {
+        type: 'button',
+        onClick: () => {
+          send(`Call ceo_replan with redirect run_id ${runId} and note: ${draft}`)
+          setNote('')
+        },
+        style: {
+          alignSelf: 'flex-start',
+          padding: '5px 10px',
+          borderRadius: 8,
+          border: 0,
+          background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 14%, transparent)',
+          color: 'var(--dsw-alias-state-business-primary, #3b82f6)',
+          cursor: 'pointer',
+          fontSize: 12,
+          fontWeight: 510,
+        },
+      }, t('intervene.redirect'))
+      : null,
+  )
+}
+
+function haltMessageFor(runId: string): string {
+  return `Call ceo_replan with halt run_id ${runId}. The member was stopped by the user; do not rewrite its work as success.`
+}
+
+function resumeMessageFor(runId: string): string {
+  return `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.`
+}
+
+export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoMemberInspectorProps) {
   const process = member.process ?? []
   const report = presentCeoMemberReport(member)
   const presentation = presentCeoMember({ ...member, report })
-  const live = member.status === 'running'
+  const live = member.status === 'running' && presentation.viewStatus === 'running'
   const reportSource = member.lastMessage ?? reportTextFromProcess(process)
   const filled = REPORT_FIELDS.filter(field => {
     const value = report?.[field.key]
-    return typeof value === 'string' && value.trim() !== ''
+    if (typeof value !== 'string' || value.trim() === '') return false
+    if (field.key === 'userDecisions') return hasUserDecision(value)
+    return true
   })
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
-  const [sendError, setSendError] = useState<string | undefined>(undefined)
-  const canSend = sendDecision !== undefined && draft.trim() !== '' && !sending
   const summary = debriefSummaryOf(report, reportSource)
   const debriefDetails = filled
-    .filter(field => field.key !== 'done')
     .filter(field => field.key !== 'userDecisions' || !presentation.needsDecision)
     .filter(field => field.key !== 'risksOrBlockers' || !presentation.hasBlocker)
     .map(field => ({
@@ -287,26 +447,6 @@ export function CeoMemberInspector({ member, sendDecision, t }: CeoMemberInspect
     }))
   const showDebrief = summary !== '' || debriefDetails.length > 0
   const showEmpty = filled.length === 0 && !member.lastMessage && process.length === 0 && !live
-
-  const submitDecision = () => {
-    if (sendDecision === undefined || sending) return
-    const answer = draft.trim()
-    if (answer === '') return
-    setSending(true)
-    setSendError(undefined)
-    void sendDecision(formatCeoDecisionMessage(member, answer)).then((result) => {
-      setSending(false)
-      if (!result.ok) {
-        setSendError(result.error ?? t('decision.error'))
-        return
-      }
-      recordCeoUserDecision(member.callId, answer)
-      setDraft('')
-    }, (error: unknown) => {
-      setSending(false)
-      setSendError(error instanceof Error ? error.message : t('decision.error'))
-    })
-  }
 
   return h('aside', {
     'data-magic-ceo-inspector': member.callId,
@@ -335,7 +475,7 @@ export function CeoMemberInspector({ member, sendDecision, t }: CeoMemberInspect
         whiteSpace: 'nowrap',
         color: PRIMARY,
       },
-    }, member.role),
+    }, displayCeoSeat(member, roster)),
     h('span', {
       style: badgeStyle(presentation.viewStatus),
     }, t(`status.${presentation.viewStatus}`)),
@@ -358,6 +498,55 @@ export function CeoMemberInspector({ member, sendDecision, t }: CeoMemberInspect
   member.dependsOn.length > 0
     ? section(t('depends.on'), member.dependsOn.join(', '))
     : null,
+  member.usage !== undefined
+    ? h('div', {
+      'data-magic-ceo-usage': true,
+      style: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginBottom: 16,
+        fontVariantNumeric: 'tabular-nums',
+        fontSize: 12,
+        color: MUTED,
+      },
+    },
+      h('span', {
+        style: {
+          padding: '2px 8px',
+          borderRadius: 99,
+          background: surface.layer2,
+        },
+      }, t('tokens.badge', {
+        tokens: formatTokenCount(
+          member.usage.totalTokens ?? member.usage.inputTokens + member.usage.outputTokens,
+        ),
+      })),
+      h('span', null, t('tokens.input', { tokens: formatTokenCount(member.usage.inputTokens) })),
+      h('span', null, t('tokens.output', { tokens: formatTokenCount(member.usage.outputTokens) })),
+      member.usage.cacheReadTokens !== undefined
+        ? h('span', null, t('tokens.cache', { tokens: formatTokenCount(member.usage.cacheReadTokens) }))
+        : null,
+    )
+    : null,
+  member.contextChannels !== undefined && member.contextChannels.length > 0
+    ? section(
+      t('context.title'),
+      member.contextChannels.map(channel =>
+        `${channel.channel}: ${String(channel.chars)}${channel.truncated ? '（已截断）' : ''}`,
+      ).join('\n'),
+    )
+    : null,
+  member.redirectedNote !== undefined
+    ? section(t('intervene.redirected'), member.redirectedNote, 'warn')
+    : null,
+  onIntervene !== undefined && (member.status === 'running' || presentation.viewStatus === 'unknown_after_restart')
+    ? h(InterveneControls, {
+      member,
+      send: (message: string) => { onIntervene('halt', message) },
+      t,
+    })
+    : null,
   process.length > 0 || live
     ? h('div', { style: { marginBottom: 16 } },
       h(CeoProcessTimeline, {
@@ -368,7 +557,11 @@ export function CeoMemberInspector({ member, sendDecision, t }: CeoMemberInspect
       }),
     )
     : null,
-  showEmpty
+  presentation.viewStatus === 'unknown_after_restart'
+    ? h('div', {
+      style: { marginBottom: 16, fontSize: 12, color: MUTED },
+    }, t('inspector.unknown'))
+    : showEmpty
     ? h('div', {
       style: { marginBottom: 16, fontSize: 12, color: MUTED },
     }, t(
@@ -376,7 +569,18 @@ export function CeoMemberInspector({ member, sendDecision, t }: CeoMemberInspect
     ))
     : null,
   presentation.needsDecision
-    ? section(t('badge.decision'), report?.userDecisions ?? '', 'warn')
+    ? h('div', {
+      style: {
+        marginBottom: 16,
+        padding: '10px 12px',
+        borderRadius: 12,
+        border: `0.5px solid ${WARN}`,
+        background: 'color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 8%, transparent)',
+        fontSize: 13,
+        lineHeight: '20px',
+        color: WARN,
+      },
+    }, t('inspector.decisionInChat'))
     : null,
   presentation.hasBlocker && report?.risksOrBlockers
     ? section(t('badge.blocker'), report.risksOrBlockers, 'danger')
@@ -388,59 +592,10 @@ export function CeoMemberInspector({ member, sendDecision, t }: CeoMemberInspect
       t,
     })
     : null,
-  presentation.needsDecision && sendDecision !== undefined
-    ? h('form', {
-      'data-magic-ceo-decision': member.callId,
-      onSubmit: (event: { preventDefault: () => void }) => {
-        event.preventDefault()
-        submitDecision()
-      },
-      style: { display: 'flex', flexDirection: 'column', gap: 8 },
-    },
-      h('label', {
-        style: { fontSize: 12, fontWeight: 510, color: WARN },
-      }, t('decision.label')),
-      h('textarea', {
-        value: draft,
-        rows: 3,
-        placeholder: t('decision.placeholder'),
-        onChange: (event: { target: { value: string } }) => { setDraft(event.target.value) },
-        style: {
-          width: '100%',
-          resize: 'vertical',
-          boxSizing: 'border-box',
-          padding: '8px 10px',
-          borderRadius: 8,
-          border: '0.5px solid var(--dsw-alias-border-l2, #2a2a2a)',
-          background: 'var(--dsw-alias-bg-module-platform, #161616)',
-          color: PRIMARY,
-          fontSize: 13,
-          lineHeight: '20px',
-        },
-      }),
-      sendError !== undefined
-        ? h('div', {
-          style: { fontSize: 12, color: DANGER },
-        }, sendError)
-        : null,
-      h('button', {
-        type: 'submit',
-        disabled: !canSend,
-        style: {
-          alignSelf: 'flex-start',
-          padding: '4px 10px',
-          borderRadius: 6,
-          border: 0,
-          background: WARN,
-          color: canSend ? '#111' : MUTED,
-          cursor: canSend ? 'pointer' : 'default',
-          fontSize: 12,
-          opacity: canSend ? 1 : 0.6,
-        },
-      }, sending ? t('decision.sending') : t('decision.send')),
-    )
-    : member.answeredDecision
-      ? section(t('decision.sent'), member.answeredDecision)
-      : null,
+  member.answeredDecision
+    ? section(t('decision.sent'), member.answeredDecision)
+    : null,
   )
 }
+
+export type { CeoMemberInspectorProps }

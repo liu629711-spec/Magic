@@ -5,10 +5,17 @@ export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'layout'
 export const zh = {
   'graph.title': 'CEO 编排图',
   'graph.empty': '还没有成员',
-  'graph.goal': '本轮目标',
-  'graph.goalHint': '用户交给 CEO 的这一轮',
+  'graph.goal': '你的任务',
+  'graph.goalHint': '对话发起',
   'graph.ceo': 'CEO 汇总',
+  'graph.ceoPending': '待汇总',
+  'graph.ceoRunning': '正在生成汇总…',
+  'graph.ceoDone': '已汇总',
   'graph.members': '{count} 个成员',
+  'graph.openCanvas': '在画布打开',
+  'graph.fold': '收起',
+  'graph.expand': '展开',
+  'graph.elapsed': '用时 {duration}',
   'plan.title': 'CEO 分析与派发计划',
   'plan.ready': '计划已记录，CEO 正在准备启动成员。',
   'graph.zoomIn': '放大',
@@ -22,6 +29,8 @@ export const zh = {
   'status.blocked': '阻塞',
   'status.failed': '失败',
   'status.partial': '部分完成',
+  'status.unverified': '回传待核实',
+  'status.unknown_after_restart': '重启后状态未知',
   'status.error': '失败',
   'depends.on': '依赖',
   'tool.title': '委派图',
@@ -32,6 +41,8 @@ export const zh = {
   'attention.decision': '待你拍板',
   'attention.blocker': '阻塞',
   'attention.failed': '失败',
+  'attention.unverified': '回传待核实',
+  'attention.unknown_after_restart': '重启后状态未知',
   'roster.title': '成员',
   'field.lastMessage': '成员回传',
   'inspector.hint': '点选节点查看任务、汇报、阻塞和待拍板',
@@ -40,14 +51,23 @@ export const zh = {
   'inspector.running': '成员已开始执行，过程还没有投射过来。',
   'inspector.queued': '还在等依赖完成，调度器还没有启动这个节点',
   'inspector.noReport': '还没有结构化汇报。',
+  'inspector.unknown': '进程重启后，这个成员当时是否仍在运行已经无法确认。',
   'debrief.title': '交接简报',
   'debrief.expand': '展开简报',
+  'debrief.collapse': '收起简报',
+  'debrief.openPage': '打开原页',
   'field.conclusion': '结论',
   'process.thinking': '思考中…',
   'process.thought.show': '思考',
   'process.thought.hide': '收起思考',
   'workspace.toBottom': '回到底部',
   'process.fetch.http': 'HTTP',
+  'process.fetch.open': '打开原页',
+  'process.fetch.empty': '（无正文）',
+  'process.fetch.collection': 'Read page · {count} sources',
+  'markdown.copy': '复制',
+  'markdown.copied': '已复制',
+  'markdown.footnotes': '脚注',
   'process.tool.running': '执行中',
   'process.tool.ok': '完成',
   'process.tool.error': '失败',
@@ -68,21 +88,51 @@ export const zh = {
   'field.decisions': '待用户决策',
   'badge.decision': '待你拍板',
   'badge.blocker': '阻塞',
+  'inspector.decisionInChat': '这个问题在输入框上方回答，不用在这里找',
+  'drawer.caption': '待你拍板',
+  'drawer.context': '{seat} 需要你选下一步',
+  'drawer.fallbackQuestion': '{seat} 需要你拍板才能继续',
+  'drawer.placeholder': '用一句话写下你的选择',
+  'drawer.prev': '上一项',
+  'drawer.next': '下一项',
+  'drawer.fold': '收起',
+  'drawer.expand': '展开',
   'decision.label': '你的决定',
-  'decision.placeholder': '写给这个成员的拍板，会作为当前会话的新回合发出',
+  'decision.placeholder': '写给这个成员的拍板。CEO 会用 ceo_replan continue 续跑同一张图，不会私下转发给成员。',
   'decision.send': '发给 CEO',
   'decision.sending': '发送中',
   'decision.sent': '已拍板',
   'decision.error': '拍板没有发出',
+  'tokens.badge': '{tokens} tokens',
+  'tokens.tooltip': '输入 {input} · 输出 {output}',
+  'tokens.input': '输入 {tokens}',
+  'tokens.output': '输出 {tokens}',
+  'tokens.cache': '缓存 {tokens}',
+  'context.title': '收到的上下文（通道：字符数）',
+  'halted.badge': '已停止',
+  'halted.hint': '这个成员被你停止了。用 replace 或 add 继续这项工作。',
+  'intervene.title': '只干预这个人',
+  'intervene.halt': '停止此成员',
+  'intervene.redirect': '按新方向重派',
+  'intervene.resume': '重新派发',
+  'intervene.placeholder': '写下新方向，例如：聚焦中国市场，不要海外数据',
+  'intervene.redirected': '已重派方向',
 }
 
 export const en = {
   'graph.title': 'CEO graph',
   'graph.empty': 'No members yet',
-  'graph.goal': 'This turn',
-  'graph.goalHint': 'The work the user gave the CEO',
+  'graph.goal': 'Your task',
+  'graph.goalHint': 'Started this turn',
   'graph.ceo': 'CEO',
+  'graph.ceoPending': 'Waiting to summarize',
+  'graph.ceoRunning': 'Writing the summary…',
+  'graph.ceoDone': 'Summarized',
   'graph.members': '{count} members',
+  'graph.openCanvas': 'Open in canvas',
+  'graph.fold': 'Collapse',
+  'graph.expand': 'Expand',
+  'graph.elapsed': 'took {duration}',
   'plan.title': 'CEO analysis and delegation plan',
   'plan.ready': 'The plan is recorded. CEO is preparing to start the team.',
   'graph.zoomIn': 'Zoom in',
@@ -96,6 +146,8 @@ export const en = {
   'status.blocked': 'blocked',
   'status.failed': 'failed',
   'status.partial': 'partial',
+  'status.unverified': 'unverified',
+  'status.unknown_after_restart': 'unknown after restart',
   'status.error': 'failed',
   'depends.on': 'depends on',
   'tool.title': 'Delegate graph',
@@ -106,6 +158,8 @@ export const en = {
   'attention.decision': 'Needs your decision',
   'attention.blocker': 'Blocked',
   'attention.failed': 'Failed',
+  'attention.unverified': 'unverified',
+  'attention.unknown_after_restart': 'unknown after restart',
   'roster.title': 'Members',
   'field.lastMessage': 'Member report',
   'inspector.hint': 'Select a node to inspect the task, report, blockers, and decisions',
@@ -114,14 +168,23 @@ export const en = {
   'inspector.running': 'The member has started. Process has not arrived yet.',
   'inspector.queued': 'Waiting for upstream nodes. The scheduler has not started this node yet.',
   'inspector.noReport': 'No structured report yet.',
+  'inspector.unknown': 'After restart, whether this member was still running cannot be confirmed.',
   'debrief.title': 'Handoff brief',
   'debrief.expand': 'Show brief',
+  'debrief.collapse': 'Hide brief',
+  'debrief.openPage': 'Open page',
   'field.conclusion': 'Conclusion',
   'process.thinking': 'Thinking…',
   'process.thought.show': 'Thought',
   'process.thought.hide': 'Hide Thought',
   'workspace.toBottom': 'Back to bottom',
   'process.fetch.http': 'HTTP',
+  'process.fetch.open': 'Open page',
+  'process.fetch.empty': '(no content)',
+  'process.fetch.collection': 'Read page · {count} sources',
+  'markdown.copy': 'Copy',
+  'markdown.copied': 'Copied',
+  'markdown.footnotes': 'Footnotes',
   'process.tool.running': 'running',
   'process.tool.ok': 'done',
   'process.tool.error': 'failed',
@@ -142,12 +205,35 @@ export const en = {
   'field.decisions': 'User decisions',
   'badge.decision': 'Needs your decision',
   'badge.blocker': 'Blocked',
+  'inspector.decisionInChat': 'Answer this in the card above the input, not in this dock',
+  'drawer.caption': 'Needs your decision',
+  'drawer.context': '{seat} is waiting for you to choose the next step',
+  'drawer.fallbackQuestion': '{seat} needs a decision before it can continue',
+  'drawer.placeholder': 'Write your choice in one sentence',
+  'drawer.prev': 'Previous',
+  'drawer.next': 'Next',
+  'drawer.fold': 'Collapse',
+  'drawer.expand': 'Expand',
   'decision.label': 'Your decision',
-  'decision.placeholder': 'Send this decision as a new turn in the current CEO session',
+  'decision.placeholder': 'CEO will call ceo_replan continue on this graph. Do not send_message the member.',
   'decision.send': 'Send to CEO',
   'decision.sending': 'Sending',
   'decision.sent': 'Decision sent',
   'decision.error': 'The decision was not sent',
+  'tokens.badge': '{tokens} tok',
+  'tokens.tooltip': 'input {input} · output {output}',
+  'tokens.input': 'in {tokens}',
+  'tokens.output': 'out {tokens}',
+  'tokens.cache': 'cache {tokens}',
+  'context.title': 'Received context (channel: chars)',
+  'halted.badge': '已停止',
+  'halted.hint': 'This member was stopped by the user. Replace or add a node to continue the work.',
+  'intervene.title': '只干预这个人',
+  'intervene.halt': '停止此成员',
+  'intervene.redirect': '按新方向重派',
+  'intervene.resume': '重新派发',
+  'intervene.placeholder': '写下新的方向，例如：聚焦中国市场，不要海外数据',
+  'intervene.redirected': '已重派方向',
 }
 
 export interface CeoUiContext {
@@ -155,6 +241,7 @@ export interface CeoUiContext {
   locale: { register: (ns: string, dicts: { zh: typeof zh; en: typeof en }) => () => void }
   sessions: {
     open: (id: string) => void
+    list?: { getSnapshot: () => { current?: string } }
     binding?: (id: string) => {
       session?: {
         prompt?: (
@@ -174,11 +261,20 @@ export interface CeoUiContext {
 
 export function registerCeoUi(
   ctx: CeoUiContext,
-  components: { graph: unknown; row: unknown; workspace: unknown },
+  components: { graph: unknown; row: unknown; workspace: unknown; drawer: unknown },
 ) {
   ctx.uiConversation.events.register(ceoTeamDefinition)
   ctx.uiConversation.events.register(ceoMemberReportDefinition)
   ctx.effect(() => ctx.locale.register('magicCeo', { zh, en }), 'magic-ceo-ui: dictionaries')
+  const promptSession = async (sessionId: string, text: string) => {
+    const session = ctx.sessions.binding?.(sessionId)?.session
+    if (session?.prompt === undefined) {
+      return { ok: false as const, error: 'session unavailable' }
+    }
+    const result = await session.prompt([{ type: 'text', text }], 'queue')
+    if (!result.ok) return { ok: false as const, error: result.error?.message }
+    return { ok: true as const }
+  }
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'ceo-team',
@@ -187,6 +283,15 @@ export function registerCeoUi(
       openDetails: () => { ctx.layout.openDetails() },
     }),
   }, components.graph))
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'ceo-decision',
+    order: 15,
+    locale: 'magicCeo',
+    inject: (sessionId: string) => ({
+      sendDecision: (text: string) => promptSession(sessionId, text),
+    }),
+  }, components.drawer))
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
     name: 'tool.call.toolview',
     key: 'ceo_delegate',
@@ -196,17 +301,9 @@ export function registerCeoUi(
     name: 'details',
     priority: -1,
     locale: 'magicCeo',
-    inject: () => ({
+    inject: (sessionId: string) => ({
       closeDetails: () => { ctx.layout.closeDetails() },
-      promptSession: async (sessionId: string, text: string) => {
-        const session = ctx.sessions.binding?.(sessionId)?.session
-        if (session?.prompt === undefined) {
-          return { ok: false as const, error: 'session unavailable' }
-        }
-        const result = await session.prompt([{ type: 'text', text }], 'queue')
-        if (!result.ok) return { ok: false as const, error: result.error?.message }
-        return { ok: true as const }
-      },
+      sendIntervention: (message: string) => { void promptSession(sessionId, message) },
     }),
   }, components.workspace))
 }

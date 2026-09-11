@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { buildRunPlan, parseDelegateTasks } from '../src/builder.ts'
+import { appendTasksToPlan, buildRunPlan, parseDelegateTasks } from '../src/builder.ts'
 import { RunPlanError } from '../src/plan.ts'
 import { WaveScheduler } from '../src/wave.ts'
 
@@ -87,6 +87,105 @@ test('progress reports running roots while dependents stay queued', async () => 
   assert.deepEqual(ticks.at(-1), ['survey:completed', 'build:completed'])
   assert.equal(results.get(plan.nodes[0]!.runId)?.phase, 'completed')
   assert.equal(results.get(plan.nodes[1]!.runId)?.phase, 'completed')
+})
+
+test('an unknown-after-restart producer skips its dependents', async () => {
+  const plan = buildRunPlan(parseDelegateTasks({
+    tasks: [
+      { id: 'survey', role: 'researcher', task: 'Survey' },
+      { id: 'build', role: 'implementer', task: 'Build', depends_on: ['survey'] },
+    ],
+  }), 'del_1')
+  const started: string[] = []
+  const results = await new WaveScheduler().run(plan, async (spec) => {
+    started.push(spec.rawId)
+    return { phase: 'unknown_after_restart' }
+  })
+  assert.deepEqual(started, ['survey'])
+  assert.equal(results.get(plan.nodes[0]!.runId)?.phase, 'unknown_after_restart')
+  assert.equal(results.get(plan.nodes[1]!.runId)?.phase, 'skipped')
+})
+
+test('an unverified producer skips its dependents', async () => {
+  const plan = buildRunPlan(parseDelegateTasks({
+    tasks: [
+      { id: 'survey', role: 'researcher', task: 'Survey' },
+      { id: 'build', role: 'implementer', task: 'Build', depends_on: ['survey'] },
+    ],
+  }), 'del_1')
+  const started: string[] = []
+  const results = await new WaveScheduler().run(plan, async (spec) => {
+    started.push(spec.rawId)
+    return { phase: 'unverified', error: 'no structured result' }
+  })
+  assert.deepEqual(started, ['survey'])
+  assert.equal(results.get(plan.nodes[0]!.runId)?.phase, 'unverified')
+  assert.equal(results.get(plan.nodes[1]!.runId)?.phase, 'skipped')
+})
+
+test('a blocked producer yields and leaves dependents queued', async () => {
+  const plan = buildRunPlan(parseDelegateTasks({
+    tasks: [
+      { id: 'survey', role: 'researcher', task: 'Survey' },
+      { id: 'build', role: 'implementer', task: 'Build', depends_on: ['survey'] },
+    ],
+  }), 'del_1')
+  const started: string[] = []
+  const scheduler = new WaveScheduler()
+  const results = await scheduler.run(plan, async (spec) => {
+    started.push(spec.rawId)
+    return { phase: 'blocked', error: 'which option?' }
+  })
+  assert.deepEqual(started, ['survey'])
+  assert.equal(scheduler.yielded, 'decision')
+  assert.equal(results.get(plan.nodes[0]!.runId)?.phase, 'blocked')
+  assert.equal(results.has(plan.nodes[1]!.runId), false)
+})
+
+test('a bind_after_deps node yields until the host binds it', async () => {
+  const plan = buildRunPlan(parseDelegateTasks({
+    tasks: [
+      { id: 'survey', role: 'researcher', task: 'Survey' },
+      { id: 'synth', role: 'synthesizer', task: 'placeholder', depends_on: ['survey'], bind_after_deps: true },
+    ],
+  }), 'del_1')
+  const scheduler = new WaveScheduler()
+  const first = await scheduler.run(plan, async () => ({ phase: 'completed', output: 'surveyed' }))
+  assert.equal(scheduler.yielded, 'bind')
+  assert.equal(first.get(plan.nodes[0]!.runId)?.phase, 'completed')
+  assert.equal(first.has(plan.nodes[1]!.runId), false)
+
+  const node = plan.nodes[1]!
+  node.bindAfterDeps = false
+  node.task = 'Synthesize'
+  const second = await scheduler.run(plan, async (spec) => ({
+    phase: 'completed',
+    output: spec.task,
+  }), undefined, undefined, first)
+  assert.equal(scheduler.yielded, undefined)
+  assert.equal(second.get(plan.nodes[1]!.runId)?.phase, 'completed')
+})
+
+test('appendTasksToPlan resolves depends_on against the live graph', () => {
+  const plan = buildRunPlan(parseDelegateTasks({
+    tasks: [{ id: 'survey', role: 'researcher', task: 'Survey' }],
+  }), 'del_1')
+  const added = appendTasksToPlan(plan, parseDelegateTasks({
+    tasks: [{ id: 'build', role: 'implementer', task: 'Build', depends_on: ['survey'] }],
+  }), 'del_1')
+  assert.equal(added.length, 1)
+  assert.equal(added[0]?.runId, 'del_1_build')
+  assert.equal(added[0]?.dependsOn[0], 'del_1_survey')
+  assert.equal(plan.waves().length, 2)
+})
+
+test('appendTasksToPlan rejects a depends_on that is not on the live graph', () => {
+  const plan = buildRunPlan(parseDelegateTasks({
+    tasks: [{ id: 'survey', role: 'researcher', task: 'Survey' }],
+  }), 'del_1')
+  assert.throws(() => appendTasksToPlan(plan, parseDelegateTasks({
+    tasks: [{ role: 'implementer', task: 'Build', depends_on: ['missing'] }],
+  }), 'del_1'), RunPlanError)
 })
 
 test('a failed producer skips its dependents', async () => {

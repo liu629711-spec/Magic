@@ -5,6 +5,16 @@ export interface SearchHit {
   site?: string
 }
 
+/** Strip a trailing "标题 - 某某网" suffix. Same rule as AgentCore cleanSourceTitle. */
+const TITLE_SUFFIX = /(?:\s[-|–—]\s|\s*[_｜·]\s*)[^-|_–—｜·\d]{2,20}$/
+
+export function cleanSourceTitle(title?: string): string {
+  const text = (title ?? '').trim()
+  if (text.length < 8) return text
+  const stripped = text.replace(TITLE_SUFFIX, '').trim()
+  return stripped.length >= 2 ? stripped : text
+}
+
 const QUERY_LIMIT = 72
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -115,29 +125,78 @@ export interface FetchPage {
   title?: string
   site?: string
   preview: string
+  snippet?: string
+  hits?: SearchHit[]
 }
 
 const FETCHED_LINE = /^Fetched\s+(\S+)\s+\(HTTP\s+(\d+)\)/i
 const FETCH_PREVIEW_LIMIT = 1600
+const FETCH_SNIPPET_LIMIT = 180
 const FETCH_CHROME = /跳至内容|辅助功能反馈|国内版|国际版|在新选项卡中打开链接|时间不限|约\s*[\d,]+\s*个结果|External web content follows|^[-*]\s*\[(?:网页|图片|视频|学术|词典|地图|航班|新闻)\]|^(网页|图片|视频|学术|词典|地图|航班|新闻|Images|Videos|Maps|News)$/
+const CHROME_TITLE = /^(网页|图片|视频|学术|词典|地图|航班|新闻|Images|Videos|Maps|News|国内版|国际版|登录|更多|Home|Search)$/i
+const SEARCH_ENGINE_HOST = /(?:^|\.)(bing|google|baidu|duckduckgo|sogou|so|yahoo|yandex)\./i
+const SOURCE_LINE = /^(?:[-*+]|\d+[.)])\s+\[([^\]]+)\]\(([^)]+)\)(?:\s+[—–-]\s+(.*))?$/
+const BARE_LINK_LINE = /^\[([^\]]+)\]\((https?:[^)]+)\)(?:\s+[—–-]\s+(.*))?$/
 
 function isFetchChromeLine(line: string): boolean {
   const text = line.trim()
   if (text === '') return false
   if (FETCHED_LINE.test(text)) return true
+  if (/^!\[/.test(text)) return true
   return FETCH_CHROME.test(text)
+}
+
+function isUsefulTitle(text: string): boolean {
+  const value = text.trim()
+  if (value.length < 4) return false
+  if (CHROME_TITLE.test(value)) return false
+  if (/^https?:\/\//.test(value)) return false
+  return true
+}
+
+export function isSearchEngineUrl(url: string): boolean {
+  const host = siteOf(url) ?? ''
+  if (host === '') return false
+  return SEARCH_ENGINE_HOST.test(host)
 }
 
 function titleFromUrl(url: string): string | undefined {
   if (url.trim() === '') return undefined
   try {
     const parsed = new URL(url)
-    const query = parsed.searchParams.get('q') ?? parsed.searchParams.get('wd')
+    const query = parsed.searchParams.get('q')
+      ?? parsed.searchParams.get('wd')
+      ?? parsed.searchParams.get('query')
     if (query !== null && query.trim() !== '') return clipTitle(query.trim())
   } catch {
     return undefined
   }
   return undefined
+}
+
+function markdownToPlainText(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/!\[[^\]]*]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[*_~`]+/g, '')
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function snippetOf(text: string): string | undefined {
+  const line = text.split(/\r?\n/).find(item => item.trim().length >= 8)?.trim()
+  if (line === undefined) return undefined
+  if (line.length <= FETCH_SNIPPET_LIMIT) return line
+  return `${line.slice(0, FETCH_SNIPPET_LIMIT).trimEnd()}…`
+}
+
+function clipPreview(text: string): string {
+  if (text.length <= FETCH_PREVIEW_LIMIT) return text
+  return `${text.slice(0, FETCH_PREVIEW_LIMIT).trimEnd()}…`
 }
 
 export function parseFetchPage(result: string | undefined, args?: string): FetchPage {
@@ -154,25 +213,33 @@ export function parseFetchPage(result: string | undefined, args?: string): Fetch
     const line = raw.trim()
     if (headingTitle === undefined) {
       const heading = /^#{1,3}\s+(.+)$/.exec(line)
-      if (heading?.[1] !== undefined) {
-        headingTitle = clipTitle(heading[1].replace(/[_\\]/g, '').trim())
-      } else if (line.length >= 8 && /^https?:\/\//.test(line) === false) {
-        headingTitle = clipTitle(line)
-      }
+      const candidate = heading?.[1] !== undefined
+        ? heading[1].replace(/[_\\]/g, '').trim()
+        : line
+      if (isUsefulTitle(candidate)) headingTitle = clipTitle(cleanSourceTitle(candidate))
     }
     kept.push(raw)
   }
-  let preview = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
-  if (preview.length > FETCH_PREVIEW_LIMIT) {
-    preview = `${preview.slice(0, FETCH_PREVIEW_LIMIT).trimEnd()}…`
-  }
-  const title = titleFromUrl(url) ?? headingTitle
+  const extracted = markdownToPlainText(kept.join('\n'))
+  const hits = parseMarkdownHits(kept.join('\n'))
+  const searchHost = isSearchEngineUrl(url)
+  const searchPage = searchHost && hits.length >= 2
+  const preview = clipPreview(searchPage
+    ? (hits[0]?.snippet ?? snippetOf(extracted) ?? '')
+    : searchHost
+      ? (snippetOf(extracted) ?? '')
+      : extracted)
+  const title = searchHost
+    ? (titleFromUrl(url) ?? headingTitle)
+    : (headingTitle ?? titleFromUrl(url))
   return {
     url,
     preview,
     ...statusCode === undefined || Number.isNaN(statusCode) ? {} : { statusCode },
     ...title === undefined || title === '' ? {} : { title },
     ...siteOf(url) === undefined ? {} : { site: siteOf(url) },
+    ...snippetOf(extracted) === undefined ? {} : { snippet: snippetOf(extracted) },
+    ...searchPage ? { hits } : {},
   }
 }
 
@@ -192,17 +259,42 @@ export function faviconUrl(site: string): string {
 function hitFromSource(item: unknown): SearchHit | undefined {
   if (!isRecord(item)) return undefined
   const url = typeof item.url === 'string' ? item.url : undefined
-  const title = firstString(item.title) ?? firstString(item.url)
-  if (title === undefined) return undefined
+  const rawTitle = firstString(item.title) ?? firstString(item.url)
+  if (rawTitle === undefined) return undefined
+  const title = cleanSourceTitle(rawTitle)
+  if (title === '') return undefined
+  const site = firstString(item.site) ?? siteOf(url)
   return {
     title,
     ...url === undefined ? {} : { url },
     ...typeof item.snippet === 'string' && item.snippet.trim() !== '' ? { snippet: item.snippet } : {},
-    ...siteOf(url) === undefined ? {} : { site: siteOf(url) },
+    ...site === undefined ? {} : { site },
   }
 }
 
-const SOURCE_LINE = /^- \[([^\]]+)\]\(([^)]+)\)(?:\s+[—-]\s+(.*))?$/
+function parseMarkdownHits(text: string): SearchHit[] {
+  const hits: SearchHit[] = []
+  const seen = new Set<string>()
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    const match = SOURCE_LINE.exec(line) ?? BARE_LINK_LINE.exec(line)
+    if (match === null) continue
+    const title = cleanSourceTitle(match[1]?.trim() ?? '')
+    const url = match[2]?.trim()
+    const snippet = match[3]?.trim()
+    if (title === '' || CHROME_TITLE.test(title)) continue
+    const key = url || title
+    if (seen.has(key)) continue
+    seen.add(key)
+    hits.push({
+      title,
+      ...url === undefined || url === '' ? {} : { url },
+      ...snippet === undefined || snippet === '' ? {} : { snippet },
+      ...siteOf(url) === undefined ? {} : { site: siteOf(url) },
+    })
+  }
+  return hits
+}
 
 export function parseSearchHits(
   result: string | undefined,
@@ -240,22 +332,7 @@ export function parseSearchHits(
   } catch {
     // Markdown / prose result from DSH web_search.
   }
-  const hits: SearchHit[] = []
-  for (const line of trimmed.split('\n')) {
-    const match = SOURCE_LINE.exec(line.trim())
-    if (match === null) continue
-    const title = match[1]?.trim() ?? ''
-    const url = match[2]?.trim()
-    const snippet = match[3]?.trim()
-    if (title === '') continue
-    hits.push({
-      title,
-      ...url === undefined || url === '' ? {} : { url },
-      ...snippet === undefined || snippet === '' ? {} : { snippet },
-      ...siteOf(url) === undefined ? {} : { site: siteOf(url) },
-    })
-  }
-  return hits
+  return parseMarkdownHits(trimmed)
 }
 
 export function searchFailurePeek(result: string | undefined): string {

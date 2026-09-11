@@ -16,6 +16,7 @@ interface PendingMemberMessage {
 
 let selected: CeoTeamMember | null = null
 let roster: CeoTeamMember[] = []
+let rosterSessionId: string | undefined
 let pendingMessages: PendingMemberMessage[] = []
 const listeners = new Set<Listener>()
 
@@ -29,6 +30,10 @@ export function getSelectedCeoMember(): CeoTeamMember | null {
 
 export function getCeoRoster(): readonly CeoTeamMember[] {
   return roster
+}
+
+export function getCeoRosterSessionId(): string | undefined {
+  return rosterSessionId
 }
 
 export function subscribeCeoSelection(listener: Listener): () => void {
@@ -60,7 +65,15 @@ function drainPending(members: readonly CeoTeamMember[]): CeoTeamMember[] {
   return next === members ? members.slice() : [...next]
 }
 
-export function publishCeoTeam(members: readonly CeoTeamMember[]): void {
+export function publishCeoTeam(members: readonly CeoTeamMember[], sessionId?: string): void {
+  if (sessionId !== undefined && sessionId !== rosterSessionId) {
+    selected = null
+    roster = []
+    pendingMessages = []
+    rosterSessionId = sessionId
+  } else if (sessionId !== undefined) {
+    rosterSessionId = sessionId
+  }
   if (members.length === 0) return
   const next = roster.slice()
   let changed = false
@@ -109,9 +122,10 @@ export function applyCeoRosterMessage(event: PendingMemberMessage): void {
 }
 
 export function resetCeoRoster(): void {
-  if (selected === null && roster.length === 0 && pendingMessages.length === 0) return
+  if (selected === null && roster.length === 0 && pendingMessages.length === 0 && rosterSessionId === undefined) return
   selected = null
   roster = []
+  rosterSessionId = undefined
   pendingMessages = []
   notify()
 }

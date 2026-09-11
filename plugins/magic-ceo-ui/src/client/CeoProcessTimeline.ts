@@ -1,6 +1,7 @@
-import { createElement as h, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { looksLikeMemberReport, type CeoProcessStep } from '../team.ts'
+import { createElement as h, useEffect, useRef, useState, type ReactNode } from 'react'
+import { looksLikeMemberReport, looksLikeStructuredDump, type CeoProcessStep } from '../team.ts'
 import {
+  cleanSourceTitle,
   faviconUrl,
   parseFetchPage,
   parseSearchHits,
@@ -11,8 +12,10 @@ import {
   toolQueryDetail,
   toolQueryFull,
   type FetchPage,
+  type SearchHit,
   type ToolIconKind,
 } from '../processView.ts'
+import { ink, line, surface, wrap } from './theme.ts'
 
 export interface CeoProcessTimelineProps {
   steps: readonly CeoProcessStep[]
@@ -21,16 +24,10 @@ export interface CeoProcessTimelineProps {
   t: (key: string, params?: Record<string, unknown>) => string
 }
 
-const wrap: CSSProperties = {
-  minWidth: 0,
-  overflowWrap: 'anywhere',
-  wordBreak: 'break-word',
-}
-
-const MUTED = 'var(--dsw-alias-label-tertiary, #9a9a9a)'
-const PRIMARY = 'var(--dsw-alias-label-primary, #f5f5f5)'
-const DANGER = 'var(--dsw-alias-state-danger, #dc2626)'
-const ACCENT = 'var(--dsw-alias-state-business-primary, #3b82f6)'
+const MUTED = ink.tertiary
+const PRIMARY = ink.primary
+const DANGER = ink.danger
+const ACCENT = ink.accent
 
 let pulseCssInjected = false
 
@@ -210,7 +207,7 @@ function WebSearchSkeleton(): ReactNode {
         height: 16,
         marginTop: 2,
         borderRadius: 4,
-        background: 'var(--dsw-alias-bg-module, #1f1f1f)',
+        background: surface.layer2,
         animation: 'magic-ceo-shimmer 1.4s ease-in-out infinite',
         flex: '0 0 auto',
       },
@@ -221,7 +218,7 @@ function WebSearchSkeleton(): ReactNode {
           height: 12,
           width: '50%',
           borderRadius: 4,
-          background: 'var(--dsw-alias-bg-module, #1f1f1f)',
+          background: surface.layer2,
           animation: 'magic-ceo-shimmer 1.4s ease-in-out infinite',
         },
       }),
@@ -230,7 +227,7 @@ function WebSearchSkeleton(): ReactNode {
           height: 12,
           width: '80%',
           borderRadius: 4,
-          background: 'color-mix(in srgb, var(--dsw-alias-bg-module, #1f1f1f) 70%, transparent)',
+          background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #24242e) 70%, transparent)',
           animation: 'magic-ceo-shimmer 1.4s ease-in-out infinite',
         },
       }),
@@ -242,29 +239,15 @@ function SearchHitCard({
   hit,
   index,
 }: {
-  hit: { title: string; url?: string; snippet?: string; site?: string }
+  hit: SearchHit
   index: number
 }): ReactNode {
   const [hover, setHover] = useState(false)
-  return h('a', {
-    href: hit.url,
-    target: '_blank',
-    rel: 'noreferrer',
-    onMouseEnter: () => { setHover(true) },
-    onMouseLeave: () => { setHover(false) },
-    style: {
-      ...wrap,
-      display: 'flex',
-      alignItems: 'flex-start',
-      gap: 8,
-      padding: '6px 8px',
-      borderRadius: 8,
-      background: hover ? 'var(--dsw-alias-bg-module, #1f1f1f)' : 'transparent',
-      color: 'inherit',
-      textDecoration: 'none',
-    },
-  },
+  const href = hit.url === undefined ? undefined : safeHref(hit.url)
+  const title = cleanSourceTitle(hit.title) || hit.site || hit.url || hit.title
+  const body = [
     h('span', {
+      key: 'n',
       style: {
         flex: '0 0 auto',
         width: 16,
@@ -276,8 +259,8 @@ function SearchHitCard({
         fontVariantNumeric: 'tabular-nums',
       },
     }, String(index + 1)),
-    h(SiteMark, { site: hit.site, title: hit.title }),
-    h('span', { style: { ...wrap, minWidth: 0, flex: 1 } },
+    h(SiteMark, { key: 'm', site: hit.site, title }),
+    h('span', { key: 't', style: { ...wrap, minWidth: 0, flex: 1 } },
       h('span', {
         style: {
           display: 'block',
@@ -289,7 +272,7 @@ function SearchHitCard({
           whiteSpace: 'nowrap',
           color: PRIMARY,
         },
-      }, hit.title),
+      }, title),
       hit.snippet !== undefined
         ? h('span', {
           style: {
@@ -306,7 +289,29 @@ function SearchHitCard({
         }, hit.snippet)
         : null,
     ),
-  )
+  ]
+  const style = {
+    ...wrap,
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: '6px 8px',
+    borderRadius: 8,
+    background: hover ? surface.layer2 : 'transparent',
+    color: 'inherit',
+    textDecoration: 'none',
+  } as const
+  if (href === undefined) {
+    return h('div', { style }, ...body)
+  }
+  return h('a', {
+    href,
+    target: '_blank',
+    rel: 'noreferrer',
+    onMouseEnter: () => { setHover(true) },
+    onMouseLeave: () => { setHover(false) },
+    style,
+  }, ...body)
 }
 
 function safeHref(url: string): string | undefined {
@@ -318,6 +323,56 @@ function safeHref(url: string): string | undefined {
   }
 }
 
+function sourceHeader(
+  title: string,
+  site: string | undefined,
+  href: string | undefined,
+): ReactNode {
+  const inner = [
+    h(SiteMark, { key: 'm', site, title }),
+    h('span', { key: 't', style: { ...wrap, minWidth: 0, flex: 1 } },
+      h('span', {
+        style: {
+          display: 'block',
+          overflow: 'hidden',
+          fontSize: 12,
+          lineHeight: '18px',
+          fontWeight: 510,
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: PRIMARY,
+        },
+      }, title),
+      site !== undefined
+        ? h('span', {
+          style: {
+            display: 'block',
+            overflow: 'hidden',
+            marginTop: 2,
+            fontSize: 12,
+            lineHeight: '16px',
+            color: MUTED,
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          },
+        }, site)
+        : null,
+    ),
+  ]
+  const style = {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: '8px 10px',
+    background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #24242e) 55%, transparent)',
+    color: 'inherit',
+    textDecoration: 'none',
+    borderBottom: `0.5px solid ${line.subtle}`,
+  } as const
+  if (href === undefined) return h('div', { style }, ...inner)
+  return h('a', { href, target: '_blank', rel: 'noreferrer', style }, ...inner)
+}
+
 function FetchPageCard({
   page,
   t,
@@ -325,18 +380,10 @@ function FetchPageCard({
   page: FetchPage
   t: CeoProcessTimelineProps['t']
 }): ReactNode {
-  const title = page.title || page.site || page.url
+  const title = cleanSourceTitle(page.title) || page.site || page.url
   const href = page.url === '' ? undefined : safeHref(page.url)
-  const headerStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 8,
-    padding: '8px 10px',
-    background: 'var(--dsw-alias-bg-module, #1f1f1f)',
-    color: 'inherit',
-    textDecoration: 'none',
-    borderBottom: page.preview === '' ? 0 : '0.5px solid var(--dsw-alias-border-l2, #2a2a2a)',
-  }
+  const hits = page.hits ?? []
+  const body = page.preview.replace(/\n+$/, '')
   return h('div', {
     'data-magic-ceo-fetch-page': true,
     style: {
@@ -344,71 +391,158 @@ function FetchPageCard({
       overflow: 'hidden',
       marginTop: 4,
       marginLeft: 22,
-      border: '0.5px solid var(--dsw-alias-border-l2, #2a2a2a)',
-      borderRadius: 8,
+      border: `0.5px solid ${line.subtle}`,
+      borderRadius: 10,
+      background: surface.layer2,
     },
   },
-    h(href === undefined ? 'div' : 'a', {
-      ...href === undefined ? {} : { href, target: '_blank', rel: 'noreferrer' },
-      style: headerStyle,
+    sourceHeader(title, page.site, href),
+    hits.length > 0
+      ? h('div', {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          maxHeight: 288,
+          overflowY: 'auto',
+          padding: '4px 4px 8px',
+        },
+      }, hits.map((hit, index) => h(SearchHitCard, {
+        key: `${hit.url ?? hit.title}-${String(index)}`,
+        hit,
+        index,
+      })))
+      : h('div', {
+        style: {
+          ...wrap,
+          maxHeight: 288,
+          overflow: 'auto',
+          padding: '8px 12px 10px',
+          fontSize: 12,
+          lineHeight: '18px',
+          color: ink.secondary,
+          background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-1, #1c1c24) 70%, transparent)',
+        },
+      }, body === ''
+        ? h('span', { style: { color: MUTED } }, t('process.fetch.empty'))
+        : h('pre', {
+          style: {
+            margin: 0,
+            fontFamily: 'inherit',
+            fontSize: 'inherit',
+            lineHeight: 'inherit',
+            whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+            color: 'inherit',
+          },
+        }, body)),
+  )
+}
+
+function FetchSourceCollection({
+  steps,
+  t,
+}: {
+  steps: Array<Extract<CeoProcessStep, { kind: 'tool' }>>
+  t: CeoProcessTimelineProps['t']
+}): ReactNode {
+  const running = steps.some(step => step.status === 'running')
+  const [open, setOpen] = useState(running)
+  const errors = steps.filter(step => step.status === 'error').length
+  const elapsed = useRunningElapsed(running)
+  const pages = steps.map(step => parseFetchPage(step.result, step.args))
+  const title = t('process.fetch.collection', { count: steps.length })
+  const runningHint = running
+    ? [t('process.tool.running'), elapsed >= 1 ? `${String(elapsed)}s` : null]
+      .filter((item): item is string => item !== null && item !== '')
+      .join(' · ')
+    : ''
+  return h('div', {
+    'data-magic-ceo-fetch-collection': true,
+    style: { ...wrap, display: 'flex', flexDirection: 'column', gap: 2 },
+  },
+    h('button', {
+      type: 'button',
+      onClick: () => { setOpen(current => !current) },
+      style: {
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 8,
+        width: '100%',
+        minWidth: 0,
+        padding: 0,
+        border: 0,
+        background: 'transparent',
+        color: MUTED,
+        cursor: 'pointer',
+        fontSize: 13,
+        lineHeight: '20px',
+        fontWeight: 400,
+        textAlign: 'left',
+      },
     },
-      h(SiteMark, { site: page.site, title }),
-      h('span', { style: { ...wrap, minWidth: 0, flex: 1 } },
+      h(ToolGlyph, { kind: 'globe' }),
+      h('span', { style: { minWidth: 0, flex: 1, overflow: 'hidden' } },
         h('span', {
           style: {
-            display: 'block',
+            display: 'flex',
+            alignItems: 'center',
+            minWidth: 0,
             overflow: 'hidden',
-            fontSize: 12,
-            lineHeight: '18px',
-            fontWeight: 510,
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            color: PRIMARY,
           },
-        }, title),
-        page.site !== undefined
+        },
+          h('span', {
+            style: {
+              flex: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            },
+          }, title),
+          errors > 0
+            ? h('span', { style: { marginLeft: 6, color: DANGER } }, `${String(errors)} failed`)
+            : null,
+          running ? h(RunningDot) : null,
+          h(Chevron, { open }),
+        ),
+        runningHint !== ''
           ? h('span', {
             style: {
               display: 'block',
               overflow: 'hidden',
-              marginTop: 2,
               fontSize: 12,
               lineHeight: '16px',
               color: MUTED,
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             },
-          }, page.site)
+          }, runningHint)
           : null,
       ),
-      page.statusCode === undefined
-        ? null
-        : h('span', {
-          style: {
-            flex: '0 0 auto',
-            marginTop: 1,
-            fontSize: 11,
-            lineHeight: '16px',
-            color: MUTED,
-            fontVariantNumeric: 'tabular-nums',
-          },
-        }, `${t('process.fetch.http')} ${String(page.statusCode)}`),
     ),
-    page.preview === ''
-      ? null
-      : h('div', {
+    open
+      ? h('div', {
         style: {
-          ...wrap,
-          maxHeight: 288,
-          overflow: 'auto',
-          padding: '8px 10px',
-          fontSize: 12,
-          lineHeight: '18px',
-          color: 'var(--dsw-alias-label-secondary, #c8c8c8)',
-          whiteSpace: 'pre-wrap',
-          background: 'color-mix(in srgb, var(--dsw-alias-bg-module, #1f1f1f) 45%, transparent)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          maxHeight: 384,
+          overflowY: 'auto',
+          padding: '0 4px 4px 8px',
         },
-      }, page.preview),
+      }, pages.map((page, index) => h(SearchHitCard, {
+        key: `${page.url}-${String(index)}`,
+        hit: {
+          title: cleanSourceTitle(page.title) || page.site || page.url,
+          url: page.url === '' ? undefined : page.url,
+          snippet: page.snippet ?? (page.hits === undefined ? page.preview : undefined),
+          site: page.site,
+        },
+        index,
+      })))
+      : null,
   )
 }
 
@@ -429,7 +563,7 @@ function SiteMark({ site, title }: { site?: string; title: string }): ReactNode 
       height: 16,
       marginTop: 2,
       borderRadius: 99,
-      background: 'var(--dsw-alias-bg-module-platform, #161616)',
+      background: surface.layer3,
       color: MUTED,
       fontSize: 10,
       fontWeight: 510,
@@ -453,9 +587,9 @@ function ToolStep({
   step: Extract<CeoProcessStep, { kind: 'tool' }>
   t: CeoProcessTimelineProps['t']
 }): ReactNode {
-  const [open, setOpen] = useState(false)
   const isSearch = step.name === 'web_search'
   const isFetch = step.name === 'web_fetch'
+  const [open, setOpen] = useState(isSearch || isFetch)
   const running = step.status === 'running'
   const elapsed = useRunningElapsed(running)
   const label = toolDisplayName(step.name)
@@ -474,7 +608,7 @@ function ToolStep({
     ? step.status !== 'running' && (query !== '' || hits.length > 0 || (step.result !== undefined && step.result.trim() !== ''))
     : isFetch
       ? page !== undefined && (page.url !== '' || page.preview !== '')
-      : step.result !== undefined && step.result.trim() !== ''
+      : step.result !== undefined && step.result.trim() !== '' && looksLikeStructuredDump(step.result) === false
   const meta = running || failed
     ? undefined
     : search?.empty === true
@@ -620,6 +754,7 @@ function ToolStep({
       : open && isFetch && page !== undefined
         ? h(FetchPageCard, { page, t })
         : open && step.result && isSearch === false && isFetch === false
+          && looksLikeStructuredDump(step.result) === false
           ? h('div', {
             style: {
               ...wrap,
@@ -628,7 +763,7 @@ function ToolStep({
               paddingLeft: 22,
               fontSize: 12,
               lineHeight: '18px',
-              color: failed ? DANGER : 'var(--dsw-alias-label-secondary, #c8c8c8)',
+              color: failed ? DANGER : ink.secondary,
               whiteSpace: 'pre-wrap',
             },
           }, step.result)
@@ -732,17 +867,36 @@ export function CeoProcessTimeline({
     }))
     reasoning = []
   }
-  for (const [index, step] of steps.entries()) {
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index]!
     if (step.kind === 'reasoning') {
       reasoning.push(step.text)
       continue
     }
     flushReasoning(false)
     if (step.kind === 'tool') {
+      if (step.name === 'web_fetch') {
+        const grouped: Array<Extract<CeoProcessStep, { kind: 'tool' }>> = [step]
+        while (index + 1 < steps.length) {
+          const next = steps[index + 1]
+          if (next === undefined || next.kind !== 'tool' || next.name !== 'web_fetch') break
+          index += 1
+          grouped.push(next)
+        }
+        nodes.push(grouped.length >= 2
+          ? h(FetchSourceCollection, {
+            key: `fetch-group-${grouped[0]!.toolCallId}`,
+            steps: grouped,
+            t,
+          })
+          : h(ToolStep, { key: `tool-${step.toolCallId}-${String(index)}`, step, t }))
+        continue
+      }
       nodes.push(h(ToolStep, { key: `tool-${step.toolCallId}-${String(index)}`, step, t }))
       continue
     }
     if (hideReportContent && looksLikeMemberReport(step.text)) continue
+    if (hideReportContent && looksLikeStructuredDump(step.text)) continue
     nodes.push(h('div', {
       key: `content-${String(index)}`,
       'data-magic-ceo-process-content': true,

@@ -114,6 +114,67 @@ test('folds a turn of ceo_delegate events into one visible team node', () => {
   assert.equal(node?.data.members[0]?.status, 'ok')
 })
 
+test('matches ceo_replan without replacing the existing roster', () => {
+  const startMatch = {
+    event: { type: 'turn/start', seq: 1, data: { turn: 4 } },
+    role: 'start',
+    location: { kind: 'turn' },
+  }
+  let state = ceoTeamDefinition.start(undefined, startMatch)
+  state = ceoTeamDefinition.update({ state }, {
+    event: {
+      type: 'tool/call',
+      seq: 8,
+      data: {
+        turn: 4,
+        callId: 'call-1',
+        name: 'ceo_delegate',
+        arguments: JSON.stringify({
+          tasks: [{ id: 'survey', role: 'researcher', task: 'Survey options' }],
+        }),
+      },
+    },
+  })
+  assert.deepEqual(ceoTeamDefinition.match({
+    type: 'tool/call',
+    data: { turn: 4, name: 'ceo_replan', callId: 'call-2' },
+  }), { id: '4', role: 'update' })
+  const next = ceoTeamDefinition.update({ state }, {
+    event: {
+      type: 'tool/call',
+      seq: 9,
+      data: {
+        turn: 4,
+        callId: 'call-2',
+        name: 'ceo_replan',
+        arguments: JSON.stringify({ continue: [{ run_id: 'survey', answer: 'A' }] }),
+      },
+    },
+  })
+  assert.equal(next.members[0]?.task, 'Survey options')
+  assert.equal(next.members.length, 1)
+
+  const resumed = ceoTeamDefinition.update({ state: next }, {
+    event: {
+      type: 'tool/result',
+      seq: 10,
+      data: {
+        turn: 4,
+        message: {
+          source: { callId: 'call-2' },
+          content: [{
+            isError: false,
+            content: [{ type: 'text', text: 'delegated researcher (del_1_survey) as member member-1 completed' }],
+          }],
+        },
+      },
+    },
+  })
+  assert.equal(resumed.members.length, 1)
+  assert.equal(resumed.members[0]?.status, 'ok')
+  assert.equal(resumed.members[0]?.report?.status, 'completed')
+})
+
 test('projects a pre-delegation CEO plan before members exist', () => {
   const start = { event: { type: 'turn/start', seq: 1, data: { turn: 9 } }, role: 'start', location: { kind: 'turn' } }
   let state = ceoTeamDefinition.start(undefined, start)

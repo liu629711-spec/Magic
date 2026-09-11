@@ -1,5 +1,6 @@
 import { createElement as h } from 'react'
 import { parseCeoDelegateMemberId, parseCeoDelegateTasks } from '../team.ts'
+import { ink, surface } from './theme.ts'
 
 export interface CeoDelegateRowProps {
   block: {
@@ -50,8 +51,8 @@ export function CeoDelegateRow({ block, inspect, t }: CeoDelegateRowProps) {
       padding: '0 8px',
       border: 0,
       borderRadius: 8,
-      background: 'var(--dsw-alias-bg-module-platform, #161616)',
-      color: 'var(--dsw-alias-label-secondary, #c8c8c8)',
+      background: surface.layer2,
+      color: ink.secondary,
       cursor: inspect === undefined ? 'default' : 'pointer',
       textAlign: 'left',
     },
@@ -65,7 +66,7 @@ export function CeoDelegateRow({ block, inspect, t }: CeoDelegateRowProps) {
     },
   }, summary),
   h('span', {
-    style: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #9a9a9a)' },
+    style: { marginLeft: 'auto', fontSize: 11, color: ink.tertiary },
   }, memberId ?? t(`status.${status}`)),
   )
 }
