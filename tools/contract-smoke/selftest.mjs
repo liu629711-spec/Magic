@@ -60,6 +60,36 @@ function record(name, pass, detail) {
   )
 }
 
+// 用例 4（负向，漂移）：引用已删除的 layout.openDetails / details 槽、保留官方已删除的
+// 投递模式字段，漂移断言必须 FAIL；否则「静默失效」护栏对这两类历史事故失效。
+{
+  const r = contractSmoke({
+    pluginsRoot: resolve(here, 'fixtures', 'drift', 'plugins'),
+    dshRoot: realDsh,
+  })
+  const hasDeadChecker = r.findings.some(
+    (f) => f.severity === 'FAIL' && f.plugin === 'magic-ceo-ui' && f.message.includes('检查器契约'),
+  )
+  const hasDelivery = r.findings.some(
+    (f) => f.severity === 'FAIL' && f.plugin === 'magic-ceo' && f.message.includes('投递模式字段'),
+  )
+  record(
+    '负向：漂移样例必须 FAIL',
+    r.failed && hasDeadChecker && hasDelivery,
+    `检查器死契约=${hasDeadChecker}，投递模式字段=${hasDelivery}`,
+  )
+}
+
+// 用例 5（正向，漂移）：合法输入不得触发漂移断言（无假阳性）。
+{
+  const r = contractSmoke({
+    pluginsRoot: resolve(here, 'fixtures', 'good', 'plugins'),
+    dshRoot: realDsh,
+  })
+  const driftFails = r.findings.filter((f) => f.category === 'drift' && f.severity === 'FAIL')
+  record('正向：合法输入不得触发漂移断言', driftFails.length === 0, `drift FAIL=${driftFails.length}`)
+}
+
 const allPass = cases.every((c) => c.pass)
 console.log('')
 console.log(allPass ? '自检通过：护栏有效（改坏必失败，正确不误报）。' : '自检失败：护栏无效，需修复 check.mjs。')

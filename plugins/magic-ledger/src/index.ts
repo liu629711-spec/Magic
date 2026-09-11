@@ -80,6 +80,22 @@ function asStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string')
 }
 
+/**
+ * 物证/契约 id 会成为 DSH storage-json 的 per-record 落盘 key，官方强制 path-safe
+ * `[a-zA-Z0-9_-]+`（storage-json/src/per-record-unit.ts assertSafeKey）。在工具边界
+ * 就拒绝不安全 id 并给出可读报错，而不是等落盘时抛天书异常。
+ */
+const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/
+
+function assertSafeId(value: string, field: string): void {
+  if (!SAFE_ID_RE.test(value)) {
+    throw new Error(
+      `${field} '${value}' is not path-safe (must match [a-zA-Z0-9_-]+). `
+      + 'Use an ASCII id, or ask the CEO for the run\'s minted run_id.',
+    )
+  }
+}
+
 export async function apply(ctx: LedgerContext): Promise<void> {
   const facility = ctx.storageDomain
   if (facility === undefined) throw new StorageUnavailableError()
@@ -121,6 +137,7 @@ export async function apply(ctx: LedgerContext): Promise<void> {
       const raw = (args ?? {}) as Record<string, unknown>
       const runId = typeof raw.run_id === 'string' ? raw.run_id : ''
       if (runId === '') throw new Error('ledger_record_evidence requires run_id')
+      assertSafeId(runId, 'run_id')
       const contractId = typeof raw.contract_id === 'string' ? raw.contract_id : ''
       const record: EvidenceRecord = {
         id: makeEvidenceId(runId),
@@ -169,9 +186,11 @@ export async function apply(ctx: LedgerContext): Promise<void> {
       const raw = (args ?? {}) as Record<string, unknown>
       const runId = typeof raw.run_id === 'string' ? raw.run_id : ''
       if (runId === '') throw new Error('ledger_verify requires run_id')
+      assertSafeId(runId, 'run_id')
 
       let contract: DeliveryContract
       const contractId = typeof raw.contract_id === 'string' ? raw.contract_id : ''
+      if (contractId !== '') assertSafeId(contractId, 'contract_id')
       const stored = contractId !== '' ? getContract(domain, contractId) : undefined
       if (stored !== undefined) {
         contract = stored
@@ -204,6 +223,7 @@ export async function apply(ctx: LedgerContext): Promise<void> {
   // 消费方用 ctx.get('magicLedger') 可选读取，因此本服务不是硬依赖。
   const service: MagicLedgerService = {
     async putContract(contractId, contract) {
+      assertSafeId(contractId, 'contract_id')
       await recordContract(domain, contractId, normalizeContract(contract))
     },
     getContract(contractId) {

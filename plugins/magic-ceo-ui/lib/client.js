@@ -944,18 +944,19 @@ function applyCeoRunProcess(state, event) {
 function applyCeoDelegateResult(state, event) {
   const runs = parseCeoDelegateRuns(event.text);
   const batch = state.members.filter((member) => member.batchCallId === event.callId);
-  const members = state.members.map((member) => {
-    if (member.batchCallId !== event.callId) return member;
+  const members = state.members.flatMap((member) => {
+    if (member.batchCallId !== event.callId) return [member];
+    if (event.isError && member.runId === void 0 && member.memberId === void 0) return [];
     const index2 = batch.findIndex((item) => item.callId === member.callId);
     const run = runs[index2];
-    return {
+    return [{
       ...member,
       seq: event.seq,
       runId: run?.runId ?? member.runId,
       memberId: run?.memberId ?? member.memberId,
       status: event.isError ? "error" : run === void 0 ? member.status : phaseStatus(run.phase),
       report: mergeReports(member.report, run === void 0 ? void 0 : phaseReport(run.phase))
-    };
+    }];
   });
   return { ...state, members };
 }
@@ -11805,12 +11806,12 @@ var Canvas = (0, import_react5.memo)(function Canvas2(props) {
             if (node.type === "member") {
               const member = node.data.member;
               selectCeoMember(member);
-              props.openDetails();
+              props.openWorkspace();
               return;
             }
             if (node.type === "ceo") {
               selectCeoMember(null);
-              props.openDetails();
+              props.openWorkspace();
             }
           }
         },
@@ -11917,7 +11918,7 @@ function CeoTeamGraph(props) {
       }, expanded ? "\u25B4" : "\u25BE"),
       (0, import_react5.createElement)("button", {
         type: "button",
-        onClick: props.openDetails,
+        onClick: props.openWorkspace,
         title: props.t("graph.openCanvas"),
         "aria-label": props.t("graph.openCanvas"),
         style: {
@@ -11957,7 +11958,7 @@ function CeoTeamGraph(props) {
           members,
           selectedCallId: selected3?.callId,
           goalPreview,
-          openDetails: props.openDetails,
+          openWorkspace: props.openWorkspace,
           t: props.t
         })
       ) : (0, import_react5.createElement)("div", {
@@ -13572,15 +13573,16 @@ function overview(roster2, t) {
     )
   );
 }
-function CeoWorkspace({ sessionId, closeDetails, sendIntervention, t }) {
+function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
   const selected3 = (0, import_react9.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
   const roster2 = (0, import_react9.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
+  const tabActions = useTabInfo().tab.actions;
   const close = () => {
     if (selected3 !== null) {
       selectCeoMember(null);
       return;
     }
-    closeDetails();
+    tabActions.close();
   };
   const inspector = selected3 === null ? null : (0, import_react9.createElement)(CeoMemberInspector, {
     key: selected3.callId,
@@ -13891,7 +13893,7 @@ var ceoMemberReportDefinition = {
 };
 
 // src/client/register.ts
-var inject = ["uiConversation", "slots", "sessions", "locale", "layout"];
+var inject = ["uiConversation", "slots", "sessions", "locale", "sidebarRightTabs", "sidebarRight"];
 var zh = {
   "graph.title": "CEO \u7F16\u6392\u56FE",
   "graph.empty": "\u8FD8\u6CA1\u6709\u6210\u5458",
@@ -14124,6 +14126,8 @@ var en = {
   "intervene.placeholder": "\u5199\u4E0B\u65B0\u7684\u65B9\u5411\uFF0C\u4F8B\u5982\uFF1A\u805A\u7126\u4E2D\u56FD\u5E02\u573A\uFF0C\u4E0D\u8981\u6D77\u5916\u6570\u636E",
   "intervene.redirected": "\u5DF2\u91CD\u6D3E\u65B9\u5411"
 };
+var CEO_MEMBER_TAB_KIND = "magicCeoMember";
+var CEO_MEMBER_TAB_ID = "@magic/dsh-ceo-ui/member-workspace";
 function registerCeoUi(ctx, components) {
   ctx.uiConversation.events.register(ceoTeamDefinition);
   ctx.uiConversation.events.register(ceoMemberReportDefinition);
@@ -14137,13 +14141,19 @@ function registerCeoUi(ctx, components) {
     if (!result.ok) return { ok: false, error: result.error?.message };
     return { ok: true };
   };
+  const t = ctx.locale.bind("magicCeo");
+  ctx.effect(() => ctx.sidebarRightTabs.register({
+    id: CEO_MEMBER_TAB_ID,
+    kind: CEO_MEMBER_TAB_KIND,
+    title: () => t("workspace.title")
+  }), "magic-ceo-ui: member tab type");
   ctx.slots.inject("conversation.chat.node", () => ctx.slots.register({
     name: "conversation.chat.node",
     key: "ceo-team",
     locale: "magicCeo",
     inject: () => ({
-      openDetails: () => {
-        ctx.layout.openDetails();
+      openWorkspace: () => {
+        ctx.sidebarRight.openTab(CEO_MEMBER_TAB_KIND);
       }
     })
   }, components.graph));
@@ -14161,14 +14171,12 @@ function registerCeoUi(ctx, components) {
     key: "ceo_delegate",
     locale: "magicCeo"
   }, components.row));
-  ctx.slots.inject("details", () => ctx.slots.register({
-    name: "details",
-    priority: -1,
+  ctx.slots.inject("sidebar.right.pane.tab", () => ctx.slots.register({
+    name: "sidebar.right.pane.tab",
+    key: CEO_MEMBER_TAB_ID,
     locale: "magicCeo",
     inject: (sessionId) => ({
-      closeDetails: () => {
-        ctx.layout.closeDetails();
-      },
+      sessionId,
       sendIntervention: (message) => {
         void promptSession(sessionId, message);
       }

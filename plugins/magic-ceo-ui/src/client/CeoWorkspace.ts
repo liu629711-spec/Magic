@@ -20,7 +20,8 @@ import {
 
 export interface CeoWorkspaceProps {
   sessionId?: string
-  closeDetails: () => void
+  /** The right-Sidebar seat's default hook: read tab record and actions (close). */
+  useTabInfo: () => { tab: { actions: { close: () => void } } }
   /** Send a per-member intervention (halt/redirect/resume) into the parent chat. */
   sendIntervention?: (message: string) => void
   t: (key: string, params?: Record<string, unknown>) => string
@@ -282,15 +283,16 @@ function overview(
   )
 }
 
-export function CeoWorkspace({ sessionId, closeDetails, sendIntervention, t }: CeoWorkspaceProps) {
+export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }: CeoWorkspaceProps) {
   const selected = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember)
   const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster)
+  const tabActions = useTabInfo().tab.actions
   const close = () => {
     if (selected !== null) {
       selectCeoMember(null)
       return
     }
-    closeDetails()
+    tabActions.close()
   }
   const inspector = selected === null
     ? null

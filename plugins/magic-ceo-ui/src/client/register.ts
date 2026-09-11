@@ -1,6 +1,6 @@
 import { ceoMemberReportDefinition, ceoTeamDefinition } from './definition.ts'
 
-export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'layout']
+export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight']
 
 export const zh = {
   'graph.title': 'CEO 编排图',
@@ -238,7 +238,10 @@ export const en = {
 
 export interface CeoUiContext {
   uiConversation: { events: { register: (definition: unknown) => unknown } }
-  locale: { register: (ns: string, dicts: { zh: typeof zh; en: typeof en }) => () => void }
+  locale: {
+    register: (ns: string, dicts: { zh: typeof zh; en: typeof en }) => () => void
+    bind: (ns: string) => (key: string, params?: Record<string, unknown>) => string
+  }
   sessions: {
     open: (id: string) => void
     list?: { getSnapshot: () => { current?: string } }
@@ -251,13 +254,26 @@ export interface CeoUiContext {
       }
     } | undefined
   }
-  layout: { openDetails: () => void; closeDetails: () => void }
+  sidebarRightTabs: {
+    register: (definition: {
+      id: string
+      kind: string
+      title: (address: string) => string
+    }) => () => void
+  }
+  sidebarRight: {
+    openTab: (kind: string, options?: { params?: unknown }) => void
+  }
   slots: {
     inject: (name: string, factory: () => unknown) => unknown
     register: (spec: Record<string, unknown>, component: unknown) => unknown
   }
   effect: (factory: () => unknown, label: string) => unknown
 }
+
+export const CEO_MEMBER_TAB_KIND = 'magicCeoMember'
+/** The tab body registers under the definition's id (the seat is keyed by id, not kind). */
+export const CEO_MEMBER_TAB_ID = '@magic/dsh-ceo-ui/member-workspace'
 
 export function registerCeoUi(
   ctx: CeoUiContext,
@@ -275,12 +291,20 @@ export function registerCeoUi(
     if (!result.ok) return { ok: false as const, error: result.error?.message }
     return { ok: true as const }
   }
+  // Stage one of the right-Sidebar tab: what the member-workspace page type IS
+  // (no patterns ⇒ a page kind, opened by `openTab(kind)` at `sidebar://<kind>`).
+  const t = ctx.locale.bind('magicCeo')
+  ctx.effect(() => ctx.sidebarRightTabs.register({
+    id: CEO_MEMBER_TAB_ID,
+    kind: CEO_MEMBER_TAB_KIND,
+    title: () => t('workspace.title'),
+  }), 'magic-ceo-ui: member tab type')
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'ceo-team',
     locale: 'magicCeo',
     inject: () => ({
-      openDetails: () => { ctx.layout.openDetails() },
+      openWorkspace: () => { ctx.sidebarRight.openTab(CEO_MEMBER_TAB_KIND) },
     }),
   }, components.graph))
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
@@ -297,12 +321,15 @@ export function registerCeoUi(
     key: 'ceo_delegate',
     locale: 'magicCeo',
   }, components.row))
-  ctx.slots.inject('details', () => ctx.slots.register({
-    name: 'details',
-    priority: -1,
+  // Stage two of the tab: the body under the definition's id. The seat's
+  // default inject supplies `useTabInfo` (tab.actions.close, tab.navigation);
+  // the framework merges it with this spec's own inject.
+  ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+    name: 'sidebar.right.pane.tab',
+    key: CEO_MEMBER_TAB_ID,
     locale: 'magicCeo',
     inject: (sessionId: string) => ({
-      closeDetails: () => { ctx.layout.closeDetails() },
+      sessionId,
       sendIntervention: (message: string) => { void promptSession(sessionId, message) },
     }),
   }, components.workspace))

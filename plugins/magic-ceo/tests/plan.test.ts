@@ -204,3 +204,30 @@ test('a failed producer skips its dependents', async () => {
   assert.equal(results.get(plan.nodes[0]!.runId)?.phase, 'failed')
   assert.equal(results.get(plan.nodes[1]!.runId)?.phase, 'skipped')
 })
+
+test('chinese raw ids mint path-safe run_ids but keep rawId for display and deps', () => {
+  const plan = buildRunPlan(parseDelegateTasks({
+    tasks: [
+      { id: '计算员', role: '计算员', task: '算乘法' },
+      { id: '校验员', role: '校验员', task: '复核', depends_on: ['计算员'] },
+    ],
+  }), 'del_1')
+  for (const node of plan.nodes) {
+    assert.match(node.runId, /^[a-zA-Z0-9_-]+$/, `run_id ${node.runId} must be path-safe`)
+  }
+  assert.equal(plan.nodes[0]?.rawId, '计算员')
+  // depends_on 按原始 id 解析后指向铸造出来的 run_id
+  assert.equal(plan.nodes[1]?.dependsOn[0], plan.nodes[0]?.runId)
+  assert.notEqual(plan.nodes[0]?.runId, plan.nodes[1]?.runId)
+})
+
+test('punctuation-only raw ids fall back to index-based slugs without colliding', () => {
+  const plan = buildRunPlan(parseDelegateTasks({
+    tasks: [
+      { id: '计算员', role: 'a', task: 'A' },
+      { id: '测试', role: 'b', task: 'B' },
+    ],
+  }), 'del_1')
+  assert.equal(plan.nodes[0]?.runId, 'del_1_n0')
+  assert.equal(plan.nodes[1]?.runId, 'del_1_n1')
+})

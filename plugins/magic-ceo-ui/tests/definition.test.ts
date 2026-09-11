@@ -197,7 +197,7 @@ test('projects a pre-delegation CEO plan before members exist', () => {
   assert.equal(node?.data.members.length, 0)
 })
 
-test('ignores unrelated tools and keeps a failed member visible', () => {
+test('ignores unrelated tools and leaves no phantom member after a rejected delegate', () => {
   const startMatch = {
     event: { type: 'turn/start', seq: 1, data: { turn: 1 } },
     role: 'start',
@@ -244,8 +244,10 @@ test('ignores unrelated tools and keeps a failed member visible', () => {
     state,
     start: startMatch,
   })
-  assert.equal(node?.data.members.length, 1)
-  assert.equal(node?.data.members[0]?.status, 'error')
+  // 被拒的调用从未创建成员：占位被清理，画布不留幽灵"失败"节点
+  // （成员清空且无计划时 projectCeoTeam 返回 null，节点可以整体不渲染）
+  const memberCount = node?.data === undefined ? 0 : (node.data.members?.length ?? 0)
+  assert.equal(memberCount, 0)
 })
 
 test('folds a member send_message into the session roster', () => {

@@ -297,21 +297,22 @@ test('keeps structured search sources on the tool step', () => {
   assert.equal(tool.sources?.[0]?.title, 'Hearthstone')
 })
 
-test('marks a failed delegation without dropping the member', () => {
+test('a rejected delegation leaves no phantom member behind', () => {
   let state = startCeoTeam(1)
   state = applyCeoDelegateCall(state, {
     callId: 'call-1',
     seq: 1,
     argsRaw: { tasks: [{ role: 'reviewer', task: 'Review' }] },
   })
+  // 调用被拒（如未切 CEO 模式）时从未创建任何成员：占位必须被清掉。
+  // 旧行为把占位留成"失败"卡片，画布会多出一个幽灵节点，把真成员挤成重名。
   state = applyCeoDelegateResult(state, {
     callId: 'call-1',
     seq: 2,
     text: 'ceo_delegate requires CEO work mode. Use /mode ceo first.',
     isError: true,
   })
-  assert.equal(projectCeoTeam(state)?.members[0]?.status, 'error')
-  assert.equal(projectCeoTeam(state)?.members[0]?.memberId, undefined)
+  assert.equal(projectCeoTeam(state), null)
 })
 
 test('parses a structured member report and surfaces decisions', () => {
@@ -1044,4 +1045,47 @@ test('markdown-bold labeled reports parse into a compact debrief', () => {
   assert.equal(presented?.status, 'completed')
   assert.equal(reportTextFromProcess([{ kind: 'content', text: dump }]), dump)
   assert.equal(debriefSummaryOf(presented, dump).includes('**status**'), false)
+})
+
+test('a failed delegate call drops its speculative placeholder but keeps real members', () => {
+  let state = startCeoTeam(1)
+  // 第一次派工被拒（如缺计划）：占位成员进入状态
+  state = applyCeoDelegateCall(state, {
+    callId: 'call-ghost',
+    seq: 1,
+    argsRaw: { tasks: [{ id: '计算员', role: '计算员', task: '算乘法' }] },
+  })
+  // 工具结果报错，且没有铸造出任何 run/member —— 占位必须被清掉而不是留成幽灵"失败"
+  state = applyCeoDelegateResult(state, {
+    callId: 'call-ghost',
+    seq: 2,
+    text: 'Error: ceo_delegate requires a plan. Call ceo_plan first.',
+    isError: true,
+  })
+  assert.equal(state.members.length, 0)
+
+  // 真成员（已拿到 runId/memberId）在失败的调用结果里不能被误删
+  state = applyCeoDelegateCall(state, {
+    callId: 'call-real',
+    seq: 3,
+    argsRaw: { tasks: [{ id: '计算员', role: '计算员', task: '算乘法' }] },
+  })
+  state = applyCeoRunJournal(state, {
+    callId: 'call-real',
+    seq: 4,
+    runs: [{ runId: 'del_1_jisuan', rawId: '计算员', role: '计算员', task: '算乘法', dependsOn: [], phase: 'running', memberId: 'member-9' }],
+  })
+  state = applyCeoDelegateResult(state, {
+    callId: 'call-real',
+    seq: 5,
+    text: 'Error: aborted',
+    isError: true,
+  })
+  assert.equal(state.members.length, 1)
+  assert.equal(state.members[0]?.runId, 'del_1_jisuan')
+  assert.equal(state.members[0]?.memberId, 'member-9')
+
+  // 修好后同座位不再出现"XXX2"式重名显示
+  const view = projectCeoTeam(state)
+  assert.equal(view?.members.length, 1)
 })

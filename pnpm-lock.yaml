@@ -29,6 +29,18 @@ importers:
         specifier: '>=4.0.1 <5.0.0'
         version: 4.0.2
 
+  plugins/magic-ledger:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: '>=4.0.1 <5.0.0'
+        version: 4.0.2
+
+  plugins/magic-memory:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: '>=4.0.1 <5.0.0'
+        version: 4.0.2
+
   plugins/magic-work-mode:
     dependencies:
       '@deepseek-ai/cordis':

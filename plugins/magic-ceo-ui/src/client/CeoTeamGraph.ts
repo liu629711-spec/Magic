@@ -35,7 +35,7 @@ import { ink, line, surface } from './theme.ts'
 export interface CeoTeamGraphProps {
   node: { data: CeoTeamView }
   sessionId?: string
-  openDetails: () => void
+  openWorkspace: () => void
   t: (key: string, params?: Record<string, unknown>) => string
 }
 
@@ -848,7 +848,7 @@ const Canvas = memo(function Canvas(props: {
   members: readonly CeoTeamMember[]
   selectedCallId: string | undefined
   goalPreview: string
-  openDetails: () => void
+  openWorkspace: () => void
   t: Translate
 }) {
   const layout = layoutCeoTeamFlow(props.members)
@@ -987,12 +987,12 @@ const Canvas = memo(function Canvas(props: {
           if (node.type === 'member') {
             const member = (node.data as MemberNodeData).member
             selectCeoMember(member)
-            props.openDetails()
+            props.openWorkspace()
             return
           }
           if (node.type === 'ceo') {
             selectCeoMember(null)
-            props.openDetails()
+            props.openWorkspace()
           }
         },
       },
@@ -1104,7 +1104,7 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
       }, expanded ? '▴' : '▾'),
       h('button', {
         type: 'button',
-        onClick: props.openDetails,
+        onClick: props.openWorkspace,
         title: props.t('graph.openCanvas'),
         'aria-label': props.t('graph.openCanvas'),
         style: {
@@ -1142,7 +1142,7 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
               members,
               selectedCallId: selected?.callId,
               goalPreview,
-              openDetails: props.openDetails,
+              openWorkspace: props.openWorkspace,
               t: props.t,
             }),
           )

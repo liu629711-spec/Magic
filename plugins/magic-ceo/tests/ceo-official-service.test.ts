@@ -11,7 +11,7 @@
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readAgentTeams } from '../src/index.ts'
+import { officialMemberIdOf, officialMemberNameOf, readAgentTeams } from '../src/index.ts'
 
 const FULL = {
   spawnTeammate: async () => ({}),
@@ -52,4 +52,29 @@ test('只读 agentTeams，不误取别的服务名', () => {
   const seen: string[] = []
   readAgentTeams({ get: name => { seen.push(name); return undefined } })
   assert.deepEqual(seen, ['agentTeams'])
+})
+
+test('官方成员名：kebab 化、限长、可预期', () => {
+  // runId 现在铸造时已 path-safe；转名册名时统一小写 kebab 并加 m- 前缀
+  assert.equal(officialMemberNameOf('del_1789145507366_ji-suan-yuan'), 'm-del-1789145507366-ji-suan-yuan')
+  assert.equal(officialMemberNameOf('del_1_n0'), 'm-del-1-n0')
+  // 不得超 64 字符（roster.ts memberName 的上限）
+  const long = officialMemberNameOf(`del_1789145507366_${'a'.repeat(80)}`)
+  assert.ok(long.length <= 64, `name length ${long.length}`)
+  // 永远不可能是保留名 lead
+  assert.notEqual(officialMemberNameOf('lead'), 'lead')
+})
+
+test('官方成员名互不冲突（同图内 runId 唯一 ⇒ 名字唯一）', () => {
+  const a = officialMemberNameOf('del_1789145507366_alpha')
+  const b = officialMemberNameOf('del_1789145507366_beta')
+  assert.notEqual(a, b)
+})
+
+test('officialMemberIdOf：从 spawnTeammate 结果取成员会话 id', () => {
+  assert.equal(officialMemberIdOf({ member: { id: 'session-1', name: 'm-x', status: 'running' } }), 'session-1')
+  assert.equal(officialMemberIdOf({ member: { name: 'm-x' } }), undefined)
+  assert.equal(officialMemberIdOf({}), undefined)
+  assert.equal(officialMemberIdOf('nope'), undefined)
+  assert.equal(officialMemberIdOf(undefined), undefined)
 })

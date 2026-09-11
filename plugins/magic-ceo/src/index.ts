@@ -66,6 +66,8 @@ export interface CeoMember {
   runId: string
   rawId: string
   memberId?: string
+  /** 官方名册名（半改道后经 agentTeams 派出的成员才有；steer/halt 按名路由）。 */
+  officialName?: string
   parentSessionId: string
   role: string
   task: string
@@ -224,6 +226,7 @@ function toPersistedMember(member: CeoMember): PersistedMember {
     phase: member.phase,
     createdAt: member.createdAt,
     ...member.memberId === undefined ? {} : { memberId: member.memberId },
+    ...member.officialName === undefined ? {} : { officialName: member.officialName },
     ...member.steer === undefined ? {} : { steer: member.steer },
     ...member.bindAfterDeps === undefined ? {} : { bindAfterDeps: member.bindAfterDeps },
     ...member.turnSeq === undefined ? {} : { turnSeq: member.turnSeq },
@@ -242,6 +245,7 @@ function fromPersistedMember(record: PersistedMember): CeoMember {
     createdAt: record.createdAt,
   }
   if (record.memberId !== undefined) member.memberId = record.memberId
+  if (record.officialName !== undefined) member.officialName = record.officialName
   if (record.steer !== undefined) member.steer = record.steer
   if (record.bindAfterDeps !== undefined) member.bindAfterDeps = record.bindAfterDeps
   if (record.turnSeq !== undefined) member.turnSeq = record.turnSeq
@@ -695,11 +699,47 @@ export interface AgentTeamsPort {
       signal: AbortSignal
     },
   ): Promise<unknown>
-  /** 投一条**持久**消息：目标成员当前离线时排队，而不是丢弃。 */
+  /**
+   * 投一条**持久**消息：目标成员当前离线时排队，而不是丢弃。
+   * 官方请求只有 target / content / signal 三个字段——早先草稿里的投递模式字段
+   * 已被官方删除（DSH packages/experimental/agent-team/src/types.ts
+   * SendTeamMessageRequest），声明必须与官方形状一致。
+   * 投递底层是 ctx.subagents 的 steer（mailbox.ts dispatchOnce →
+   * steerHostSubagentPrompt），成员在线立即投、离线持久排队重试。
+   */
   sendMessage(
     caller: unknown,
-    request: { target: string; content: unknown[]; delivery: 'quiet' | 'wakeup'; signal: AbortSignal },
+    request: { target: string; content: unknown[]; signal: AbortSignal },
   ): Promise<unknown>
+  /** 打断一个在册成员的当前回合（按官方名册名路由），不清空其待投信箱。 */
+  interrupt?(caller: unknown, targetName: string): unknown
+}
+
+/**
+ * 官方名册成员名：lower-kebab-case、≤64 字符、不得为 "lead"
+ * （agent-team/src/roster.ts memberName）。由 runId 转换而来 —— runId 在一个
+ * 会话的图内唯一（前缀含毫秒时间戳），所以名册名天然唯一。
+ */
+export function officialMemberNameOf(runId: string): string {
+  const kebab = `m-${runId.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+  return kebab.slice(0, 64)
+}
+
+/**
+ * 从 spawnTeammate 结果里取成员的子代理会话 id。官方把成员 id 直接当
+ * continuable childId 用（roster.ts spawnAdmitted 把 childId 传给
+ * startContinuable），所以拿到 id 就能接进 residency 的回合等待。
+ */
+export function officialMemberIdOf(result: unknown): string | undefined {
+  if (typeof result !== 'object' || result === null) return undefined
+  const member = (result as { member?: unknown }).member
+  if (typeof member !== 'object' || member === null) return undefined
+  const id = (member as { id?: unknown }).id
+  return typeof id === 'string' && id.trim() !== '' ? id : undefined
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 /**
@@ -962,20 +1002,79 @@ export function apply(ctx: {
       abortMap.set(spec.runId, nodeAbort)
       try {
       if (childId === undefined) {
-        const started = await ctx.subagents.startContinuable({
-          provider: 'spawn',
-          label: spec.role,
-          request: {
-            prompt: [{ type: 'text', text: prompt }],
-            parent,
-          },
-          signal: nodeAbort.signal,
-        })
-        childId = started.childId
-        if (member !== undefined) {
-          trackMemberChild(member, childId)
-          member.phase = 'running'
+        // 半改道：官方 agentTeams 在场时走 spawnTeammate（成员进官方名册，可恢复、
+        // 可信箱投递）；官方缺席或派工失败时原样回退 startContinuable。两条路的
+        // 成员都是 continuable 子代理，官方成员 id 就是 childId（roster.ts
+        // spawnAdmitted 直接把它传给 startContinuable），residency 无需分叉。
+        const teams = readAgentTeams(ctx)
+        const officialName = officialMemberNameOf(spec.runId)
+        let spawned = false
+        if (teams !== undefined) {
+          try {
+            const result = await teams.spawnTeammate(parent, {
+              name: officialName,
+              description: spec.task.slice(0, 200),
+              prompt: [{ type: 'text', text: prompt }],
+              context: 'fresh',
+              provider: 'spawn',
+              signal: nodeAbort.signal,
+            })
+            const spawnedId = officialMemberIdOf(result)
+            if (spawnedId !== undefined) {
+              childId = spawnedId
+              spawned = true
+              if (member !== undefined) {
+                trackMemberChild(member, childId)
+                member.officialName = officialName
+                member.phase = 'running'
+              }
+            }
+          } catch (error) {
+            console.warn(`[magic-ceo] official roster spawn failed for ${spec.runId}, falling back to subagents: ${errorMessage(error)}`)
+          }
         }
+        if (!spawned) {
+          const started = await ctx.subagents.startContinuable({
+            provider: 'spawn',
+            label: spec.role,
+            request: {
+              prompt: [{ type: 'text', text: prompt }],
+              parent,
+            },
+            signal: nodeAbort.signal,
+          })
+          childId = started.childId
+          if (member !== undefined) {
+            trackMemberChild(member, childId)
+            member.phase = 'running'
+          }
+        }
+      } else if (member?.officialName !== undefined) {
+        // 官方名册成员：续派走持久信箱（按名路由，离线排队）；信箱不可用或
+        // 投递被拒时回退 subagents 直投（成员 id 即 childId，两条路等价）。
+        const teams = readAgentTeams(ctx)
+        let delivered = false
+        if (teams !== undefined) {
+          try {
+            await teams.sendMessage(parent, {
+              target: member.officialName,
+              content: [{ type: 'text', text: prompt }],
+              signal: nodeAbort.signal,
+            })
+            delivered = true
+          } catch (error) {
+            console.warn(`[magic-ceo] official mailbox steer failed for ${spec.runId}, falling back to subagents: ${errorMessage(error)}`)
+          }
+        }
+        if (!delivered) {
+          await ctx.subagents.sendMessage(
+            parent,
+            childId,
+            [{ type: 'text', text: prompt }],
+            { signal: nodeAbort.signal },
+          )
+        }
+        if (member !== undefined) member.phase = 'running'
       } else {
         await ctx.subagents.sendMessage(
           parent,
@@ -1514,7 +1613,19 @@ export function apply(ctx: {
             throw new Error(`ceo_replan halt requires a running member for ${record.run_id}`)
           }
           haltRun(node.runId)
-          ctx.subagents.interrupt?.(member.memberId, { kind: 'ancestor', agent: parent })
+          // 官方名册成员按名走官方 interrupt（名册状态机会同步）；失败或非官方
+          // 成员回退 subagents 直打断（成员 id 即 childId，两者等价）。
+          const teams = readAgentTeams(ctx)
+          let halted = false
+          if (member.officialName !== undefined && teams?.interrupt !== undefined) {
+            try {
+              teams.interrupt(parent, member.officialName)
+              halted = true
+            } catch (error) {
+              console.warn(`[magic-ceo] official interrupt failed for ${node.runId}, falling back to subagents: ${errorMessage(error)}`)
+            }
+          }
+          if (!halted) ctx.subagents.interrupt?.(member.memberId, { kind: 'ancestor', agent: parent })
           appendCeoMemberHalted(parent.session, {
             turn: graph.turn, callId: graph.callId, runId: node.runId, memberId: member.memberId, reason: 'user_stop',
           })
@@ -1533,7 +1644,17 @@ export function apply(ctx: {
           const member = graph.members.find(entry => entry.runId === node.runId)
           if (member?.memberId !== undefined) {
             haltRun(node.runId)
-            ctx.subagents.interrupt?.(member.memberId, { kind: 'ancestor', agent: parent })
+            const teams = readAgentTeams(ctx)
+            let halted = false
+            if (member.officialName !== undefined && teams?.interrupt !== undefined) {
+              try {
+                teams.interrupt(parent, member.officialName)
+                halted = true
+              } catch (error) {
+                console.warn(`[magic-ceo] official interrupt failed for ${node.runId}, falling back to subagents: ${errorMessage(error)}`)
+              }
+            }
+            if (!halted) ctx.subagents.interrupt?.(member.memberId, { kind: 'ancestor', agent: parent })
             appendCeoMemberHalted(parent.session, {
               turn: graph.turn, callId: graph.callId, runId: node.runId, memberId: member.memberId, reason: 'user_stop',
             })

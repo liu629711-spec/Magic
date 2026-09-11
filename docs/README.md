@@ -26,6 +26,7 @@
 | [V1 并行开发计划](02-实现/02-V1并行开发计划.md) | 任务怎么拆过、哪些已完成、还剩什么 |
 | [插件契约内核](02-实现/03-插件契约内核.md) | 插件怎么写：ctx 契约、存储端口、跨插件服务 |
 | [官方 Agent Teams 集成方案](02-实现/04-官方agent-team集成方案.md) | 形态 A'、为什么不挂官方工具、挂载方式 |
+| [CEO 派活改道映射](02-实现/05-CEO派活改道映射.md) | 派活改道的逐动作映射、硬缺口、动工门禁 |
 
 ## 阅读规则
 
@@ -54,15 +55,15 @@
 | `plugins/magic-work-mode` | 工作方式（代理 / CEO）与作用域 | `/mode`、`/mode once ceo` |
 | `plugins/magic-ledger` | 交付契约、物证、验收 | `ledger_*` |
 | `plugins/magic-memory` | 记忆（作用域隔离） | `magic_memory_*` |
-| `plugins/magic-ceo` | CEO 编排；派活仍走 `ctx.subagents` | `ceo_plan` / `ceo_delegate` / `ceo_replan` |
-| `plugins/magic-ceo-ui` | CEO 团队图（客户端） | 会话内画布 |
+| `plugins/magic-ceo` | CEO 编排；半改道：官方名册优先 + subagents 降级回退 | `ceo_plan` / `ceo_delegate` / `ceo_replan` |
+| `plugins/magic-ceo-ui` | CEO 团队图 + 成员工作区（官方右侧栏） | 会话内画布；点成员在右侧栏看工作区 |
 
 **有意不挂**
 
 - `plugins/magic-engineering` —— 工程暂缓，与 PRD-03 一致。
 - `tools/contract-smoke` —— 升级体检（静态契约核查）。
 
-已知活问题（不在本文展开）：成员检查器仍调用已删除的 `layout.openDetails` / `details` 槽；官方 `sendMessage` 已去掉 `delivery` 字段，但 CEO 生产路径还没改道到 `agentTeams`。
+2026-09-11 接线状态：成员工作区已迁入官方右侧栏；CEO 派活已完成**半改道**（官方名册/信箱/打断优先 + subagents 降级回退，容量对策 `maxMembers: 32`），映射与门禁见 [05 文档](02-实现/05-CEO派活改道映射.md)。
 
 ## 历史材料
 

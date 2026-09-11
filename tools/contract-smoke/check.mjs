@@ -15,7 +15,7 @@
 // 不 import 任何 @deepseek-ai/* 包；不修改 reference-project 下任何文件。
 
 import { readdirSync, statSync, readFileSync, existsSync } from 'node:fs'
-import { join, resolve, dirname } from 'node:path'
+import { join, resolve, dirname, relative } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -374,6 +374,102 @@ function relativeOf(absPath) {
   }
 }
 
+// 逐条断言 Magic 源码不再引用已被官方删除的契约（反向漂移：Magic 侧残留）。
+// 命中即 FAIL——这些引用在运行期打空方法或投递错误形状，且编译期不会报错。
+function magicSideDrift(pluginsRoot, findings) {
+  const ceoUiSrc = join(pluginsRoot, 'magic-ceo-ui', 'src')
+  if (existsSync(ceoUiSrc)) {
+    const deadContract = /\bopenDetails\b|\bcloseDetails\b|ctx\.layout\b|inject\(\s*['"]details['"]/
+    const hits = []
+    for (const f of walk(ceoUiSrc)) {
+      if (!f.endsWith('.ts') || /\/tests?\//.test(f)) continue
+      const lines = readFileSync(f, 'utf8').split('\n')
+      lines.forEach((line, i) => {
+        if (deadContract.test(line)) hits.push(`${relative(ceoUiSrc, f)}:${i + 1}`)
+      })
+    }
+    findings.push(hits.length === 0
+      ? {
+        severity: 'PASS', category: 'drift', plugin: 'magic-ceo-ui',
+        message: '未引用已删除的 layout.openDetails / details 槽（成员工作区已走官方右侧栏）',
+      }
+      : {
+        severity: 'FAIL', category: 'drift', plugin: 'magic-ceo-ui',
+        message: `仍引用官方 0.1.5 已删除的检查器契约 —— 运行期会打空 API: ${hits.join(', ')}`,
+      })
+  }
+
+  const ceoSrc = join(pluginsRoot, 'magic-ceo', 'src')
+  if (existsSync(ceoSrc)) {
+    // 官方 SendTeamMessageRequest 只有 target/content/signal；端口里再出现
+    // "delivery:" 形状的类型声明就是与官方漂移（注释里不含冒号引号组合，不会误报）。
+    const deliveryDecl = /\bdelivery\s*:\s*['"]/
+    const hits = []
+    for (const f of walk(ceoSrc)) {
+      if (!f.endsWith('.ts') || /\/tests?\//.test(f)) continue
+      const lines = readFileSync(f, 'utf8').split('\n')
+      lines.forEach((line, i) => {
+        if (deliveryDecl.test(line)) hits.push(`${relative(ceoSrc, f)}:${i + 1}`)
+      })
+    }
+    findings.push(hits.length === 0
+      ? {
+        severity: 'PASS', category: 'drift', plugin: 'magic-ceo',
+        message: 'AgentTeamsPort 声明与官方一致（无投递模式字段）',
+      }
+      : {
+        severity: 'FAIL', category: 'drift', plugin: 'magic-ceo',
+        message: `AgentTeamsPort 声明了官方已删除的投递模式字段 —— 改道时会发错形状: ${hits.join(', ')}`,
+      })
+  }
+}
+
+// 正向漂移：官方如果哪天改回了旧形状（例如恢复投递模式字段），也要 alarms，
+// 提醒 Magic 重新对齐端口声明。DSH 缺席时跳过（不阻塞无 DSH 环境的体检）。
+function dshSideDrift(dshRoot, findings) {
+  const typesPath = join(dshRoot, 'packages', 'experimental', 'agent-team', 'src', 'types.ts')
+  if (!existsSync(typesPath)) return
+  const content = readFileSync(typesPath, 'utf8')
+  const m = /interface\s+SendTeamMessageRequest\s*\{/.exec(content)
+  if (!m) {
+    findings.push({
+      severity: 'WARN', category: 'drift', plugin: null,
+      message: 'DSH types.ts 里找不到 SendTeamMessageRequest —— 官方消息契约可能已重构，待人工核查',
+    })
+    return
+  }
+  const body = sliceToMatchingBrace(content, m.index + m[0].length)
+  findings.push(/\bdelivery\b/.test(body)
+    ? {
+      severity: 'FAIL', category: 'drift', plugin: null,
+      message: '官方 SendTeamMessageRequest 重新出现了投递模式字段 —— Magic 的端口声明与映射文档（docs/02-实现/05）需要重新对齐',
+    }
+    : {
+      severity: 'PASS', category: 'drift', plugin: null,
+      message: '官方 SendTeamMessageRequest 仍无投递模式字段（与 Magic 端口声明一致）',
+    })
+  // 半改道的地基：官方成员 id 必须仍是 SessionId（成员 = continuable 子代理，
+  // residency 靠它接 waitForChildTurn）。官方若改掉这一形状，半改道前提失效。
+  const viewMatch = /interface\s+TeamMemberView\s*\{/.exec(content)
+  if (!viewMatch) {
+    findings.push({
+      severity: 'WARN', category: 'drift', plugin: null,
+      message: 'DSH types.ts 里找不到 TeamMemberView —— 官方名册视图可能已重构，待人工核查',
+    })
+    return
+  }
+  const viewBody = sliceToMatchingBrace(content, viewMatch.index + viewMatch[0].length)
+  findings.push(/readonly\s+id:\s*SessionId/.test(viewBody)
+    ? {
+      severity: 'PASS', category: 'drift', plugin: null,
+      message: '官方 TeamMemberView.id 仍是 SessionId（半改道前提成立：成员 id 即子代理 childId）',
+    }
+    : {
+      severity: 'FAIL', category: 'drift', plugin: null,
+      message: '官方 TeamMemberView.id 不再是 SessionId —— 成员与子代理的等价性失效，residency 桥接需要重新设计',
+    })
+}
+
 // 主入口：组装所有信息并产出结果对象。fn 之外不碰任何文件。
 export function contractSmoke(opts) {
   const pluginsRoot = resolve(opts.pluginsRoot)
@@ -403,6 +499,9 @@ export function contractSmoke(opts) {
   for (const pd of pluginDirs) {
     analyzePlugin(pd, { available, sources, findings })
   }
+
+  magicSideDrift(pluginsRoot, findings)
+  dshSideDrift(dshRoot, findings)
 
   const failCount = findings.filter((f) => f.severity === 'FAIL').length
   const warnCount = findings.filter((f) => f.severity === 'WARN').length

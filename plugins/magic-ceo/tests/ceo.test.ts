@@ -19,7 +19,7 @@ function journalSession(id: string) {
   }
 }
 
-function harness(mode: 'agent' | 'ceo' = 'ceo') {
+function harness(mode: 'agent' | 'ceo' = 'ceo', extra: Record<string, unknown> = {}) {
   resetCeoStateForTests()
 
   const sections: Array<{
@@ -87,6 +87,7 @@ function harness(mode: 'agent' | 'ceo' = 'ceo') {
     on: (_event, listener) => {
       listeners.push(listener as (session: { id: string }, event: unknown) => void)
     },
+    ...extra,
   })
 
   const emitChild = (id: string, event: { type: string; seq: number; data: unknown }) => {
@@ -761,4 +762,94 @@ test('keeps queued journal nodes after restart so they can be redispatched', () 
   }
   assert.equal(last.runs[0]?.phase, 'unknown_after_restart')
   assert.equal(last.runs[1]?.phase, 'queued')
+})
+
+test('official roster spawn is preferred and its member id becomes the child id', async () => {
+  const spawnedOfficial: Array<{ name: string; description: string; prompt: string }> = []
+  const officialMessages: Array<{ target: string; text: string }> = []
+  const officialInterrupts: string[] = []
+  let officialSeq = 0
+  const fakeTeams = {
+    spawnTeammate: async (_caller: unknown, request: { name: string; description: string; prompt: Array<{ type: string; text: string }> }) => {
+      officialSeq += 1
+      spawnedOfficial.push({ name: request.name, description: request.description, prompt: request.prompt[0]?.text ?? '' })
+      return { member: { id: `official-${String(officialSeq)}`, name: request.name, status: 'running' } }
+    },
+    sendMessage: async (_caller: unknown, request: { target: string; content: Array<{ type: string; text: string }> }) => {
+      officialMessages.push({ target: request.target, text: request.content[0]?.text ?? '' })
+      return { messageId: 'tm-1', status: 'accepted' }
+    },
+    interrupt: (_caller: unknown, targetName: string) => {
+      officialInterrupts.push(targetName)
+    },
+  }
+  const { tool, plan, started, emitChild } = harness('ceo', { get: (name: string) => (name === 'agentTeams' ? fakeTeams : undefined) })
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+
+  await recordPlan(plan, [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+    { role: 'reviewer', task: 'List risks', id: 'risks' },
+  ], session)
+
+  const pending = delegate.execute(
+    {
+      tasks: [
+        { role: 'researcher', task: 'Survey options', id: 'survey' },
+        { role: 'reviewer', task: 'List risks', id: 'risks' },
+      ],
+    },
+    { agent: { session }, signal: new AbortController().signal },
+  )
+  await Promise.resolve()
+  await Promise.resolve()
+  // 两个成员都走了官方名册，没有走 startContinuable
+  assert.equal(started.length, 0)
+  assert.equal(spawnedOfficial.length, 2)
+  assert.match(spawnedOfficial[0]?.name ?? '', /^m-del-[0-9]+-survey$/)
+  assert.match(spawnedOfficial[1]?.name ?? '', /^m-del-[0-9]+-risks$/)
+  assert.ok((spawnedOfficial[0]?.description.length ?? 0) <= 200)
+  // 官方成员 id 就是 childId：回合事件按它送达（先结构化自报，再收尾）
+  for (const id of ['official-1', 'official-2']) {
+    emitChild(id, { type: 'assistant/message', seq: 1, data: { message: { content: [{ type: 'text', text: 'status: completed\ndone: done' }] } } })
+    emitChild(id, { type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } })
+  }
+  const result = await pending
+  assert.equal(result.runs.length, 2)
+  // 同一波次完成顺序不定，断言集合而非顺序
+  assert.deepEqual(result.runs.map(run => run.memberId).sort(), ['official-1', 'official-2'])
+  for (const run of result.runs) assert.equal(run.phase, 'completed')
+})
+
+test('official spawn failure falls back to subagents and the graph still completes', async () => {
+  const fakeTeams = {
+    spawnTeammate: async () => {
+      throw new Error('Team member limit 8 reached')
+    },
+    sendMessage: async () => {
+      throw new Error('mailbox unavailable')
+    },
+  }
+  const { tool, plan, started, release } = harness('ceo', { get: (name: string) => (name === 'agentTeams' ? fakeTeams : undefined) })
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+
+  await recordPlan(plan, [
+    { role: 'researcher', task: 'Survey options', id: 'survey' },
+  ], session)
+
+  const pending = delegate.execute(
+    { tasks: [{ role: 'researcher', task: 'Survey options', id: 'survey' }] },
+    { agent: { session }, signal: new AbortController().signal },
+  )
+  await Promise.resolve()
+  await Promise.resolve()
+  // 官方派工失败 ⇒ 回退 startContinuable
+  assert.equal(started.length, 1)
+  release.get('member-1')?.()
+  const result = await pending
+  assert.equal(result.runs.length, 1)
+  assert.equal(result.runs[0]?.phase, 'completed')
 })

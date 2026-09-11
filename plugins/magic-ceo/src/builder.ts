@@ -123,10 +123,17 @@ export function appendTasksToPlan(plan: RunPlan, tasks: readonly DelegateTask[],
     seen.add(rawId)
   }
 
-  const minted = (raw: string) => `${prefix}_${raw}`
+  // run_id 会成为账本物证的落盘 key（ev_<runId>_<ts>），而 DSH storage-json 的
+  // per-record key 强制 path-safe [a-zA-Z0-9_-]+（storage-json/src/per-record-unit.ts
+  // assertSafeKey）。模型给的节点 id 可能是任意文本（如中文座位名），铸造时 ASCII 化；
+  // rawId 原样保留用于显示和 depends_on 解析。
+  const minted = (raw: string, index: number): string => {
+    const slug = raw.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    return `${prefix}_${slug === '' ? `n${String(index)}` : slug}`
+  }
   for (const [index, task] of tasks.entries()) {
     const rawId = rawIds[index]!
-    const runId = minted(rawId)
+    const runId = minted(rawId, index)
     if (plan.byId(runId) !== undefined) {
       throw new RunPlanError(`duplicate run_id: ${runId}`)
     }
@@ -141,7 +148,7 @@ export function appendTasksToPlan(plan: RunPlan, tasks: readonly DelegateTask[],
   for (const [index, task] of tasks.entries()) {
     const rawId = rawIds[index]!
     const spec: RunSpec = {
-      runId: minted(rawId),
+      runId: minted(rawId, index),
       rawId,
       role: task.role,
       task: task.task,

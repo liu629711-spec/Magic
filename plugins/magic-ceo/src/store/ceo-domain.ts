@@ -40,6 +40,8 @@ export interface PersistedMember {
   runId: string
   rawId: string
   memberId?: string
+  /** 官方名册名（半改道后经 agentTeams 派出的成员才有；steer/halt 按名路由）。 */
+  officialName?: string
   parentSessionId: string
   role: string
   task: string

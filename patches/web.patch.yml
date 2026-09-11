@@ -64,7 +64,10 @@
     - id: agent-team
       name: ../reference-project/deepseek-harness/packages/experimental/agent-team/lib/index.js
       config:
-        maxMembers: 8
+        # maxMembers 是官方名册的成员名上限。半改道后 CEO 成员经 spawnTeammate
+        # 进名册，replace/redirect 会为同一座位派新成员且官方没有退役 API
+        # （docs/02-实现/05-CEO派活改道映射.md §4），旧条目会堆积，所以要给足余量。
+        maxMembers: 32
         maxTasks: 256
         maxPendingMessagesPerMember: 64
         maxMessageBytes: 65536

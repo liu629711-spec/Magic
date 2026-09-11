@@ -1112,18 +1112,22 @@ export function applyCeoDelegateResult(
 ): CeoTeamState {
   const runs = parseCeoDelegateRuns(event.text)
   const batch = state.members.filter(member => member.batchCallId === event.callId)
-  const members = state.members.map(member => {
-    if (member.batchCallId !== event.callId) return member
+  const members = state.members.flatMap(member => {
+    if (member.batchCallId !== event.callId) return [member]
+    // 调用失败且从没拿到过 run/member 编号的占位成员是凭空预支的——那次调用
+    // 没创建任何成员，留着的"失败"卡片只是幽灵（画布会多出一个同名座位，把
+    // 真成员挤成"XXX2"）。已拿到编号的条目说明成员真实存在，走常规更新。
+    if (event.isError && member.runId === undefined && member.memberId === undefined) return []
     const index = batch.findIndex(item => item.callId === member.callId)
     const run = runs[index]
-    return {
+    return [{
       ...member,
       seq: event.seq,
       runId: run?.runId ?? member.runId,
       memberId: run?.memberId ?? member.memberId,
       status: event.isError ? 'error' as const : (run === undefined ? member.status : phaseStatus(run.phase)),
       report: mergeReports(member.report, run === undefined ? undefined : phaseReport(run.phase)),
-    }
+    }]
   })
   return { ...state, members }
 }

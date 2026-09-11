@@ -22,7 +22,7 @@ dsh: 0.1.5-rc.2 / c291e7961a
 
 **为什么这么切**：官方工具只是薄适配器（`tool-agent-team/src/index.ts` 的 `send_message` 转发 `ctx.agentTeams.sendMessage`）。挂不挂工具，只决定「模型能不能自己按到按钮」，不改变服务能力。挂工具的代价是全局的，见 §6。
 
-**现状（不要读成已经改道）**：Magic CEO 生产派活仍是 `ctx.subagents.startContinuable` / `sendMessage` / `interrupt`（`plugins/magic-ceo/src/index.ts:965`）。`readAgentTeams` 只探测 `ctx.get('agentTeams')`，不写进 `inject`。官方服务在场时日志打 `available`，缺席时 `delegation stays on dsh subagents`。
+**现状（2026-09-11 半改道已实施）**：官方服务在场时，CEO 成员经 `spawnTeammate` 派出（名册名 `officialMemberNameOf(runId)`，成员 id 即 childId）；续派走官方信箱按名路由；halt 走官方 interrupt。官方缺席或任何失败时，三条路各自原样回退 `ctx.subagents` 等价调用（`plugins/magic-ceo/src/index.ts` 派工循环）。
 
 ## 2. 挂载证据【已核实】
 
@@ -100,7 +100,7 @@ CodeGraph：`spawnTeammate` 的生产调用方是 `tool-agent-team` 的 `install
 | **服务层** | 不冲突 | `TeamService` 与 Magic CEO 都站在 `ctx.subagents` 之上；各 provide 各的 |
 | **工具层** | A' 下无冲突 | 不挂 `tool-agent-team`，模型可见面仍是 Magic 的 `ceo_*` |
 | **config 层** | A' 下无需关原生工具 | 本 web profile 下 `tool-subagent-control` 等已被 `@deepseek-ai/dsh-web-app` 关掉 |
-| **UI 层** | **有活漂移** | Magic 挂 `details` + `openDetails`；官方根槽是 `rightbar`。见 §7 |
+| **UI 层** | 已对齐（2026-09-11） | Magic 成员工作区已迁入官方右侧栏；`details` / `openDetails` 全部移除。见 §7.5 |
 
 官方 host profile 里「先关原生、再挂工具」针对的是 `dsh-base`（原生工具开启的 profile）。换 profile 时需重新核实。
 
@@ -123,7 +123,7 @@ CodeGraph：`spawnTeammate` 的生产调用方是 `tool-agent-team` 的 `install
 | 团队图 | `magic-ceo-ui` | **保留**；检查器槽位必须先改 |
 | 记忆 | `magic-memory` | **保留** |
 
-> 退役 `residency` 前必须证明官方 `waitForChange`（等团队域变化）能覆盖 Magic 的 `waitForChildTurn`（等成员回合结束）。两者不等价。**待技术核查。**
+> ~~退役 `residency` 前必须证明官方 `waitForChange` 能覆盖 `waitForChildTurn`~~ **已核查（2026-09-11）：覆盖不了**——`waitForChange` 只返回 `{ timedOut }`（`agent-team/src/types.ts:249-252`），且 `TeamMemberView` 没有成员产出字段（`types.ts:58-67`），Magic 的波次推进和验收都要吃回合产出。结论：residency 不退役，收窄为「座位 ↔ member.id」映射；官方成员 id 就是子代理 childId（`roster.ts:281-290` 把 `childId` 直接传给 `startContinuable`）。详见 05 文档 §6。
 
 ### 5.3 状态归属
 
@@ -153,8 +153,8 @@ CodeGraph：`spawnTeammate` 的生产调用方是 `tool-agent-team` 的 `install
 1. **experimental 无支持承诺**：组 README 写明 contracts can change；五包虽已发布，仍标 opt-in exception。DSH 公共 API 仍 pre-stable。
 2. **路径挂载绑目录结构**：`packages/experimental/*/lib/index.js` 被官方挪走，patch 即失效。`lib/` 还依赖本机构建或拷贝。
 3. **官方数据模型更窄**：成员创建后不可变；任务 revision 必须 CAS。Magic 的 ledger 不能去改官方任务字段。
-4. **`AgentTeamsPort` 过期**：Magic 仍声明 `delivery: 'quiet'|'wakeup'`（`plugins/magic-ceo/src/index.ts:699-701`）。官方已删除该字段。探测仍通过；改道会发错形状。
-5. **检查器挂空槽**：`magic-ceo-ui` 声明 `layout.openDetails/closeDetails` 并 `slots.inject('details')`（`register.ts:254,283,300-308`）。官方 `ILayout` 只有 `openRightbar/closeRightbar`（`ui-layout/src/client/service.ts:28-51`）。根槽：`sidebar` / `main` / `rightbar` / `shell.overlay`（`index.ts:151-155`）。CodeGraph 查 `openDetails`：生产符号 0 命中。画布能画；点节点打开工作区会打空方法。**未改代码，待裁定交互。**
+4. **`AgentTeamsPort` 过期**：~~Magic 仍声明 `delivery: 'quiet'|'wakeup'`~~ 已对齐（2026-09-11）：声明改为 `{ target, content, signal }`（`plugins/magic-ceo/src/index.ts:698-706`），与官方 `types.ts:159-163` 一致；契约体检有双向断言（Magic 端不得复活该字段，官方若恢复会报警）。生产派活仍走 `ctx.subagents`，改道映射见 `05-CEO派活改道映射.md`。
+5. **~~检查器挂空槽~~ 已修复（2026-09-11）**：成员工作区迁入官方右侧栏。接法照搬 `ui-sidebar-documentpreview` 的公开两段式：页面型 tab 定义（无 patterns）进 `ctx.sidebarRightTabs`，面板体进 keyed `sidebar.right.pane.tab` 槽（key = 定义 id，`ui-sidebar-right/src/client/index.ts:184-193` 范例）；打开走 `ctx.sidebarRight.openTab(kind)`（`service.ts:257-263`），重复打开同一 kind 会把新导航参数记到已有 tab（`service.ts:322-342` 的 `tabDomain.navigate`）；面板体经座位默认注入拿 `useTabInfo`（`tab-info.ts:30-54`），关闭用 `tab.actions.close()`。web profile 确认加载该包（`packages/bundle/web-app/cordis.patch.yml:224-225`）。
 
 ## 8. 阶段
 
@@ -163,13 +163,13 @@ CodeGraph：`spawnTeammate` 的生产调用方是 `tool-agent-team` 的 `install
 | P1 路径挂载服务 + 面板 | patch 已指向 git checkout | ✅ |
 | P2 形态 A' | 不挂 `tool-agent-team` | ✅ |
 | P3 只读探测 | `readAgentTeams` + 8 个单测 | ✅；派活改道未做 |
-| P4 退役 residency / 收窄 `magic_ceo` | 先证明 `waitForChange` 覆盖 `waitForChildTurn` | 待裁定 + 待核查 |
-| P5 契约体检覆盖路径与服务面形状 | 含「无 `delivery`」「无 `openDetails`」 | 待做 |
-| P6 检查器迁槽 | `rightbar` 或画布内面板 | 待裁定 |
+| P4 退役 residency / 收窄 `magic_ceo` | 已核实 `waitForChange` **覆盖不了** `waitForChildTurn`（官方无成员产出捕获）；**半改道已实施（2026-09-11）**：官方名册 spawn / 信箱 steer / interrupt 优先 + 三路降级回退，residency 收窄为「座位 ↔ member.id/officialName」映射 | ✅ 实施完成，门禁见 05 文档 §8 |
+| P5 契约体检覆盖路径与服务面形状 | 漂移断言已加：Magic 端不得引用 `openDetails` / `details` 槽 / 投递模式字段，官方 `SendTeamMessageRequest` 恢复字段会报警（含 selftest 负向 fixtures） | ✅ |
+| P6 检查器迁槽 | 已裁定官方右侧栏并实施 | ✅ |
 
 ## 9. 待裁定
 
 1. ~~接入形态~~ **已定 A'**。
-2. **成员工作区**：官方 `rightbar`，还是画布内面板。官方删了 `details`，不能再假装这个 API 还在。
-3. **派活改道**：继续 `ctx.subagents`，还是改 `spawnTeammate` + mailbox。必须先映射 replan / 重定向 / 不可变成员，并改掉 `delivery` 字段。
+2. ~~成员工作区：官方 `rightbar`，还是画布内面板~~ **已定官方右侧栏**（2026-09-11 用户裁定，已实施）。
+3. ~~派活改道~~ **半改道已实施（2026-09-11）**：官方名册 spawn / 信箱 steer / interrupt 优先 + 三路降级回退；容量对策①（`maxMembers: 32`）；映射与门禁见 `05-CEO派活改道映射.md`。后续观察：官方成员退役 API（replace 堆积清理）、信箱对离线成员的唤醒时机的运行时实测。
 4. **双边 UI**：头部 `ui-agent-team` 与 Magic 画布功能重叠，是否只留一个。

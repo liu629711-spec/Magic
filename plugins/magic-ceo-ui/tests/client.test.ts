@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { inject, registerCeoUi } from '../src/client/register.ts'
+import { CEO_MEMBER_TAB_ID, CEO_MEMBER_TAB_KIND, inject, registerCeoUi, zh } from '../src/client/register.ts'
 
-test('registers the ceo-team node, ceo_delegate toolview, and details workspace', () => {
+test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar member workspace', () => {
   const sections: string[] = []
-  const slots: Array<{ name: string; key?: string; priority?: number }> = []
+  const slots: Array<{ name: string; key?: string; priority?: number; spec: Record<string, unknown> }> = []
   const definitions: Array<{ kind?: string; target?: string }> = []
+  const tabKinds: string[] = []
+  const openedTabs: string[] = []
 
   registerCeoUi({
     uiConversation: {
@@ -59,13 +61,23 @@ test('registers the ceo-team node, ceo_delegate toolview, and details workspace'
         assert.equal(dicts.zh['field.conclusion'], '结论')
         return () => {}
       },
+      bind: () => (key: string) => zh[key as keyof typeof zh] ?? key,
     },
     sessions: {
       open: () => {},
     },
-    layout: {
-      openDetails: () => {},
-      closeDetails: () => {},
+    sidebarRightTabs: {
+      register: (definition) => {
+        tabKinds.push(definition.kind)
+        assert.equal(definition.id, CEO_MEMBER_TAB_ID)
+        assert.equal(definition.title('sidebar://magicCeoMember'), '成员工作区')
+        return () => {}
+      },
+    },
+    sidebarRight: {
+      openTab: (kind) => {
+        openedTabs.push(kind)
+      },
     },
     slots: {
       inject: (_name, factory) => factory(),
@@ -74,21 +86,34 @@ test('registers the ceo-team node, ceo_delegate toolview, and details workspace'
           name: String(spec.name),
           key: spec.key === undefined ? undefined : String(spec.key),
           priority: typeof spec.priority === 'number' ? spec.priority : undefined,
+          spec,
         })
       },
     },
     effect: (factory) => factory(),
   }, { graph: 'graph', row: 'row', workspace: 'workspace', drawer: 'drawer' })
 
-  assert.deepEqual(inject, ['uiConversation', 'slots', 'sessions', 'locale', 'layout'])
+  assert.deepEqual(inject, ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight'])
   assert.equal(definitions[0]?.kind, 'ceo-team')
   assert.equal(definitions[0]?.target, 'chat')
   assert.equal(definitions[1]?.kind, 'ceo-member-report')
   assert.equal(sections[0], 'magicCeo')
-  assert.deepEqual(slots, [
+  assert.deepEqual(tabKinds, [CEO_MEMBER_TAB_KIND])
+  assert.deepEqual(slots.map(({ name, key, priority }) => ({ name, key, priority })), [
     { name: 'conversation.chat.node', key: 'ceo-team', priority: undefined },
     { name: 'conversation.input.dock', key: undefined, priority: undefined },
     { name: 'tool.call.toolview', key: 'ceo_delegate', priority: undefined },
-    { name: 'details', key: undefined, priority: -1 },
+    { name: 'sidebar.right.pane.tab', key: CEO_MEMBER_TAB_ID, priority: undefined },
   ])
+
+  // The canvas node's inject opens the member workspace page tab by kind.
+  const graphSpec = slots[0]!.spec as { inject: () => { openWorkspace: () => void } }
+  graphSpec.inject().openWorkspace()
+  assert.deepEqual(openedTabs, [CEO_MEMBER_TAB_KIND])
+
+  // The workspace body gets its session id and intervention sender from the seat.
+  const workspaceSpec = slots[3]!.spec as { inject: (sessionId: string) => Record<string, unknown> }
+  const workspaceInject = workspaceSpec.inject('session-1')
+  assert.equal(workspaceInject.sessionId, 'session-1')
+  assert.equal(typeof workspaceInject.sendIntervention, 'function')
 })
