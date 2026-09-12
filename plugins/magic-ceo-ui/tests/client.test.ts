@@ -141,10 +141,14 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
   // 右坞同样拿「句柄」用于订阅：点画布任务节点 → store 记 selectedTaskId → 右坞据此出详情。
   // 曾误注入 RPC 本体（只有 view/createTask/updateTask），导致 getSnapshot 缺席 →
   // 回落到不稳定的空快照 → 右坞整块 slot 崩（slot entry crashed in 'sidebar.right.pane.tab'）。
+  // 右坞任务板只读（PRD-04 §12 裁定）：句柄只有订阅/读取/刷新，无 create/complete。
   const workspaceBoard = workspaceInject.taskBoard as Record<string, unknown>
   assert.notEqual(workspaceBoard, undefined)
-  for (const key of ['subscribe', 'getSnapshot', 'reload', 'create', 'complete']) {
+  for (const key of ['subscribe', 'getSnapshot', 'reload']) {
     assert.equal(typeof workspaceBoard[key], 'function', `workspace.taskBoard.${key} 必须是函数`)
+  }
+  for (const key of ['create', 'complete']) {
+    assert.equal(workspaceBoard[key], undefined, `workspace.taskBoard.${key} 已按只读裁定移除`)
   }
   const workspaceSnapshot = (workspaceBoard.getSnapshot as () => unknown)()
   assert.equal(workspaceSnapshot, (workspaceBoard.getSnapshot as () => unknown)(), 'getSnapshot 必须引用稳定（否则 React #185）')

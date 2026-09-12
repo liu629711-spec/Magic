@@ -2,8 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   EMPTY_TASK_BOARD_SNAPSHOT,
-  completeTaskOnBoard,
-  createTaskOnBoard,
   getEmptyTaskBoardSnapshot,
   getTaskBoardSnapshot,
   reloadTaskBoard,
@@ -186,43 +184,6 @@ test('taskMutationFailure：双层信封四态归一', () => {
   )
 })
 
-test('completeTaskOnBoard：载波 ok 但业务拒绝 → 必须抛出且快照留下原因', async () => {
-  const conflict: TaskMutationEnvelope = {
-    ok: true,
-    value: { ok: false, error: { code: 'team-task-conflict', message: 'revision 过期' } },
-  }
-  const { api, calls } = fakeApi({ tasks: [task('task-1', '待办')], mutation: conflict })
-  await reloadTaskBoard(api, 'session-conflict')
-  // 旧实现只在 `result.ok !== true` 时看内层，业务拒绝被完全跳过 → 不抛异常、
-  // 错误被随后的 reload 覆盖 → CAS 冲突对用户静默。
-  await assert.rejects(() => completeTaskOnBoard(api, 'session-conflict', 'task-1', 1), /刷新后重试/)
-  assert.equal(calls.update, 1)
-  assert.match(getTaskBoardSnapshot().error ?? '', /刷新后重试/)
-})
-
-test('createTaskOnBoard：双层信封成功 → 刷新出新任务', async () => {
-  const created: TeamTaskDuck[] = []
-  const api: TaskBoardApi = {
-    view: async () => ({ ok: true, value: { tasks: [...created] } }),
-    createTask: async (_sessionId, input) => {
-      created.push(task('task-1', input.subject))
-      return { ok: true, value: { ok: true, value: { id: 'task-1' } } }
-    },
-    updateTask: async () => ({ ok: true, value: { ok: true } }),
-  }
-  await createTaskOnBoard(api, 'session-create', '验收任务板：界面创建')
-  const snapshot = getTaskBoardSnapshot()
-  assert.equal(snapshot.tasks.length, 1)
-  assert.equal(snapshot.tasks[0]?.subject, '验收任务板：界面创建')
-  assert.equal(snapshot.loading, false)
-  assert.equal(snapshot.error, undefined)
-})
-
-test('createTaskOnBoard：业务拒绝 → 抛出且快照留下原因', async () => {
-  const { api } = fakeApi({
-    tasks: [],
-    mutation: { ok: true, value: { ok: false, error: { code: 'team-rejected', message: '超出配额' } } },
-  })
-  await assert.rejects(() => createTaskOnBoard(api, 'session-reject-create', '新任务'), /超出配额/)
-  assert.equal(getTaskBoardSnapshot().error, '超出配额')
-})
+// 2026-09-13 裁定：任务板 UI 只读（PRD-04 §12），createTaskOnBoard /
+// completeTaskOnBoard 已随 UI 写路径移除；写信封的解码语义仍由上面的
+// taskMutationFailure 用例守护。

@@ -1,6 +1,6 @@
 import { ceoMemberReportDefinition, ceoTeamDefinition } from './definition.ts'
 import type { TaskBoardApi } from './TaskBoard.ts'
-import { getTaskBoardSnapshot, reloadTaskBoard, subscribeTaskBoard, createTaskOnBoard, completeTaskOnBoard } from './task-board-store.ts'
+import { getTaskBoardSnapshot, reloadTaskBoard, subscribeTaskBoard } from './task-board-store.ts'
 
 export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.agentTeams']
 
@@ -463,27 +463,16 @@ export function registerCeoUi(
     createTask: async (sessionId, input) => await readAgentTeams().createTask(leadSessionIdOf(sessionId), input),
     updateTask: async (sessionId, input) => await readAgentTeams().updateTask(leadSessionIdOf(sessionId), input),
   }
-  // 任务板句柄：画布（chat.node）与工作区（右坞）共用的订阅/操作面。
+  // 任务板句柄：画布（chat.node）与工作区（右坞）共用的订阅面。
   // 会话 id 从 sessions.list 取当前会话（画布只出现在 lead 会话视图）。
-  // 写操作失败时 store 已把原因写入快照（UI 呈现），这里吞掉异常只为
-  // 避免 unhandled rejection 变成控制台噪声。
-  const swallow = (): undefined => undefined
+  // PRD-04 §12（2026-09-13 裁定）：任务板只读——句柄不再暴露 create/complete，
+  // 任务生命周期由智能体驱动（CEO 派发、成员完成）。
   const taskBoardHandle = {
     subscribe: subscribeTaskBoard,
     getSnapshot: getTaskBoardSnapshot,
     reload: () => {
       const sessionId = ctx.sessions.list?.getSnapshot().current
       if (sessionId !== undefined) void reloadTaskBoard(taskBoardApi, sessionId)
-    },
-    create: (subject: string) => {
-      const sessionId = ctx.sessions.list?.getSnapshot().current
-      if (sessionId === undefined) return Promise.resolve()
-      return createTaskOnBoard(taskBoardApi, sessionId, subject).catch(swallow)
-    },
-    complete: (taskId: string, revision: number) => {
-      const sessionId = ctx.sessions.list?.getSnapshot().current
-      if (sessionId === undefined) return Promise.resolve()
-      return completeTaskOnBoard(taskBoardApi, sessionId, taskId, revision).catch(swallow)
     },
   }
 

@@ -10905,41 +10905,6 @@ function useElapsedSeconds(live) {
   return live && startedRef.current !== null ? Math.max(0, Math.floor((Date.now() - startedRef.current) / 1e3)) : frozenRef.current;
 }
 
-// src/client/task-board-data.ts
-function taskMutationFailure(result) {
-  if (result === void 0) return "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528";
-  if (result.ok !== true) return result.error?.message ?? "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528";
-  const inner = result.value;
-  if (inner === void 0) return "\u64CD\u4F5C\u5931\u8D25";
-  if (inner.ok === true) return void 0;
-  return inner.error?.code === "team-task-conflict" ? `\u4EFB\u52A1\u5DF2\u88AB\u66F4\u65B0\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5\uFF08${inner.error.message ?? "team-task-conflict"}\uFF09` : inner.error?.message ?? "\u64CD\u4F5C\u5931\u8D25";
-}
-function taskRowsFromResult(result) {
-  if (result === void 0) return { kind: "loading", tasks: [] };
-  if (result.ok !== true) {
-    return { kind: "unavailable", tasks: [], message: result.error?.message };
-  }
-  const tasks = (result.value?.tasks ?? []).filter((task) => task.status !== "deleted");
-  return { kind: tasks.length === 0 ? "empty" : "ready", tasks };
-}
-function statusDotColor(status) {
-  if (status === "completed") return "var(--dsw-alias-state-success, #16a34a)";
-  if (status === "in_progress") return "var(--dsw-alias-state-business-primary, #3b82f6)";
-  return "var(--dsw-alias-border-l3, #6b6b7a)";
-}
-function taskRowOf(task) {
-  const blockedBy = task.blockedBy ?? [];
-  return {
-    title: task.subject,
-    statusText: task.status,
-    blockedByText: blockedBy.length === 0 ? "" : `\u963B\u585E\u4E8E\uFF1A${blockedBy.join("\u3001")}`,
-    completable: task.status !== "completed"
-  };
-}
-function completePayload(task) {
-  return { taskId: task.id, expectedRevision: task.revision, action: "complete" };
-}
-
 // src/client/task-board-store.ts
 var EMPTY_TASK_BOARD_SNAPSHOT = { tasks: [], loading: false };
 function getEmptyTaskBoardSnapshot() {
@@ -11013,29 +10978,6 @@ async function reloadTaskBoard(api, sessionId) {
       error: cause instanceof Error ? cause.message : String(cause)
     });
   }
-}
-async function settleMutation(api, sessionId, envelope) {
-  const failure = taskMutationFailure(envelope);
-  if (failure === void 0) {
-    await reloadTaskBoard(api, sessionId);
-    return;
-  }
-  await reloadTaskBoard(api, sessionId);
-  commit({ ...snapshot, error: failure });
-  throw new Error(failure);
-}
-async function createTaskOnBoard(api, sessionId, subject) {
-  const envelope = await api.createTask(sessionId, {
-    subject,
-    description: subject,
-    blockedBy: [],
-    writeScopes: []
-  });
-  await settleMutation(api, sessionId, envelope);
-}
-async function completeTaskOnBoard(api, sessionId, taskId, expectedRevision) {
-  const envelope = await api.updateTask(sessionId, { taskId, expectedRevision, action: "complete" });
-  await settleMutation(api, sessionId, envelope);
 }
 
 // src/processView.ts
@@ -12424,16 +12366,38 @@ var import_react12 = require("react");
 
 // src/client/TaskBoard.ts
 var import_react8 = require("react");
+
+// src/client/task-board-data.ts
+function taskRowsFromResult(result) {
+  if (result === void 0) return { kind: "loading", tasks: [] };
+  if (result.ok !== true) {
+    return { kind: "unavailable", tasks: [], message: result.error?.message };
+  }
+  const tasks = (result.value?.tasks ?? []).filter((task) => task.status !== "deleted");
+  return { kind: tasks.length === 0 ? "empty" : "ready", tasks };
+}
+function statusDotColor(status) {
+  if (status === "completed") return "var(--dsw-alias-state-success, #16a34a)";
+  if (status === "in_progress") return "var(--dsw-alias-state-business-primary, #3b82f6)";
+  return "var(--dsw-alias-border-l3, #6b6b7a)";
+}
+function taskRowOf(task) {
+  const blockedBy = task.blockedBy ?? [];
+  return {
+    title: task.subject,
+    statusText: task.status,
+    blockedByText: blockedBy.length === 0 ? "" : `\u963B\u585E\u4E8E\uFF1A${blockedBy.join("\u3001")}`,
+    completable: task.status !== "completed"
+  };
+}
+
+// src/client/TaskBoard.ts
 function TaskBoardCard({
   sessionId,
   api,
-  onMutated,
   t
 }) {
   const [state, setState] = (0, import_react8.useState)({ kind: "loading", tasks: [] });
-  const [draft, setDraft] = (0, import_react8.useState)("");
-  const [busy, setBusy] = (0, import_react8.useState)(false);
-  const [error, setError] = (0, import_react8.useState)("");
   const [attempt, setAttempt] = (0, import_react8.useState)(0);
   const reload = async () => {
     if (api === void 0 || sessionId === void 0) {
@@ -12442,7 +12406,6 @@ function TaskBoardCard({
     }
     try {
       setState(taskRowsFromResult(await api.view(sessionId)));
-      setError("");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setState({ kind: "unavailable", tasks: [], message });
@@ -12455,23 +12418,7 @@ function TaskBoardCard({
   };
   (0, import_react8.useEffect)(() => {
     void reload();
-  }, [sessionId, api, busy, attempt]);
-  const run = async (operation) => {
-    setBusy(true);
-    setError("");
-    try {
-      const failure = taskMutationFailure(await operation());
-      if (failure !== void 0) setError(failure);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-    onMutated?.();
-    try {
-      if (api !== void 0 && sessionId !== void 0) setState(taskRowsFromResult(await api.view(sessionId)));
-    } catch {
-    }
-    setBusy(false);
-  };
+  }, [sessionId, api, attempt]);
   if (api === void 0 || sessionId === void 0) {
     return (0, import_react8.createElement)(
       "div",
@@ -12504,7 +12451,6 @@ function TaskBoardCard({
         (0, import_react8.createElement)("span", null, t("tasks.unavailable")),
         (0, import_react8.createElement)("button", {
           type: "button",
-          disabled: busy,
           onClick: () => {
             void reload();
           },
@@ -12513,11 +12459,10 @@ function TaskBoardCard({
             border: "0.5px solid rgba(255,255,255,0.14)",
             borderRadius: 6,
             padding: "2px 8px",
-            cursor: busy ? "default" : "pointer",
+            cursor: "pointer",
             fontSize: 11,
             background: "transparent",
-            color: "inherit",
-            opacity: busy ? 0.5 : 1
+            color: "inherit"
           }
         }, t("tasks.retry"))
       ),
@@ -12544,65 +12489,16 @@ function TaskBoardCard({
               title: t(`tasks.status.${row.statusText}`),
               style: { flex: "0 0 auto", width: 7, height: 7, borderRadius: 99, background: statusDotColor(row.statusText) }
             }),
-            (0, import_react8.createElement)("span", { style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? "line-through" : void 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.title),
-            row.completable ? (0, import_react8.createElement)("button", {
-              type: "button",
-              disabled: busy,
-              title: t("tasks.complete"),
-              onClick: () => {
-                if (task !== void 0) void run(() => api.updateTask(sessionId, completePayload(task)));
-              },
-              style: { marginLeft: "auto", flex: "0 0 auto", border: 0, borderRadius: 6, padding: "2px 7px", cursor: busy ? "default" : "pointer", fontSize: 11, background: "transparent", color: "inherit", opacity: 0.55 }
-            }, t("tasks.complete")) : null
+            (0, import_react8.createElement)("span", { style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? "line-through" : void 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.title)
           ),
           row.blockedByText === "" ? null : (0, import_react8.createElement)("div", { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByText)
         );
       })
-    ),
-    (0, import_react8.createElement)(
-      "div",
-      { style: { display: "flex", gap: 6 } },
-      (0, import_react8.createElement)("input", {
-        value: draft,
-        placeholder: t("tasks.subject"),
-        disabled: busy,
-        onChange: (event) => {
-          setDraft(event.target.value);
-        },
-        onKeyDown: (event) => {
-          if (event.key === "Enter" && draft.trim() !== "" && !busy) {
-            void run(() => api.createTask(sessionId, { subject: draft.trim(), description: draft.trim(), blockedBy: [], writeScopes: [] }));
-            setDraft("");
-          }
-        },
-        style: { flex: 1, minWidth: 0, boxSizing: "border-box", padding: "5px 10px", borderRadius: 7, border: "0.5px solid rgba(255,255,255,0.14)", background: "rgba(0,0,0,0.2)", color: "inherit", fontSize: 12 }
-      }),
-      (0, import_react8.createElement)("button", {
-        type: "button",
-        disabled: busy || draft.trim() === "",
-        onClick: () => {
-          void run(() => api.createTask(sessionId, { subject: draft.trim(), description: "", blockedBy: [], writeScopes: [] }));
-          setDraft("");
-        },
-        style: {
-          flex: "0 0 auto",
-          padding: "5px 12px",
-          borderRadius: 7,
-          border: 0,
-          cursor: busy || draft.trim() === "" ? "default" : "pointer",
-          fontSize: 12,
-          fontWeight: 510,
-          background: draft.trim() === "" || busy ? "rgba(255,255,255,0.08)" : "var(--dsw-alias-state-business-primary, #3b82f6)",
-          color: draft.trim() === "" || busy ? "rgba(255,255,255,0.5)" : "#fff"
-        }
-      }, t("tasks.create"))
-    ),
-    error === "" ? null : (0, import_react8.createElement)("div", { style: { fontSize: 11, color: "rgba(220,120,120,1)" } }, error)
+    )
   );
 }
 function TaskBoardDetail({
   task,
-  onComplete,
   t
 }) {
   const done = task.status === "completed";
@@ -12619,12 +12515,7 @@ function TaskBoardDetail({
         "aria-hidden": true,
         style: { flex: "0 0 auto", width: 8, height: 8, borderRadius: 99, background: done ? "var(--dsw-alias-state-success, #16a34a)" : task.status === "in_progress" ? "var(--dsw-alias-state-business-primary, #3b82f6)" : "var(--dsw-alias-border-l3, #6b6b7a)" }
       }),
-      (0, import_react8.createElement)("span", { style: { fontSize: 12, fontWeight: 510, textDecoration: done ? "line-through" : void 0 } }, task.subject),
-      !done && onComplete !== void 0 ? (0, import_react8.createElement)("button", {
-        type: "button",
-        onClick: onComplete,
-        style: { marginLeft: "auto", flex: "0 0 auto", border: 0, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, background: "var(--dsw-alias-state-business-primary, #3b82f6)", color: "#fff", fontWeight: 510 }
-      }, t("tasks.complete")) : null
+      (0, import_react8.createElement)("span", { style: { fontSize: 12, fontWeight: 510, textDecoration: done ? "line-through" : void 0 } }, task.subject)
     ),
     (0, import_react8.createElement)("div", { style: { fontSize: 11, opacity: 0.65 } }, t(`tasks.status.${done ? "completed" : task.status === "in_progress" ? "in_progress" : "pending"}`))
   );
@@ -14584,14 +14475,8 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
             selectedTask !== void 0 ? (0, import_react12.createElement)(TaskBoardDetail, {
               key: selectedTask.id,
               task: selectedTask,
-              onComplete: taskBoard === void 0 ? void 0 : () => {
-                void taskBoard.complete(selectedTask.id, selectedTask.revision);
-                taskBoard.reload();
-              },
               t
-            }) : (0, import_react12.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, onMutated: () => {
-              taskBoard?.reload();
-            }, t })
+            }) : (0, import_react12.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, t })
           )
         )
       ),
@@ -15306,23 +15191,12 @@ function registerCeoUi(ctx, components) {
     createTask: async (sessionId, input) => await readAgentTeams().createTask(leadSessionIdOf(sessionId), input),
     updateTask: async (sessionId, input) => await readAgentTeams().updateTask(leadSessionIdOf(sessionId), input)
   };
-  const swallow = () => void 0;
   const taskBoardHandle = {
     subscribe: subscribeTaskBoard,
     getSnapshot: getTaskBoardSnapshot,
     reload: () => {
       const sessionId = ctx.sessions.list?.getSnapshot().current;
       if (sessionId !== void 0) void reloadTaskBoard(taskBoardApi, sessionId);
-    },
-    create: (subject) => {
-      const sessionId = ctx.sessions.list?.getSnapshot().current;
-      if (sessionId === void 0) return Promise.resolve();
-      return createTaskOnBoard(taskBoardApi, sessionId, subject).catch(swallow);
-    },
-    complete: (taskId, revision) => {
-      const sessionId = ctx.sessions.list?.getSnapshot().current;
-      if (sessionId === void 0) return Promise.resolve();
-      return completeTaskOnBoard(taskBoardApi, sessionId, taskId, revision).catch(swallow);
     }
   };
   ctx.slots.inject("sidebar.right.pane.tab", () => ctx.slots.register({

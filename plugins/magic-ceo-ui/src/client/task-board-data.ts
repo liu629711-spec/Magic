@@ -134,12 +134,3 @@ export function taskRowOf(task: TeamTaskDuck): {
   }
 }
 
-/** 完成动作的 CAS 载荷（纯函数，测试盯 expectedRevision）。 */
-export function completePayload(task: TeamTaskDuck): {
-  taskId: string
-  expectedRevision: number
-  action: 'complete'
-} {
-  return { taskId: task.id, expectedRevision: task.revision, action: 'complete' }
-}
-

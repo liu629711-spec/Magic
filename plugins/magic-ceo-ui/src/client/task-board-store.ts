@@ -1,6 +1,6 @@
 /**
- * 任务板客户端状态（第一梯队 #3，Codex 对标）：拉取官方任务板 / 新建 / 完成，
- * 并维护「当前选中的任务节点」（点画布上的任务节点 → 右坞显示任务详情）。
+ * 任务板客户端状态（第一梯队 #3，Codex 对标）：拉取官方任务板并维护
+ * 「当前选中的任务节点」（点画布上的任务节点 → 右坞显示任务详情）。
  *
  * 模式与 selection.ts 一致：模块级单例 + useSyncExternalStore 订阅；
  * 数据源是官方 remote.agentTeams（RPC），本模块不触碰 cordis。
@@ -15,15 +15,18 @@
  *
  * ## 信封层级（依据官方源码，见 task-board-data.ts 注释）
  *
- * - `view`：单层信封，任务在 `result.value.tasks`；
- * - `createTask`/`updateTask`：双层信封，业务结果在 `result.value` 里再判一次。
+ * - `view`：单层信封，任务在 `result.value.tasks`。
+ *
+ * ## 只读（PRD-04 §12，2026-09-13 裁定）
+ *
+ * 任务生命周期由智能体驱动（CEO 拆解派发、成员带证据完成），本 store 只拉取
+ * 与分发，不含写操作；写信封（createTask/updateTask 双层）的解码语义保留在
+ * task-board-data.ts 的 taskMutationFailure 供核对官方线格式。
  */
 
 import {
-  taskMutationFailure,
   type TaskBoardApi,
   type RemoteResult,
-  type TaskMutationEnvelope,
   type TeamTaskDuck,
   type TeamViewDuck,
 } from './task-board-data.ts'
@@ -161,46 +164,4 @@ export async function reloadTaskBoard(api: TaskBoardApi, sessionId: string): Pro
       error: cause instanceof Error ? cause.message : String(cause),
     })
   }
-}
-
-/**
- * 写操作收尾：失败时先回源刷新（CAS 冲突意味着本地 revision 已过期，
- * 官方 ui-agent-team 在 `team-task-conflict` 时同样先 refresh()），
- * 再把失败原因留在快照里供界面呈现，最后抛出让调用方感知。
- */
-async function settleMutation(
-  api: TaskBoardApi,
-  sessionId: string,
-  envelope: TaskMutationEnvelope,
-): Promise<void> {
-  const failure = taskMutationFailure(envelope)
-  if (failure === undefined) {
-    await reloadTaskBoard(api, sessionId)
-    return
-  }
-  await reloadTaskBoard(api, sessionId)
-  commit({ ...snapshot, error: failure })
-  throw new Error(failure)
-}
-
-/** 新建任务并刷新。 */
-export async function createTaskOnBoard(api: TaskBoardApi, sessionId: string, subject: string): Promise<void> {
-  const envelope = await api.createTask(sessionId, {
-    subject,
-    description: subject,
-    blockedBy: [],
-    writeScopes: [],
-  })
-  await settleMutation(api, sessionId, envelope)
-}
-
-/** 完成任务（CAS：带 expectedRevision）并刷新。 */
-export async function completeTaskOnBoard(
-  api: TaskBoardApi,
-  sessionId: string,
-  taskId: string,
-  expectedRevision: number,
-): Promise<void> {
-  const envelope = await api.updateTask(sessionId, { taskId, expectedRevision, action: 'complete' })
-  await settleMutation(api, sessionId, envelope)
 }

@@ -1,39 +1,31 @@
 // 任务板组件：渲染与交互（依赖 react，见 package.json 说明——react 由 DSH 客户端运行时提供）。
+// PRD-04 §12（2026-09-13 裁定）：任务板是只读视图——任务生命周期由智能体驱动
+// （CEO 拆解派发、成员带证据完成），前端不提供人工新建/完成入口。
 
 import { createElement as h, useEffect, useState, type ReactNode } from 'react'
 import {
-  completePayload,
   statusDotColor,
-  taskMutationFailure,
   taskRowOf,
   taskRowsFromResult,
   type TaskBoardApi,
   type TaskBoardState,
-  type TaskMutationEnvelope,
   type TeamTaskDuck,
 } from './task-board-data.ts'
-import { line } from './theme.ts'
 
 
 type Translate = (key: string, params?: Record<string, unknown>) => string
 
-/** 任务板卡片：加载 → 列表 → 新建/完成；api 缺席或失败时降级文案。 */
+/** 任务板卡片：加载 → 列表；api 缺席或失败时降级文案。只读，无写操作。 */
 export function TaskBoardCard({
   sessionId,
   api,
-  onMutated,
   t,
 }: {
   sessionId?: string
   api?: TaskBoardApi
-  /** 卡片写操作（新建/完成）落定后回调：宿主用它重拉共享 store，让画布泳道即时跟随。 */
-  onMutated?: () => void
   t: Translate
 }): ReactNode {
   const [state, setState] = useState<TaskBoardState>({ kind: 'loading', tasks: [] })
-  const [draft, setDraft] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
   /** RPC 通道未就绪时的有界自动重试（页面加载初期网关可能尚未连上）。 */
   const [attempt, setAttempt] = useState(0)
 
@@ -44,7 +36,6 @@ export function TaskBoardCard({
     }
     try {
       setState(taskRowsFromResult(await api.view(sessionId)))
-      setError('')
     } catch (cause) {
       // 传输异常（如页面加载初期网关未连上）→ 有界自动重试；详情透出到界面。
       const message = cause instanceof Error ? cause.message : String(cause)
@@ -54,29 +45,7 @@ export function TaskBoardCard({
       }
     }
   }
-  useEffect(() => { void reload() }, [sessionId, api, busy, attempt])
-
-  // 写操作是双层信封（载波 ok ≠ 业务成功，信封层级见 task-board-data.ts）：
-  // 曾只判外层 ok，内层 TeamTaskMutationResult 拒绝（如 CAS 冲突）被静默吞掉。
-  const run = async (operation: () => Promise<TaskMutationEnvelope | undefined>): Promise<void> => {
-    setBusy(true)
-    setError('')
-    try {
-      const failure = taskMutationFailure(await operation())
-      if (failure !== undefined) setError(failure)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    }
-    // 双通路同步：卡片走 api 直连，画布泳道走共享 store——写操作落定后（无论成败，
-    // 失败也要刷新本地过期的 revision）让宿主重拉 store，泳道不必等重挂载。
-    onMutated?.()
-    try {
-      if (api !== undefined && sessionId !== undefined) setState(taskRowsFromResult(await api.view(sessionId)))
-    } catch {
-      // 刷新失败保留现状
-    }
-    setBusy(false)
-  }
+  useEffect(() => { void reload() }, [sessionId, api, attempt])
 
   if (api === undefined || sessionId === undefined) {
     return h('div', { 'data-magic-ceo-taskboard': true, style: { padding: '10px 12px', color: 'rgba(160,160,175,1)', fontSize: 12 } },
@@ -104,12 +73,11 @@ export function TaskBoardCard({
             h('span', null, t('tasks.unavailable')),
             h('button', {
               type: 'button',
-              disabled: busy,
               onClick: () => { void reload() },
               style: {
                 marginLeft: 'auto', border: '0.5px solid rgba(255,255,255,0.14)', borderRadius: 6,
-                padding: '2px 8px', cursor: busy ? 'default' : 'pointer', fontSize: 11,
-                background: 'transparent', color: 'inherit', opacity: busy ? 0.5 : 1,
+                padding: '2px 8px', cursor: 'pointer', fontSize: 11,
+                background: 'transparent', color: 'inherit',
               },
             }, t('tasks.retry'))),
           state.message !== undefined
@@ -134,51 +102,10 @@ export function TaskBoardCard({
                     style: { flex: '0 0 auto', width: 7, height: 7, borderRadius: 99, background: statusDotColor(row.statusText) },
                   }),
                   h('span', { style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? 'line-through' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.title),
-                  row.completable
-                    ? h('button', {
-                      type: 'button',
-                      disabled: busy,
-                      title: t('tasks.complete'),
-                      onClick: () => {
-                        if (task !== undefined) void run(() => api.updateTask(sessionId, completePayload(task)))
-                      },
-                      style: { marginLeft: 'auto', flex: '0 0 auto', border: 0, borderRadius: 6, padding: '2px 7px', cursor: busy ? 'default' : 'pointer', fontSize: 11, background: 'transparent', color: 'inherit', opacity: 0.55 },
-                    }, t('tasks.complete'))
-                    : null,
                 ),
                 row.blockedByText === '' ? null : h('div', { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByText),
               )
             })),
-    h('div', { style: { display: 'flex', gap: 6 } },
-      h('input', {
-        value: draft,
-        placeholder: t('tasks.subject'),
-        disabled: busy,
-        onChange: (event: { target: { value: string } }) => { setDraft(event.target.value) },
-        onKeyDown: (event: { key: string }) => {
-          if (event.key === 'Enter' && draft.trim() !== '' && !busy) {
-            void run(() => api.createTask(sessionId, { subject: draft.trim(), description: draft.trim(), blockedBy: [], writeScopes: [] }))
-            setDraft('')
-          }
-        },
-        style: { flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '5px 10px', borderRadius: 7, border: '0.5px solid rgba(255,255,255,0.14)', background: 'rgba(0,0,0,0.2)', color: 'inherit', fontSize: 12 },
-      }),
-      h('button', {
-        type: 'button',
-        disabled: busy || draft.trim() === '',
-        onClick: () => {
-          void run(() => api.createTask(sessionId, { subject: draft.trim(), description: '', blockedBy: [], writeScopes: [] }))
-          setDraft('')
-        },
-        style: {
-          flex: '0 0 auto', padding: '5px 12px', borderRadius: 7, border: 0, cursor: busy || draft.trim() === '' ? 'default' : 'pointer',
-          fontSize: 12, fontWeight: 510,
-          background: draft.trim() === '' || busy ? 'rgba(255,255,255,0.08)' : 'var(--dsw-alias-state-business-primary, #3b82f6)',
-          color: draft.trim() === '' || busy ? 'rgba(255,255,255,0.5)' : '#fff',
-        },
-      }, t('tasks.create')),
-    ),
-    error === '' ? null : h('div', { style: { fontSize: 11, color: 'rgba(220,120,120,1)' } }, error),
   )
 }
 
@@ -186,14 +113,12 @@ export type { TaskBoardApi, TeamTaskDuck, TaskBoardState } from './task-board-da
 
 // ── 选中任务详情（画布点任务节点 → 右坞显示）────────────────────────────
 
-/** 一个选中任务的详情卡：状态、主题、完成按钮（CAS）。 */
+/** 一个选中任务的只读详情卡：状态、主题。完成由成员工作回写，前端不提供动作。 */
 export function TaskBoardDetail({
   task,
-  onComplete,
   t,
 }: {
   task: { id: string; subject: string; status: string; revision: number }
-  onComplete?: () => void
   t: Translate
 }): ReactNode {
   const done = task.status === 'completed'
@@ -207,13 +132,6 @@ export function TaskBoardDetail({
         style: { flex: '0 0 auto', width: 8, height: 8, borderRadius: 99, background: done ? 'var(--dsw-alias-state-success, #16a34a)' : task.status === 'in_progress' ? 'var(--dsw-alias-state-business-primary, #3b82f6)' : 'var(--dsw-alias-border-l3, #6b6b7a)' },
       }),
       h('span', { style: { fontSize: 12, fontWeight: 510, textDecoration: done ? 'line-through' : undefined } }, task.subject),
-      !done && onComplete !== undefined
-        ? h('button', {
-          type: 'button',
-          onClick: onComplete,
-          style: { marginLeft: 'auto', flex: '0 0 auto', border: 0, borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: 11, background: 'var(--dsw-alias-state-business-primary, #3b82f6)', color: '#fff', fontWeight: 510 },
-        }, t('tasks.complete'))
-        : null,
     ),
     h('div', { style: { fontSize: 11, opacity: 0.65 } }, t(`tasks.status.${done ? 'completed' : task.status === 'in_progress' ? 'in_progress' : 'pending'}`)),
   )

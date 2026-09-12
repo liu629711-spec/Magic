@@ -448,10 +448,9 @@ export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoar
             ? h(TaskBoardDetail, {
               key: selectedTask.id,
               task: selectedTask,
-              onComplete: taskBoard === undefined ? undefined : () => { void taskBoard.complete(selectedTask.id, selectedTask.revision); taskBoard.reload() },
               t,
             })
-            : h(TaskBoardCard, { sessionId, api: taskBoardApi, onMutated: () => { taskBoard?.reload() }, t }),
+            : h(TaskBoardCard, { sessionId, api: taskBoardApi, t }),
         ),
       ),
     ),
