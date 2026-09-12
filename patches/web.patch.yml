@@ -27,9 +27,9 @@
 # 形态 A'：只挂官方「服务」与「面板」，**不挂官方工具**（tool-agent-team）。
 #
 # 为什么不挂官方工具：`tool-agent-team` 的安装门槛是「caller 不是 Team 成员就跳过」
-# （tool-agent-team/src/index.ts:405），而顶层会话默认就被判定为 lead
-# （agent-team/src/roster.ts:91-118 的兜底分支）。两者相乘 ⇒ 一旦挂上，
-# **每个普通会话**（哪怕只是随便问一句）都会看到那 10 个 Team 工具。
+# （tool-agent-team/src/index.ts:397-400 的 maybeInstall），而顶层会话默认就被判定为 lead
+# （agent-team/src/roster.ts:92-122 的兜底分支，:107/:115）。两者相乘 ⇒ 一旦挂上，
+# **每个普通会话**（哪怕只是随便问一句）都会看到那 9 个 Team 工具。
 # 官方插件没有「只在 CEO 模式下装」的开关，所以这是全局性的模型可见面改变。
 #
 # 【更正】此前本文件写过「必须 disabled 原生 tool-subagent-control，否则重名启动失败」。
@@ -39,7 +39,7 @@
 # 「patched by @deepseek-ai/dsh-web-app」）。所以官方 host patch 里那 4 行
 # 「先关原生、再挂工具」在本 profile 下是冗余的，本 patch 不复刻。
 #
-# 官方能力并未因此减少：那 10 个工具只是薄适配器（如
+# 官方能力并未因此减少：那 9 个工具只是薄适配器（如
 # tool-agent-team/src/index.ts 里 send_message 直接转发 ctx.agentTeams.sendMessage），
 # 服务层（名册 / 信箱 / 任务板 / 恢复）完整保留，由 Magic 经 ctx.agentTeams 调用。
 #

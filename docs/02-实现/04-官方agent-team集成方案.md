@@ -1,7 +1,7 @@
 ---
 status: active
-version: 2.0
-date: 2026-09-11
+version: 2.1
+date: 2026-09-13
 owner: Magic 项目
 authority: implementation-plan
 dsh: 0.1.5-rc.2 / c291e7961a
@@ -10,7 +10,7 @@ dsh: 0.1.5-rc.2 / c291e7961a
 # 04 官方 Agent Teams 集成方案
 
 > 本文回答：**Magic 用官方 `experimental/agent-team` 当地基，接到哪一层、为什么不挂官方工具。**
-> 仓库快照见 `00-当前基线-DSH-0.1.5.md`。v2.0 相对 DSH 0.1.5-rc.2 更正了「experimental 全 private / 未发布 / 本地 0.1.2」等过时陈述，并补上 UI 槽位漂移。
+> 仓库快照见 `00-当前基线-DSH-0.1.5.md`。v2.0 相对 DSH 0.1.5-rc.2 更正了「experimental 全 private / 未发布 / 本地 0.1.2」等过时陈述，并补上 UI 槽位漂移。v2.1 补记 `updateTask` 写路径疑点的核查结论（§7.6）：非上游缺陷。
 
 ## 1. 决策（已定：形态 A'）
 
@@ -155,6 +155,7 @@ CodeGraph：`spawnTeammate` 的生产调用方是 `tool-agent-team` 的 `install
 3. **官方数据模型更窄**：成员创建后不可变；任务 revision 必须 CAS。Magic 的 ledger 不能去改官方任务字段。
 4. **`AgentTeamsPort` 过期**：~~Magic 仍声明 `delivery: 'quiet'|'wakeup'`~~ 已对齐（2026-09-11）：声明改为 `{ target, content, signal }`（`plugins/magic-ceo/src/index.ts:698-706`），与官方 `types.ts:159-163` 一致；契约体检有双向断言（Magic 端不得复活该字段，官方若恢复会报警）。生产派活仍走 `ctx.subagents`，改道映射见 `05-CEO派活改道映射.md`。
 5. **~~检查器挂空槽~~ 已修复（2026-09-11）**：成员工作区迁入官方右侧栏。接法照搬 `ui-sidebar-documentpreview` 的公开两段式：页面型 tab 定义（无 patterns）进 `ctx.sidebarRightTabs`，面板体进 keyed `sidebar.right.pane.tab` 槽（key = 定义 id，`ui-sidebar-right/src/client/index.ts:184-193` 范例）；打开走 `ctx.sidebarRight.openTab(kind)`（`service.ts:257-263`），重复打开同一 kind 会把新导航参数记到已有 tab（`service.ts:322-342` 的 `tabDomain.navigate`）；面板体经座位默认注入拿 `useTabInfo`（`tab-info.ts:30-54`），关闭用 `tab.actions.close()`。web profile 确认加载该包（`packages/bundle/web-app/cordis.patch.yml:224-225`）。
+6. **~~`updateTask`「返回成功但状态不变」疑似 DSH 上游缺陷~~ 已核查（2026-09-13）：不是上游缺陷，上游无异常**。 Remote 写信封是**双层**的：载波 `{ok:true}` 只代表传输成功，业务拒绝装在内层 `{ok:false, error:{code:'team-task-conflict'|'team-rejected'}}`——`agent-team/src/index.ts:273-286` 把 `TeamError` 转成业务结果而外层不抛，生成 schema（`agent-team/lib/typert.remote-client.js` 的 `updateTask_result$schema`）同口径，官方面板自己就是先查载波再查内层（`client-ui-agent-team/src/client/TeamAction.tsx:160,164`）。CAS 写路径所有失败分支都显式抛 `TeamError`（`agent-team/src/task-board.ts:118-129`），提交必须过 `appendAndFlush` 落盘（`agent-team/src/journal.ts:60-72`），不存在静默 no-op。「成功但状态不变」的直接成因是 Magic UI 曾只读外层 ok、吞掉内层业务拒绝（commit 20ceb91 已修）。即便解包正确，当时的 UI 写路径也**注定被合法拒绝**：UI 只暴露 `complete` 动作，而官方 CAS 要求 `complete` 只能从 `in_progress` 发起（`task-board.ts:166-170`），`pending` 须先 `claim`（`:133-141`）；UI 无 claim 通道，服务端 `AgentTeamsPort` 也只含 `spawnTeammate`/`sendMessage` 不写官方任务板（`plugins/magic-ceo/src/index.ts:689-704`）——写面在 A' 组合下事实不可达，这构成任务板只读裁定（PRD-04 §12）的事实依据之一。同源假设一并更正：「agentTeams 工具集默认禁用」是形态 A' 有意不挂 `tool-agent-team`（§1/§6），属产品决策；两症状不同源，均为 Magic 侧可控事实。
 
 ## 8. 阶段
 
