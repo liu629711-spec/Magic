@@ -429,13 +429,13 @@ export function registerCeoUi(
     key: 'ceo_delegate',
     locale: 'magicCeo',
   }, components.row))
-  // codex 式 turn 折叠摘要：同 key 注册即替换 ui-chat 的 turn-process 渲染器
-  // （ui-chat contract/slots.ts 的 SlotMap 注释明示「Reusing a key replaces that
-  // node renderer」；本插件 inject 依赖 ui-chat，apply 晚于其注册，替换生效）。
-  // 只替换披露行本身；展开后的过程明细仍由 DSH seat 渲染。
+  // codex 式 turn 折叠摘要：低优先级影子注册 ui-chat 的 turn-process 渲染器。
+  // keyed 槽位同 key 同 priority 会抛错拒绝加载（loader 语义：lowest renders），
+  // 因此用 priority: -10 影子掉 DSH 原行；展开后的过程明细仍由 DSH seat 渲染。
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'turn-process',
+    priority: -10,
     locale: 'magicCeo',
   }, components.turnProcess))
   // Stage two of the tab: the body under the definition's id. The seat's

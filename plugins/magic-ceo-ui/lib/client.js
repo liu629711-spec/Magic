@@ -15283,6 +15283,7 @@ function registerCeoUi(ctx, components) {
   ctx.slots.inject("conversation.chat.node", () => ctx.slots.register({
     name: "conversation.chat.node",
     key: "turn-process",
+    priority: -10,
     locale: "magicCeo"
   }, components.turnProcess));
   const leadSessionIdOf = (sessionId) => {

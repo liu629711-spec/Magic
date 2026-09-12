@@ -112,7 +112,7 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
     { name: 'conversation.chat.node', key: 'ceo-team', priority: undefined },
     { name: 'conversation.input.dock', key: undefined, priority: undefined },
     { name: 'tool.call.toolview', key: 'ceo_delegate', priority: undefined },
-    { name: 'conversation.chat.node', key: 'turn-process', priority: undefined },
+    { name: 'conversation.chat.node', key: 'turn-process', priority: -10 },
     { name: 'sidebar.right.pane.tab', key: CEO_MEMBER_TAB_ID, priority: undefined },
   ])
 
