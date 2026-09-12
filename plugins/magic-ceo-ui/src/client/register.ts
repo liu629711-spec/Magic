@@ -143,6 +143,20 @@ export const zh = {
   'blocked.waitingFor': '等待',
   'blocked.blockers': '阻塞说明',
   'badge.blocked': '阻塞',
+  'inspector.processing': '正在处理 {duration}',
+  'process.summary.running': '运行中',
+  'process.summary.expand': '展开过程明细',
+  'process.summary.collapse': '收起过程明细',
+  'process.summary.explore.done': '已探索 {count} 项',
+  'process.summary.explore.running': '正在探索 {count} 项',
+  'process.summary.search.done': '已搜索 {count} 次',
+  'process.summary.search.running': '正在搜索 {count} 次',
+  'process.summary.edit.done': '已编辑 {count} 个文件',
+  'process.summary.edit.running': '正在编辑 {count} 个文件',
+  'process.summary.run.done': '已运行 {count} 条命令',
+  'process.summary.run.running': '正在运行 {count} 条命令',
+  'process.summary.other.done': '已执行 {count} 个操作',
+  'process.summary.other.running': '正在执行 {count} 个操作',
 }
 
 export const en = {
@@ -281,6 +295,20 @@ export const en = {
   'blocked.waitingFor': 'Waiting for',
   'blocked.blockers': 'Blockers',
   'badge.blocked': 'Blocked',
+  'inspector.processing': 'Processing {duration}',
+  'process.summary.running': 'Running',
+  'process.summary.expand': 'Expand process details',
+  'process.summary.collapse': 'Collapse process details',
+  'process.summary.explore.done': 'Explored {count}',
+  'process.summary.explore.running': 'Exploring {count}',
+  'process.summary.search.done': 'Searched {count}',
+  'process.summary.search.running': 'Searching {count}',
+  'process.summary.edit.done': 'Edited {count}',
+  'process.summary.edit.running': 'Editing {count}',
+  'process.summary.run.done': 'Ran {count} commands',
+  'process.summary.run.running': 'Running {count} commands',
+  'process.summary.other.done': '{count} operations',
+  'process.summary.other.running': '{count} operations',
 }
 
 export interface CeoUiContext {

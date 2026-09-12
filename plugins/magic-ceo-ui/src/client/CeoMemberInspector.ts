@@ -14,6 +14,7 @@ import {
 import { CeoProcessTimeline } from './CeoProcessTimeline.ts'
 import { MemberFailureCard } from './FailureCard.ts'
 import { failureCardOf, type CeoFailureCard } from '../failure-card.ts'
+import { formatElapsed, useElapsedSeconds } from './elapsed.ts'
 import { ink, line, surface, wrap } from './theme.ts'
 
 const TASK_COLLAPSE_H = 144
@@ -431,6 +432,13 @@ function resumeMessageFor(runId: string): string {
   return `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.`
 }
 
+/** 「正在处理 Ns」叶子组件：每秒自转，不牵动整个成员详情重渲染。 */
+function LiveElapsedBadge({ t }: { t: (key: string, params?: Record<string, unknown>) => string }): ReactNode {
+  const elapsed = useElapsedSeconds(true)
+  return h('span', { 'data-magic-ceo-elapsed': true, style: { fontVariantNumeric: 'tabular-nums', opacity: 0.75 } },
+    ` · ${t('inspector.processing', { duration: formatElapsed(elapsed) })}`)
+}
+
 export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoMemberInspectorProps) {
   const process = member.process ?? []
   const report = presentCeoMemberReport(member)
@@ -516,7 +524,7 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
         lineHeight: '20px',
         color: PRIMARY,
       },
-    }, t('inspector.live'))
+    }, t('inspector.live'), h(LiveElapsedBadge, { t }))
     : null,
   h(CollapsibleTask, { text: member.task, t }),
   member.dependsOn.length > 0

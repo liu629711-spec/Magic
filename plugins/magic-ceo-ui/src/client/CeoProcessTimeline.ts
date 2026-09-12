@@ -1,5 +1,6 @@
 import { createElement as h, useEffect, useRef, useState, type ReactNode } from 'react'
 import { looksLikeMemberReport, looksLikeStructuredDump, type CeoProcessStep } from '../team.ts'
+import { summarizeProcessSteps, timelineDefaultExpanded, type ProcessSummary } from '../process-summary.ts'
 import {
   cleanSourceTitle,
   faviconUrl,
@@ -847,6 +848,17 @@ function shouldShowThinkingTail(steps: readonly CeoProcessStep[], live: boolean)
   return true
 }
 
+/** codex-ui 式摘要行文案：每个类别一条「正在/已 …」，中英文各自成句。 */
+function summaryLabel(summary: ProcessSummary, t: (key: string, params?: Record<string, unknown>) => string): string {
+  const state = summary.running ? 'running' : 'done'
+  const parts: string[] = []
+  for (const category of ['explore', 'search', 'edit', 'run', 'other'] as const) {
+    const count = summary.counts[category]
+    if (count > 0) parts.push(t(`process.summary.${category}.${state}`, { count }))
+  }
+  return parts.join(' · ')
+}
+
 export function CeoProcessTimeline({
   steps,
   live,
@@ -854,7 +866,36 @@ export function CeoProcessTimeline({
   t,
 }: CeoProcessTimelineProps) {
   useEffect(() => { ensurePulseCss() }, [])
+  // hooks 必须在早退之前：摘要行需要折叠状态，即使时间线为空也要保持调用顺序。
+  const summary = summarizeProcessSteps(steps)
+  const [userExpanded, setUserExpanded] = useState<boolean | undefined>(undefined)
   if (steps.length === 0 && !live) return null
+  const expanded = userExpanded ?? timelineDefaultExpanded(summary)
+  const summaryBar = summary.total > 0
+    ? h('button', {
+      type: 'button',
+      'data-magic-ceo-process-summary': true,
+      onClick: () => { setUserExpanded(!expanded) },
+      title: expanded ? t('process.summary.collapse') : t('process.summary.expand'),
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: 0,
+        border: 0,
+        background: 'transparent',
+        color: MUTED,
+        cursor: 'pointer',
+        fontSize: 12,
+        lineHeight: '18px',
+        textAlign: 'left',
+      },
+    },
+      h(Chevron, { open: expanded }),
+      h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+        summaryLabel(summary, t)),
+      summary.running ? h(RunningDot) : null)
+    : null
   const nodes: ReactNode[] = []
   let reasoning: string[] = []
   const flushReasoning = (streaming: boolean) => {
@@ -913,9 +954,12 @@ export function CeoProcessTimeline({
   if (shouldShowThinkingTail(steps, live)) {
     nodes.push(h(ThinkingTail, { key: 'thinking-tail', t }))
   }
-  if (nodes.length === 0) return null
+  if (nodes.length === 0 && summaryBar === null) return null
+  // codex-ui 语义：完成态默认只留摘要行，明细点击展开；运行中永远全量。
+  const children = expanded || summaryBar === null ? nodes : []
   return h('div', {
     'data-magic-ceo-process': true,
+    'data-process-collapsed': summaryBar !== null && !expanded ? 'true' : undefined,
     style: { ...wrap, display: 'flex', flexDirection: 'column', gap: 10 },
-  }, ...nodes)
+  }, ...(summaryBar !== null ? [summaryBar] : []), ...children)
 }

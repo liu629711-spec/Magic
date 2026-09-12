@@ -57,7 +57,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
             "The result of getSnapshot should be cached to avoid an infinite loop"
           ), didWarnUncachedGetSnapshot = true);
         }
-        cachedValue = useState8({
+        cachedValue = useState9({
           inst: { value, getSnapshot }
         });
         var inst = cachedValue[0].inst, forceUpdate = cachedValue[1];
@@ -69,7 +69,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
           },
           [subscribe, value, getSnapshot]
         );
-        useEffect6(
+        useEffect7(
           function() {
             checkIfSnapshotChanged(inst) && forceUpdate({ inst });
             return subscribe(function() {
@@ -95,7 +95,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
         return getSnapshot();
       }
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var React = require("react"), objectIs = "function" === typeof Object.is ? Object.is : is, useState8 = React.useState, useEffect6 = React.useEffect, useLayoutEffect4 = React.useLayoutEffect, useDebugValue2 = React.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
+      var React = require("react"), objectIs = "function" === typeof Object.is ? Object.is : is, useState9 = React.useState, useEffect7 = React.useEffect, useLayoutEffect4 = React.useLayoutEffect, useDebugValue2 = React.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
       exports.useSyncExternalStore = void 0 !== React.useSyncExternalStore ? React.useSyncExternalStore : shim;
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
@@ -123,9 +123,9 @@ var require_with_selector_development = __commonJS({
         return x === y && (0 !== x || 1 / x === 1 / y) || x !== x && y !== y;
       }
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var React = require("react"), shim = require_shim(), objectIs = "function" === typeof Object.is ? Object.is : is, useSyncExternalStore4 = shim.useSyncExternalStore, useRef6 = React.useRef, useEffect6 = React.useEffect, useMemo3 = React.useMemo, useDebugValue2 = React.useDebugValue;
+      var React = require("react"), shim = require_shim(), objectIs = "function" === typeof Object.is ? Object.is : is, useSyncExternalStore4 = shim.useSyncExternalStore, useRef7 = React.useRef, useEffect7 = React.useEffect, useMemo3 = React.useMemo, useDebugValue2 = React.useDebugValue;
       exports.useSyncExternalStoreWithSelector = function(subscribe, getSnapshot, getServerSnapshot, selector, isEqual) {
-        var instRef = useRef6(null);
+        var instRef = useRef7(null);
         if (null === instRef.current) {
           var inst = { hasValue: false, value: null };
           instRef.current = inst;
@@ -166,7 +166,7 @@ var require_with_selector_development = __commonJS({
           [getSnapshot, getServerSnapshot, selector, isEqual]
         );
         var value = useSyncExternalStore4(subscribe, instRef[0], instRef[1]);
-        useEffect6(
+        useEffect7(
           function() {
             inst.hasValue = true;
             inst.value = value;
@@ -1508,7 +1508,7 @@ function CeoDelegateRow({ block, inspect, t }) {
 }
 
 // src/client/CeoTeamGraph.ts
-var import_react5 = require("react");
+var import_react6 = require("react");
 
 // ../../node_modules/.pnpm/@xyflow+react@12.11.6_react_c2c6b2ffa45210201bfebe3ffbf25aee/node_modules/@xyflow/react/dist/esm/index.js
 var import_jsx_runtime = require("react/jsx-runtime");
@@ -10876,6 +10876,35 @@ function failureCardOf(member, roster2 = []) {
   return void 0;
 }
 
+// src/client/elapsed.ts
+var import_react5 = require("react");
+function formatElapsed(seconds) {
+  if (seconds < 60) return `${String(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${String(minutes)}m` : `${String(minutes)}m ${String(rest)}s`;
+}
+function useElapsedSeconds(live) {
+  const [, setTick] = (0, import_react5.useState)(0);
+  const startedRef = (0, import_react5.useRef)(null);
+  const frozenRef = (0, import_react5.useRef)(0);
+  if (live && startedRef.current === null) startedRef.current = Date.now();
+  if (!live && startedRef.current !== null) {
+    frozenRef.current = Math.max(0, Math.floor((Date.now() - startedRef.current) / 1e3));
+    startedRef.current = null;
+  }
+  (0, import_react5.useEffect)(() => {
+    if (!live) return void 0;
+    const id2 = setInterval(() => {
+      setTick((value) => value + 1);
+    }, 1e3);
+    return () => {
+      clearInterval(id2);
+    };
+  }, [live]);
+  return live && startedRef.current !== null ? Math.max(0, Math.floor((Date.now() - startedRef.current) / 1e3)) : frozenRef.current;
+}
+
 // src/client/task-board-data.ts
 function taskMutationFailure(result) {
   if (result === void 0) return "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528";
@@ -11277,7 +11306,7 @@ function searchResultCount(result, sources) {
 }
 
 // src/client/CeoTeamGraph.ts
-var GraphHoverContext = (0, import_react5.createContext)({
+var GraphHoverContext = (0, import_react6.createContext)({
   hoveredNodeId: null,
   keepBrightIds: null
 });
@@ -11308,12 +11337,6 @@ function roleGlyph(role) {
   const key = role.trim();
   if (key === "") return "?";
   return Array.from(key)[0] ?? "?";
-}
-function formatElapsed(seconds) {
-  if (seconds < 60) return `${String(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return rest === 0 ? `${String(minutes)}m` : `${String(minutes)}m ${String(rest)}s`;
 }
 function memberPreview(member) {
   const output = debriefSummaryOf(member.report, member.lastMessage);
@@ -11486,7 +11509,7 @@ function FlowEdge({
   const animated = data?.animated === true && motionEnabled();
   const kind = data?.kind;
   const handoff = data?.handoff;
-  const { hoveredNodeId, keepBrightIds } = (0, import_react5.useContext)(GraphHoverContext);
+  const { hoveredNodeId, keepBrightIds } = (0, import_react6.useContext)(GraphHoverContext);
   const hoverActive = hoveredNodeId !== null;
   const hoverRelated = keepBrightIds?.has(source) === true && keepBrightIds.has(target) === true;
   let strokeOpacity;
@@ -11511,10 +11534,10 @@ function FlowEdge({
   }
   const dash = kind === "depends" ? "5 4" : void 0;
   const handoffShort = handoff === "summary" || handoff === "truncated" ? handoff === "summary" ? "\u6458\u8981" : "\u5DF2\u622A\u65AD" : null;
-  return (0, import_react5.createElement)(
-    import_react5.Fragment,
+  return (0, import_react6.createElement)(
+    import_react6.Fragment,
     null,
-    (0, import_react5.createElement)(BaseEdge, {
+    (0, import_react6.createElement)(BaseEdge, {
       path: edgePath,
       markerEnd,
       style: {
@@ -11525,10 +11548,10 @@ function FlowEdge({
         strokeDasharray: animated ? void 0 : dash
       }
     }),
-    handoffShort !== null ? (0, import_react5.createElement)(
+    handoffShort !== null ? (0, import_react6.createElement)(
       EdgeLabelRenderer,
       null,
-      (0, import_react5.createElement)("div", {
+      (0, import_react6.createElement)("div", {
         className: "nodrag nopan",
         style: {
           position: "absolute",
@@ -11545,11 +11568,11 @@ function FlowEdge({
         }
       }, handoffShort)
     ) : null,
-    animated ? PARTICLE_BEGINS.map((begin) => (0, import_react5.createElement)("circle", {
+    animated ? PARTICLE_BEGINS.map((begin) => (0, import_react6.createElement)("circle", {
       key: begin,
       r: 3,
       fill: ink.accent
-    }, (0, import_react5.createElement)("animateMotion", {
+    }, (0, import_react6.createElement)("animateMotion", {
       dur: PARTICLE_DUR,
       begin,
       repeatCount: "indefinite",
@@ -11581,7 +11604,7 @@ function clipOneLine(text) {
 }
 function useGraphNodeDimmed() {
   const nodeId = useNodeId();
-  const { keepBrightIds } = (0, import_react5.useContext)(GraphHoverContext);
+  const { keepBrightIds } = (0, import_react6.useContext)(GraphHoverContext);
   if (keepBrightIds === null || nodeId == null) return false;
   return keepBrightIds.has(nodeId) === false;
 }
@@ -11592,9 +11615,9 @@ function isTerminalStatus(status) {
   return status === "completed" || status === "failed" || status === "error";
 }
 function useTerminalFlash(status) {
-  const [flashing, setFlashing] = (0, import_react5.useState)(false);
-  const prev = (0, import_react5.useRef)(status);
-  (0, import_react5.useEffect)(() => {
+  const [flashing, setFlashing] = (0, import_react6.useState)(false);
+  const prev = (0, import_react6.useRef)(status);
+  (0, import_react6.useEffect)(() => {
     const was = prev.current;
     prev.current = status;
     if (was === status) return void 0;
@@ -11614,7 +11637,7 @@ function useTerminalFlash(status) {
 }
 function endpointAvatar(kind, status) {
   const color2 = kind === "goal" ? ink.tertiary : STATUS_COLOR[status];
-  return (0, import_react5.createElement)("span", {
+  return (0, import_react6.createElement)("span", {
     "aria-hidden": true,
     style: {
       display: "inline-flex",
@@ -11633,24 +11656,24 @@ function endpointAvatar(kind, status) {
 }
 function handles(kind) {
   return [
-    kind === "goal" ? null : (0, import_react5.createElement)(Handle, { key: "in", type: "target", position: Position.Left }),
-    kind === "ceo" ? null : (0, import_react5.createElement)(Handle, { key: "out", type: "source", position: Position.Right })
+    kind === "goal" ? null : (0, import_react6.createElement)(Handle, { key: "in", type: "target", position: Position.Left }),
+    kind === "ceo" ? null : (0, import_react6.createElement)(Handle, { key: "out", type: "source", position: Position.Right })
   ];
 }
 function GoalNode({ data }) {
   const dimmed = useGraphNodeDimmed();
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     "div",
     {
       "data-magic-ceo-node": "goal",
       className: `magic-ceo-node-face ${graphNodeDimClass(dimmed)}`,
       style: { ...cardStyle(false, false, void 0, true), ...faceStyle(data.enterIndex) }
     },
-    (0, import_react5.createElement)(
+    (0, import_react6.createElement)(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 10 } },
       endpointAvatar("goal", "queued"),
-      (0, import_react5.createElement)("strong", {
+      (0, import_react6.createElement)("strong", {
         style: {
           fontSize: 13,
           fontWeight: 510,
@@ -11660,10 +11683,10 @@ function GoalNode({ data }) {
         }
       }, data.t("graph.goal"))
     ),
-    (0, import_react5.createElement)("div", {
+    (0, import_react6.createElement)("div", {
       style: { marginTop: 4, fontSize: 11, lineHeight: "16px", color: ink.tertiary }
     }, data.t("graph.goalHint")),
-    data.preview.trim() === "" ? null : (0, import_react5.createElement)("div", { style: { ...clampPreview(data.preview), marginTop: 6 } }, data.preview),
+    data.preview.trim() === "" ? null : (0, import_react6.createElement)("div", { style: { ...clampPreview(data.preview), marginTop: 6 } }, data.preview),
     ...handles("goal")
   );
 }
@@ -11682,7 +11705,7 @@ function MemberNode({ data }) {
   const flashColor = presentation.viewStatus === "failed" || presentation.viewStatus === "error" ? "var(--dsw-alias-state-danger, #dc2626)" : "var(--dsw-alias-state-success, #16a34a)";
   const blockedWait = presentation.viewStatus === "blocked" ? waitingOnOf(member, data.roster) : [];
   const blockedBadgeText = [data.t("badge.blocked"), blockedWait.join(", ")].filter((part) => part !== "").join(" \xB7 ");
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     "div",
     {
       "data-magic-ceo-member": data.member.memberId ?? data.member.callId,
@@ -11691,7 +11714,7 @@ function MemberNode({ data }) {
       "data-selected": data.selected ? "true" : void 0,
       className: `${graphNodeDimClass(hoverDimmed)}${running ? " magic-ceo-node-running" : ""}`
     },
-    (0, import_react5.createElement)(
+    (0, import_react6.createElement)(
       "div",
       {
         className: `magic-ceo-node-face${flashing ? " magic-ceo-node-flash" : ""}`,
@@ -11705,15 +11728,15 @@ function MemberNode({ data }) {
           ...faceStyle(data.enterIndex)
         }
       },
-      (0, import_react5.createElement)(
+      (0, import_react6.createElement)(
         "div",
         { style: { display: "flex", alignItems: "center", gap: 10 } },
-        (0, import_react5.createElement)(
+        (0, import_react6.createElement)(
           "span",
           {
             style: { position: "relative", flex: "0 0 auto", width: 28, height: 28 }
           },
-          (0, import_react5.createElement)("span", {
+          (0, import_react6.createElement)("span", {
             "aria-hidden": true,
             style: {
               display: "inline-flex",
@@ -11728,7 +11751,7 @@ function MemberNode({ data }) {
               fontWeight: 600
             }
           }, roleGlyph(title)),
-          (0, import_react5.createElement)("span", {
+          (0, import_react6.createElement)("span", {
             "aria-hidden": true,
             style: {
               position: "absolute",
@@ -11744,7 +11767,7 @@ function MemberNode({ data }) {
               justifyContent: "center",
               animation: running ? "magic-ceo-dot-pulse 2s ease-in-out infinite" : void 0
             }
-          }, running ? (0, import_react5.createElement)("span", {
+          }, running ? (0, import_react6.createElement)("span", {
             "aria-hidden": true,
             style: {
               width: 6,
@@ -11753,9 +11776,9 @@ function MemberNode({ data }) {
               borderTopColor: "transparent",
               borderRadius: 99
             }
-          }) : presentation.viewStatus === "completed" ? (0, import_react5.createElement)("span", { style: { fontSize: 8, lineHeight: "8px", color: "#fff", fontWeight: 700 } }, "\u2713") : null)
+          }) : presentation.viewStatus === "completed" ? (0, import_react6.createElement)("span", { style: { fontSize: 8, lineHeight: "8px", color: "#fff", fontWeight: 700 } }, "\u2713") : null)
         ),
-        (0, import_react5.createElement)("strong", {
+        (0, import_react6.createElement)("strong", {
           style: {
             minWidth: 0,
             flex: 1,
@@ -11768,7 +11791,7 @@ function MemberNode({ data }) {
         }, title)
       ),
       // AgentCore AgentNodeMeta: badges left, status right on its own row.
-      (0, import_react5.createElement)(
+      (0, import_react6.createElement)(
         "div",
         {
           style: {
@@ -11781,7 +11804,7 @@ function MemberNode({ data }) {
             color: ink.tertiary
           }
         },
-        presentation.viewStatus === "blocked" ? (0, import_react5.createElement)("span", {
+        presentation.viewStatus === "blocked" ? (0, import_react6.createElement)("span", {
           "data-badge": "blocked",
           title: blockedBadgeText,
           style: {
@@ -11791,7 +11814,7 @@ function MemberNode({ data }) {
             background: "color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 14%, transparent)",
             color: "var(--dsw-alias-state-warning, #d97706)"
           }
-        }, blockedBadgeText) : presentation.needsDecision ? (0, import_react5.createElement)("span", {
+        }, blockedBadgeText) : presentation.needsDecision ? (0, import_react6.createElement)("span", {
           "data-badge": "decision",
           style: {
             fontSize: 12,
@@ -11800,7 +11823,7 @@ function MemberNode({ data }) {
             background: "var(--dsw-alias-bg-layer-2, #f4f4f6)",
             color: ink.tertiary
           }
-        }, data.t("badge.decision")) : presentation.hasBlocker ? (0, import_react5.createElement)("span", {
+        }, data.t("badge.decision")) : presentation.hasBlocker ? (0, import_react6.createElement)("span", {
           "data-badge": "blocker",
           style: {
             fontSize: 12,
@@ -11810,7 +11833,7 @@ function MemberNode({ data }) {
             color: ink.tertiary
           }
         }, data.t("badge.blocker")) : null,
-        member.halted === true ? (0, import_react5.createElement)("span", {
+        member.halted === true ? (0, import_react6.createElement)("span", {
           "data-badge": "halted",
           title: data.t("halted.hint"),
           style: {
@@ -11821,7 +11844,7 @@ function MemberNode({ data }) {
             color: "var(--dsw-alias-state-danger, #dc2626)"
           }
         }, data.t("halted.badge")) : null,
-        member.usage !== void 0 ? (0, import_react5.createElement)("span", {
+        member.usage !== void 0 ? (0, import_react6.createElement)("span", {
           "data-badge": "tokens",
           title: data.t("tokens.tooltip", {
             input: formatTokenCount(member.usage.inputTokens),
@@ -11837,7 +11860,7 @@ function MemberNode({ data }) {
             member.usage.totalTokens ?? member.usage.inputTokens + member.usage.outputTokens
           )
         })) : null,
-        (0, import_react5.createElement)("span", {
+        (0, import_react6.createElement)("span", {
           style: {
             marginLeft: "auto",
             fontVariantNumeric: "tabular-nums",
@@ -11845,7 +11868,7 @@ function MemberNode({ data }) {
           }
         }, face)
       ),
-      preview === "" ? null : (0, import_react5.createElement)("div", { style: { ...clampPreview(preview), marginTop: 8 } }, preview),
+      preview === "" ? null : (0, import_react6.createElement)("div", { style: { ...clampPreview(preview), marginTop: 8 } }, preview),
       ...handles("member")
     )
   );
@@ -11855,13 +11878,13 @@ function CeoNode({ data }) {
   const flashing = useTerminalFlash(data.status);
   const caption = data.status === "running" ? data.t("graph.ceoRunning") : data.status === "completed" ? data.t("graph.ceoDone") : data.t("graph.ceoPending");
   const flashColor = data.status === "failed" || data.status === "error" ? "var(--dsw-alias-state-danger, #dc2626)" : "var(--dsw-alias-state-success, #16a34a)";
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     "div",
     {
       "data-magic-ceo-node": "ceo",
       className: `${graphNodeDimClass(dimmed)}${data.status === "running" ? " magic-ceo-node-running" : ""}`
     },
-    (0, import_react5.createElement)(
+    (0, import_react6.createElement)(
       "div",
       {
         className: `magic-ceo-node-face${flashing ? " magic-ceo-node-flash" : ""}`,
@@ -11875,13 +11898,13 @@ function CeoNode({ data }) {
           ...faceStyle(data.enterIndex)
         }
       },
-      (0, import_react5.createElement)(
+      (0, import_react6.createElement)(
         "div",
         { style: { display: "flex", alignItems: "center", gap: 10 } },
         endpointAvatar("ceo", data.status),
-        (0, import_react5.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, data.t("graph.ceo"))
+        (0, import_react6.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, data.t("graph.ceo"))
       ),
-      (0, import_react5.createElement)("div", {
+      (0, import_react6.createElement)("div", {
         style: {
           marginTop: 4,
           fontSize: 11,
@@ -11901,7 +11924,7 @@ function TaskNode({ data }) {
   const statusLabel = data.task.status === "completed" ? data.t("tasks.status.completed") : data.task.status === "in_progress" ? data.t("tasks.status.in_progress") : data.t("tasks.status.pending");
   const dot = data.task.status === "completed" ? "var(--dsw-alias-state-success, #16a34a)" : data.task.status === "in_progress" ? "var(--dsw-alias-state-business-primary, #3b82f6)" : "var(--dsw-alias-border-l3, #6b6b7a)";
   const done = data.task.status === "completed";
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     "div",
     {
       "data-magic-ceo-node": "task",
@@ -11910,7 +11933,7 @@ function TaskNode({ data }) {
       "data-selected": data.selected ? "true" : void 0,
       className: graphNodeDimClass(false)
     },
-    (0, import_react5.createElement)(
+    (0, import_react6.createElement)(
       "div",
       {
         className: "magic-ceo-node-face",
@@ -11924,15 +11947,15 @@ function TaskNode({ data }) {
           background: done ? "color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 40%, transparent)" : "var(--dsw-alias-bg-base, #ffffff)"
         }
       },
-      (0, import_react5.createElement)(
+      (0, import_react6.createElement)(
         "div",
         { style: { display: "flex", alignItems: "center", gap: 7 } },
-        (0, import_react5.createElement)("span", { "aria-hidden": true, style: { flex: "0 0 auto", width: 7, height: 7, borderRadius: 99, background: dot } }),
-        (0, import_react5.createElement)("span", {
+        (0, import_react6.createElement)("span", { "aria-hidden": true, style: { flex: "0 0 auto", width: 7, height: 7, borderRadius: 99, background: dot } }),
+        (0, import_react6.createElement)("span", {
           style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? "line-through" : void 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
         }, data.task.subject)
       ),
-      (0, import_react5.createElement)("div", { style: { marginTop: 3, fontSize: 11, color: ink.tertiary } }, statusLabel)
+      (0, import_react6.createElement)("div", { style: { marginTop: 3, fontSize: 11, color: ink.tertiary } }, statusLabel)
     )
   );
 }
@@ -11945,34 +11968,14 @@ var nodeTypes = {
 var edgeTypes = {
   flow: FlowEdge
 };
-function useElapsedSeconds(live) {
-  const [, setTick] = (0, import_react5.useState)(0);
-  const startedRef = (0, import_react5.useRef)(null);
-  const frozenRef = (0, import_react5.useRef)(0);
-  if (live && startedRef.current === null) startedRef.current = Date.now();
-  if (!live && startedRef.current !== null) {
-    frozenRef.current = Math.max(0, Math.floor((Date.now() - startedRef.current) / 1e3));
-    startedRef.current = null;
-  }
-  (0, import_react5.useEffect)(() => {
-    if (!live) return void 0;
-    const id2 = setInterval(() => {
-      setTick((value) => value + 1);
-    }, 1e3);
-    return () => {
-      clearInterval(id2);
-    };
-  }, [live]);
-  return live && startedRef.current !== null ? Math.max(0, Math.floor((Date.now() - startedRef.current) / 1e3)) : frozenRef.current;
-}
 function TaskLaneBand({ lane }) {
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     ViewportPortal,
     null,
-    (0, import_react5.createElement)(
-      import_react5.Fragment,
+    (0, import_react6.createElement)(
+      import_react6.Fragment,
       { key: lane.id },
-      (0, import_react5.createElement)("div", {
+      (0, import_react6.createElement)("div", {
         "data-magic-ceo-lane": lane.id,
         style: {
           position: "absolute",
@@ -11986,7 +11989,7 @@ function TaskLaneBand({ lane }) {
           pointerEvents: "none"
         }
       }),
-      (0, import_react5.createElement)("div", {
+      (0, import_react6.createElement)("div", {
         style: {
           position: "absolute",
           transform: `translate(${String(lane.labelX)}px, ${String(lane.labelY)}px)`,
@@ -12002,13 +12005,13 @@ function TaskLaneBand({ lane }) {
 }
 function WaveLanes({ lanes }) {
   if (lanes.length === 0) return null;
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     ViewportPortal,
     null,
-    lanes.map((lane) => (0, import_react5.createElement)(
-      import_react5.Fragment,
+    lanes.map((lane) => (0, import_react6.createElement)(
+      import_react6.Fragment,
       { key: lane.id },
-      (0, import_react5.createElement)("div", {
+      (0, import_react6.createElement)("div", {
         "data-magic-ceo-lane": lane.id,
         style: {
           position: "absolute",
@@ -12022,7 +12025,7 @@ function WaveLanes({ lanes }) {
           pointerEvents: "none"
         }
       }),
-      (0, import_react5.createElement)("div", {
+      (0, import_react6.createElement)("div", {
         style: {
           position: "absolute",
           transform: `translate(${String(lane.labelX)}px, ${String(lane.labelY)}px)`,
@@ -12074,23 +12077,23 @@ function RefitWhenMeasured() {
   const { fitView } = useReactFlow();
   const width = useStore((state) => state.width);
   const height = useStore((state) => state.height);
-  const fitted = (0, import_react5.useRef)(false);
-  (0, import_react5.useEffect)(() => {
+  const fitted = (0, import_react6.useRef)(false);
+  (0, import_react6.useEffect)(() => {
     if (fitted.current || width <= 0 || height <= 0) return;
     fitted.current = true;
     void fitView({ ...CANVAS_FIT_VIEW });
   }, [width, height, fitView]);
   return null;
 }
-var Canvas = (0, import_react5.memo)(function Canvas2(props) {
+var Canvas = (0, import_react6.memo)(function Canvas2(props) {
   const layout = layoutCeoTeamFlow(props.members, props.tasks);
   const sinkStatus = ceoTeamSinkStatus(props.members);
-  const [hoveredId, setHoveredId] = (0, import_react5.useState)(null);
-  const hoverState = (0, import_react5.useMemo)(() => ({
+  const [hoveredId, setHoveredId] = (0, import_react6.useState)(null);
+  const hoverState = (0, import_react6.useMemo)(() => ({
     hoveredNodeId: hoveredId,
     keepBrightIds: hoveredId === null ? null : hoverRelatedIds(hoveredId, layout.edges)
   }), [hoveredId, layout.edges]);
-  const flow = (0, import_react5.useMemo)(() => {
+  const flow = (0, import_react6.useMemo)(() => {
     const nodes = layout.nodes.map((node) => {
       if (node.kind === "goal") {
         return {
@@ -12177,7 +12180,7 @@ var Canvas = (0, import_react5.memo)(function Canvas2(props) {
     return { nodes, edges };
   }, [layout, props.goalPreview, props.selectedCallId, props.t, sinkStatus, props.members, props.tasks, props.selectedTaskId]);
   const height = Math.min(520, Math.max(300, layout.height + 72));
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     "div",
     {
       className: "magic-ceo-canvas",
@@ -12193,10 +12196,10 @@ var Canvas = (0, import_react5.memo)(function Canvas2(props) {
         background: "var(--dsw-alias-bg-layer-1, #f7f7f9)"
       }
     },
-    (0, import_react5.createElement)(
+    (0, import_react6.createElement)(
       GraphHoverContext.Provider,
       { value: hoverState },
-      (0, import_react5.createElement)(
+      (0, import_react6.createElement)(
         index,
         {
           nodes: flow.nodes,
@@ -12245,17 +12248,17 @@ var Canvas = (0, import_react5.memo)(function Canvas2(props) {
             }
           }
         },
-        (0, import_react5.createElement)(RefitWhenMeasured),
-        (0, import_react5.createElement)(Background, { gap: 20, size: 1, color: "color-mix(in srgb, var(--dsw-alias-border-l2, #3a3a48) 45%, transparent)" }),
-        (0, import_react5.createElement)(WaveLanes, { lanes: layout.lanes }),
-        layout.taskLane !== void 0 ? (0, import_react5.createElement)(TaskLaneBand, { lane: layout.taskLane }) : null
+        (0, import_react6.createElement)(RefitWhenMeasured),
+        (0, import_react6.createElement)(Background, { gap: 20, size: 1, color: "color-mix(in srgb, var(--dsw-alias-border-l2, #3a3a48) 45%, transparent)" }),
+        (0, import_react6.createElement)(WaveLanes, { lanes: layout.lanes }),
+        layout.taskLane !== void 0 ? (0, import_react6.createElement)(TaskLaneBand, { lane: layout.taskLane }) : null
       )
     )
   );
 });
 function StatusIcon({ status }) {
   const running = status === "running";
-  return (0, import_react5.createElement)("span", {
+  return (0, import_react6.createElement)("span", {
     "aria-hidden": true,
     style: {
       display: "inline-flex",
@@ -12265,7 +12268,7 @@ function StatusIcon({ status }) {
       height: 16,
       color: STATUS_COLOR[status]
     }
-  }, running ? (0, import_react5.createElement)("span", {
+  }, running ? (0, import_react6.createElement)("span", {
     style: {
       width: 12,
       height: 12,
@@ -12277,34 +12280,34 @@ function StatusIcon({ status }) {
   }) : status === "completed" ? "\u2713" : status === "blocked" || status === "failed" || status === "error" ? "!" : "\u25CB");
 }
 function CeoTeamGraph(props) {
-  const selected3 = (0, import_react5.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
-  const roster2 = (0, import_react5.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
-  const taskBoard = (0, import_react5.useSyncExternalStore)(
+  const selected3 = (0, import_react6.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
+  const roster2 = (0, import_react6.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
+  const taskBoard = (0, import_react6.useSyncExternalStore)(
     props.taskBoard?.subscribe ?? noopTaskBoardSubscribe,
     props.taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot,
     getEmptyTaskBoardSnapshot
   );
-  (0, import_react5.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     props.taskBoard?.reload();
   }, [props.taskBoard]);
   const turnMembers = props.node.data.members;
-  const mergeRoster = (0, import_react5.useMemo)(createRosterMerger, []);
+  const mergeRoster = (0, import_react6.useMemo)(createRosterMerger, []);
   const members = mergeRoster(turnMembers, roster2);
   const sinkStatus = ceoTeamSinkStatus(members);
   const live = sinkStatus === "running" || sinkStatus === "queued";
-  const [expanded, setExpanded] = (0, import_react5.useState)(true);
+  const [expanded, setExpanded] = (0, import_react6.useState)(true);
   const elapsed = useElapsedSeconds(live);
-  (0, import_react5.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     ensureCanvasCss();
   }, []);
-  (0, import_react5.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     publishCeoTeam(turnMembers, props.sessionId);
   }, [turnMembers, props.sessionId]);
   const progress = props.node.data.progress;
   const progressLabel = `${String(progress.completed)}/${String(progress.total)}`;
   const duration = elapsed >= 1 ? props.t("graph.elapsed", { duration: formatElapsed(elapsed) }) : "";
   const goalPreview = initiatorPreview(props.node.data.plan?.summary ?? members[0]?.task ?? "");
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     "section",
     {
       "data-magic-ceo-team": true,
@@ -12320,7 +12323,7 @@ function CeoTeamGraph(props) {
         background: surface.layer2
       }
     },
-    (0, import_react5.createElement)(
+    (0, import_react6.createElement)(
       "header",
       {
         "data-magic-ceo-status-strip": true,
@@ -12334,11 +12337,11 @@ function CeoTeamGraph(props) {
           fontSize: 13
         }
       },
-      (0, import_react5.createElement)(StatusIcon, { status: sinkStatus }),
-      (0, import_react5.createElement)("span", {
+      (0, import_react6.createElement)(StatusIcon, { status: sinkStatus }),
+      (0, import_react6.createElement)("span", {
         style: { minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
       }, [progressLabel, duration].filter((item) => item !== "").join(" \xB7 ")),
-      (0, import_react5.createElement)("button", {
+      (0, import_react6.createElement)("button", {
         type: "button",
         title: expanded ? props.t("graph.fold") : props.t("graph.expand"),
         "aria-label": expanded ? props.t("graph.fold") : props.t("graph.expand"),
@@ -12355,7 +12358,7 @@ function CeoTeamGraph(props) {
           padding: "2px 6px"
         }
       }, expanded ? "\u25B4" : "\u25BE"),
-      (0, import_react5.createElement)("button", {
+      (0, import_react6.createElement)("button", {
         type: "button",
         onClick: props.openWorkspace,
         title: props.t("graph.openCanvas"),
@@ -12374,10 +12377,10 @@ function CeoTeamGraph(props) {
         }
       }, props.t("graph.openCanvas"))
     ),
-    expanded ? (0, import_react5.createElement)(
+    expanded ? (0, import_react6.createElement)(
       "div",
       { style: { display: "flex", flexDirection: "column" } },
-      props.node.data.plan ? (0, import_react5.createElement)(
+      props.node.data.plan ? (0, import_react6.createElement)(
         "div",
         {
           "data-magic-ceo-plan": true,
@@ -12387,13 +12390,13 @@ function CeoTeamGraph(props) {
             background: surface.layer2
           }
         },
-        (0, import_react5.createElement)("strong", { style: { display: "block", fontSize: 12, marginBottom: 2, color: ink.secondary } }, `${props.t("plan.title")} \xB7 v${props.node.data.plan.version}`),
-        (0, import_react5.createElement)("div", { style: { fontSize: 12, lineHeight: "18px", color: ink.tertiary } }, props.node.data.plan.summary)
+        (0, import_react6.createElement)("strong", { style: { display: "block", fontSize: 12, marginBottom: 2, color: ink.secondary } }, `${props.t("plan.title")} \xB7 v${props.node.data.plan.version}`),
+        (0, import_react6.createElement)("div", { style: { fontSize: 12, lineHeight: "18px", color: ink.tertiary } }, props.node.data.plan.summary)
       ) : null,
-      members.length > 0 ? (0, import_react5.createElement)(
+      members.length > 0 ? (0, import_react6.createElement)(
         ReactFlowProvider,
         null,
-        (0, import_react5.createElement)(Canvas, {
+        (0, import_react6.createElement)(Canvas, {
           members,
           selectedCallId: selected3?.callId,
           goalPreview,
@@ -12404,7 +12407,7 @@ function CeoTeamGraph(props) {
           selectedTaskId: taskBoard.selectedTaskId,
           t: props.t
         })
-      ) : (0, import_react5.createElement)("div", {
+      ) : (0, import_react6.createElement)("div", {
         "data-magic-ceo-plan-status": true,
         style: {
           padding: "18px 12px",
@@ -12417,20 +12420,20 @@ function CeoTeamGraph(props) {
 }
 
 // src/client/CeoWorkspace.ts
-var import_react11 = require("react");
+var import_react12 = require("react");
 
 // src/client/TaskBoard.ts
-var import_react7 = require("react");
+var import_react8 = require("react");
 function TaskBoardCard({
   sessionId,
   api,
   t
 }) {
-  const [state, setState] = (0, import_react7.useState)({ kind: "loading", tasks: [] });
-  const [draft, setDraft] = (0, import_react7.useState)("");
-  const [busy, setBusy] = (0, import_react7.useState)(false);
-  const [error, setError] = (0, import_react7.useState)("");
-  const [attempt, setAttempt] = (0, import_react7.useState)(0);
+  const [state, setState] = (0, import_react8.useState)({ kind: "loading", tasks: [] });
+  const [draft, setDraft] = (0, import_react8.useState)("");
+  const [busy, setBusy] = (0, import_react8.useState)(false);
+  const [error, setError] = (0, import_react8.useState)("");
+  const [attempt, setAttempt] = (0, import_react8.useState)(0);
   const reload = async () => {
     if (api === void 0 || sessionId === void 0) {
       setState({ kind: "unavailable", tasks: [] });
@@ -12449,7 +12452,7 @@ function TaskBoardCard({
       }
     }
   };
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     void reload();
   }, [sessionId, api, busy, attempt]);
   const run = async (operation) => {
@@ -12468,7 +12471,7 @@ function TaskBoardCard({
     setBusy(false);
   };
   if (api === void 0 || sessionId === void 0) {
-    return (0, import_react7.createElement)(
+    return (0, import_react8.createElement)(
       "div",
       { "data-magic-ceo-taskboard": true, style: { padding: "10px 12px", color: "rgba(160,160,175,1)", fontSize: 12 } },
       t("tasks.unavailable")
@@ -12476,7 +12479,7 @@ function TaskBoardCard({
   }
   const sorted = [...state.tasks].sort((a, b) => (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0));
   const rows = sorted.map(taskRowOf);
-  return (0, import_react7.createElement)(
+  return (0, import_react8.createElement)(
     "div",
     {
       "data-magic-ceo-taskboard": true,
@@ -12490,14 +12493,14 @@ function TaskBoardCard({
         background: "rgba(255,255,255,0.03)"
       }
     },
-    state.kind === "loading" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.7, textAlign: "center", padding: "6px 0" } }, t("tasks.loading")) : state.kind === "unavailable" ? (0, import_react7.createElement)(
+    state.kind === "loading" ? (0, import_react8.createElement)("div", { style: { fontSize: 12, opacity: 0.7, textAlign: "center", padding: "6px 0" } }, t("tasks.loading")) : state.kind === "unavailable" ? (0, import_react8.createElement)(
       "div",
       { style: { display: "flex", flexDirection: "column", gap: 4, alignItems: "center", padding: "6px 0", fontSize: 12, color: "rgba(220,120,120,1)" } },
-      (0, import_react7.createElement)(
+      (0, import_react8.createElement)(
         "div",
         { style: { display: "flex", alignItems: "center", gap: 8 } },
-        (0, import_react7.createElement)("span", null, t("tasks.unavailable")),
-        (0, import_react7.createElement)("button", {
+        (0, import_react8.createElement)("span", null, t("tasks.unavailable")),
+        (0, import_react8.createElement)("button", {
           type: "button",
           disabled: busy,
           onClick: () => {
@@ -12516,8 +12519,8 @@ function TaskBoardCard({
           }
         }, t("tasks.retry"))
       ),
-      state.message !== void 0 ? (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.85, textAlign: "center" } }, state.message) : null
-    ) : state.kind === "empty" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.6, textAlign: "center", padding: "10px 0" } }, t("tasks.empty")) : (0, import_react7.createElement)(
+      state.message !== void 0 ? (0, import_react8.createElement)("div", { style: { fontSize: 11, opacity: 0.85, textAlign: "center" } }, state.message) : null
+    ) : state.kind === "empty" ? (0, import_react8.createElement)("div", { style: { fontSize: 12, opacity: 0.6, textAlign: "center", padding: "10px 0" } }, t("tasks.empty")) : (0, import_react8.createElement)(
       "div",
       {
         style: { display: "flex", flexDirection: "column", gap: 3, maxHeight: 240, overflowY: "auto", margin: "-2px" }
@@ -12525,22 +12528,22 @@ function TaskBoardCard({
       rows.map((row, index2) => {
         const task = sorted[index2];
         const done = row.statusText === "completed";
-        return (0, import_react7.createElement)(
+        return (0, import_react8.createElement)(
           "div",
           {
             key: task?.id ?? String(index2),
             style: { display: "flex", flexDirection: "column", gap: 2, padding: "5px 8px", borderRadius: 7, background: done ? "transparent" : "rgba(255,255,255,0.045)", opacity: done ? 0.5 : 1 }
           },
-          (0, import_react7.createElement)(
+          (0, import_react8.createElement)(
             "div",
             { style: { display: "flex", alignItems: "center", gap: 8 } },
-            (0, import_react7.createElement)("span", {
+            (0, import_react8.createElement)("span", {
               "aria-hidden": true,
               title: t(`tasks.status.${row.statusText}`),
               style: { flex: "0 0 auto", width: 7, height: 7, borderRadius: 99, background: statusDotColor(row.statusText) }
             }),
-            (0, import_react7.createElement)("span", { style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? "line-through" : void 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.title),
-            row.completable ? (0, import_react7.createElement)("button", {
+            (0, import_react8.createElement)("span", { style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? "line-through" : void 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.title),
+            row.completable ? (0, import_react8.createElement)("button", {
               type: "button",
               disabled: busy,
               title: t("tasks.complete"),
@@ -12550,14 +12553,14 @@ function TaskBoardCard({
               style: { marginLeft: "auto", flex: "0 0 auto", border: 0, borderRadius: 6, padding: "2px 7px", cursor: busy ? "default" : "pointer", fontSize: 11, background: "transparent", color: "inherit", opacity: 0.55 }
             }, t("tasks.complete")) : null
           ),
-          row.blockedByText === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByText)
+          row.blockedByText === "" ? null : (0, import_react8.createElement)("div", { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByText)
         );
       })
     ),
-    (0, import_react7.createElement)(
+    (0, import_react8.createElement)(
       "div",
       { style: { display: "flex", gap: 6 } },
-      (0, import_react7.createElement)("input", {
+      (0, import_react8.createElement)("input", {
         value: draft,
         placeholder: t("tasks.subject"),
         disabled: busy,
@@ -12572,7 +12575,7 @@ function TaskBoardCard({
         },
         style: { flex: 1, minWidth: 0, boxSizing: "border-box", padding: "5px 10px", borderRadius: 7, border: "0.5px solid rgba(255,255,255,0.14)", background: "rgba(0,0,0,0.2)", color: "inherit", fontSize: 12 }
       }),
-      (0, import_react7.createElement)("button", {
+      (0, import_react8.createElement)("button", {
         type: "button",
         disabled: busy || draft.trim() === "",
         onClick: () => {
@@ -12592,7 +12595,7 @@ function TaskBoardCard({
         }
       }, t("tasks.create"))
     ),
-    error === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, color: "rgba(220,120,120,1)" } }, error)
+    error === "" ? null : (0, import_react8.createElement)("div", { style: { fontSize: 11, color: "rgba(220,120,120,1)" } }, error)
   );
 }
 function TaskBoardDetail({
@@ -12601,35 +12604,63 @@ function TaskBoardDetail({
   t
 }) {
   const done = task.status === "completed";
-  return (0, import_react7.createElement)(
+  return (0, import_react8.createElement)(
     "div",
     {
       "data-magic-ceo-task-detail": task.id,
       style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderRadius: 10, border: "0.5px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }
     },
-    (0, import_react7.createElement)(
+    (0, import_react8.createElement)(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8 } },
-      (0, import_react7.createElement)("span", {
+      (0, import_react8.createElement)("span", {
         "aria-hidden": true,
         style: { flex: "0 0 auto", width: 8, height: 8, borderRadius: 99, background: done ? "var(--dsw-alias-state-success, #16a34a)" : task.status === "in_progress" ? "var(--dsw-alias-state-business-primary, #3b82f6)" : "var(--dsw-alias-border-l3, #6b6b7a)" }
       }),
-      (0, import_react7.createElement)("span", { style: { fontSize: 12, fontWeight: 510, textDecoration: done ? "line-through" : void 0 } }, task.subject),
-      !done && onComplete !== void 0 ? (0, import_react7.createElement)("button", {
+      (0, import_react8.createElement)("span", { style: { fontSize: 12, fontWeight: 510, textDecoration: done ? "line-through" : void 0 } }, task.subject),
+      !done && onComplete !== void 0 ? (0, import_react8.createElement)("button", {
         type: "button",
         onClick: onComplete,
         style: { marginLeft: "auto", flex: "0 0 auto", border: 0, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, background: "var(--dsw-alias-state-business-primary, #3b82f6)", color: "#fff", fontWeight: 510 }
       }, t("tasks.complete")) : null
     ),
-    (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.65 } }, t(`tasks.status.${done ? "completed" : task.status === "in_progress" ? "in_progress" : "pending"}`))
+    (0, import_react8.createElement)("div", { style: { fontSize: 11, opacity: 0.65 } }, t(`tasks.status.${done ? "completed" : task.status === "in_progress" ? "in_progress" : "pending"}`))
   );
 }
 
 // src/client/CeoMemberInspector.ts
-var import_react10 = require("react");
+var import_react11 = require("react");
 
 // src/client/CeoProcessTimeline.ts
-var import_react8 = require("react");
+var import_react9 = require("react");
+
+// src/process-summary.ts
+var TIMELINE_COLLAPSE_THRESHOLD = 8;
+function classifyToolName(name) {
+  const lower2 = name.toLowerCase();
+  if (/(edit|write|patch|apply)/.test(lower2)) return "edit";
+  if (/(grep|search|find)/.test(lower2)) return "search";
+  if (/(bash|exec|command|shell|run|test|build|install)/.test(lower2)) return "run";
+  if (/(read|view|list|glob|dir|open|fetch|browse|source)/.test(lower2)) return "explore";
+  return "other";
+}
+function summarizeProcessSteps(steps) {
+  const counts = { explore: 0, search: 0, edit: 0, run: 0, other: 0 };
+  let running = false;
+  let total = 0;
+  for (const step of steps) {
+    if (step.kind !== "tool") continue;
+    total += 1;
+    if (step.status === "running") running = true;
+    counts[classifyToolName(step.name)] += 1;
+  }
+  return { running, total, counts };
+}
+function timelineDefaultExpanded(summary) {
+  return summary.running || summary.total < TIMELINE_COLLAPSE_THRESHOLD;
+}
+
+// src/client/CeoProcessTimeline.ts
 var MUTED = ink.tertiary;
 var PRIMARY = ink.primary;
 var DANGER = ink.danger;
@@ -12647,7 +12678,7 @@ function ensurePulseCss() {
   document.head.appendChild(style2);
 }
 function svgIcon(paths) {
-  return (0, import_react8.createElement)("svg", {
+  return (0, import_react9.createElement)("svg", {
     "aria-hidden": true,
     width: 14,
     height: 14,
@@ -12667,53 +12698,53 @@ function svgIcon(paths) {
 function ToolGlyph({ kind }) {
   if (kind === "search") {
     return svgIcon([
-      (0, import_react8.createElement)("circle", { key: "c", cx: 11, cy: 11, r: 7 }),
-      (0, import_react8.createElement)("path", { key: "p", d: "M21 21l-4.35-4.35" })
+      (0, import_react9.createElement)("circle", { key: "c", cx: 11, cy: 11, r: 7 }),
+      (0, import_react9.createElement)("path", { key: "p", d: "M21 21l-4.35-4.35" })
     ]);
   }
   if (kind === "globe") {
     return svgIcon([
-      (0, import_react8.createElement)("circle", { key: "c", cx: 12, cy: 12, r: 10 }),
-      (0, import_react8.createElement)("path", { key: "m", d: "M2 12h20" }),
-      (0, import_react8.createElement)("path", { key: "e", d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" })
+      (0, import_react9.createElement)("circle", { key: "c", cx: 12, cy: 12, r: 10 }),
+      (0, import_react9.createElement)("path", { key: "m", d: "M2 12h20" }),
+      (0, import_react9.createElement)("path", { key: "e", d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" })
     ]);
   }
   if (kind === "file") {
     return svgIcon([
-      (0, import_react8.createElement)("path", { key: "p", d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" }),
-      (0, import_react8.createElement)("path", { key: "f", d: "M14 2v6h6" })
+      (0, import_react9.createElement)("path", { key: "p", d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" }),
+      (0, import_react9.createElement)("path", { key: "f", d: "M14 2v6h6" })
     ]);
   }
   if (kind === "edit") {
     return svgIcon([
-      (0, import_react8.createElement)("path", { key: "p", d: "M12 20h9" }),
-      (0, import_react8.createElement)("path", { key: "e", d: "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" })
+      (0, import_react9.createElement)("path", { key: "p", d: "M12 20h9" }),
+      (0, import_react9.createElement)("path", { key: "e", d: "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" })
     ]);
   }
   if (kind === "folder") {
     return svgIcon([
-      (0, import_react8.createElement)("path", { key: "p", d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" })
+      (0, import_react9.createElement)("path", { key: "p", d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" })
     ]);
   }
   if (kind === "terminal") {
     return svgIcon([
-      (0, import_react8.createElement)("path", { key: "b", d: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" }),
-      (0, import_react8.createElement)("path", { key: "c", d: "m7 10 3 2-3 2" }),
-      (0, import_react8.createElement)("path", { key: "l", d: "M13 14h4" })
+      (0, import_react9.createElement)("path", { key: "b", d: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" }),
+      (0, import_react9.createElement)("path", { key: "c", d: "m7 10 3 2-3 2" }),
+      (0, import_react9.createElement)("path", { key: "l", d: "M13 14h4" })
     ]);
   }
   if (kind === "code") {
     return svgIcon([
-      (0, import_react8.createElement)("path", { key: "l", d: "m16 18 6-6-6-6" }),
-      (0, import_react8.createElement)("path", { key: "r", d: "m8 6-6 6 6 6" })
+      (0, import_react9.createElement)("path", { key: "l", d: "m16 18 6-6-6-6" }),
+      (0, import_react9.createElement)("path", { key: "r", d: "m8 6-6 6 6 6" })
     ]);
   }
   return svgIcon([
-    (0, import_react8.createElement)("path", { key: "p", d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" })
+    (0, import_react9.createElement)("path", { key: "p", d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" })
   ]);
 }
 function Chevron({ open }) {
-  return (0, import_react8.createElement)("svg", {
+  return (0, import_react9.createElement)("svg", {
     "aria-hidden": true,
     width: 14,
     height: 14,
@@ -12724,10 +12755,10 @@ function Chevron({ open }) {
     strokeLinecap: "round",
     strokeLinejoin: "round",
     style: { flex: "0 0 auto", color: MUTED }
-  }, open ? (0, import_react8.createElement)("path", { d: "m6 9 6 6 6-6" }) : (0, import_react8.createElement)("path", { d: "m9 6 6 6-6 6" }));
+  }, open ? (0, import_react9.createElement)("path", { d: "m6 9 6 6 6-6" }) : (0, import_react9.createElement)("path", { d: "m9 6 6 6-6 6" }));
 }
 function ErrorMark() {
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "svg",
     {
       "aria-hidden": true,
@@ -12741,15 +12772,15 @@ function ErrorMark() {
       strokeLinejoin: "round",
       style: { flex: "0 0 auto", marginLeft: 4, color: DANGER }
     },
-    (0, import_react8.createElement)("path", { d: "M18 6L6 18" }),
-    (0, import_react8.createElement)("path", { d: "M6 6l12 12" })
+    (0, import_react9.createElement)("path", { d: "M18 6L6 18" }),
+    (0, import_react9.createElement)("path", { d: "M6 6l12 12" })
   );
 }
 function ThinkingDots() {
-  return (0, import_react8.createElement)("span", {
+  return (0, import_react9.createElement)("span", {
     "aria-hidden": true,
     style: { display: "inline-flex", gap: 4, alignItems: "center" }
-  }, [0, 150, 300].map((delay) => (0, import_react8.createElement)("span", {
+  }, [0, 150, 300].map((delay) => (0, import_react9.createElement)("span", {
     key: String(delay),
     style: {
       width: 6,
@@ -12762,7 +12793,7 @@ function ThinkingDots() {
   })));
 }
 function RunningDot() {
-  return (0, import_react8.createElement)("span", {
+  return (0, import_react9.createElement)("span", {
     "aria-hidden": true,
     style: {
       display: "inline-block",
@@ -12777,11 +12808,11 @@ function RunningDot() {
   });
 }
 function useRunningElapsed(running) {
-  const started = (0, import_react8.useRef)(null);
-  const [, force] = (0, import_react8.useState)(0);
+  const started = (0, import_react9.useRef)(null);
+  const [, force] = (0, import_react9.useState)(0);
   if (running && started.current === null) started.current = Date.now();
   if (!running) started.current = null;
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     if (!running) return void 0;
     const id2 = setInterval(() => {
       force((n) => n + 1);
@@ -12794,16 +12825,16 @@ function useRunningElapsed(running) {
   return Math.max(0, Math.floor((Date.now() - started.current) / 1e3));
 }
 function WebSearchSkeleton() {
-  return (0, import_react8.createElement)("div", {
+  return (0, import_react9.createElement)("div", {
     "aria-hidden": true,
     style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4, paddingLeft: 22 }
-  }, [0, 1, 2].map((index2) => (0, import_react8.createElement)(
+  }, [0, 1, 2].map((index2) => (0, import_react9.createElement)(
     "div",
     {
       key: String(index2),
       style: { display: "flex", alignItems: "flex-start", gap: 8, padding: "4px 8px" }
     },
-    (0, import_react8.createElement)("div", {
+    (0, import_react9.createElement)("div", {
       style: {
         width: 16,
         height: 16,
@@ -12814,10 +12845,10 @@ function WebSearchSkeleton() {
         flex: "0 0 auto"
       }
     }),
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(
       "div",
       { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 } },
-      (0, import_react8.createElement)("div", {
+      (0, import_react9.createElement)("div", {
         style: {
           height: 12,
           width: "50%",
@@ -12826,7 +12857,7 @@ function WebSearchSkeleton() {
           animation: "magic-ceo-shimmer 1.4s ease-in-out infinite"
         }
       }),
-      (0, import_react8.createElement)("div", {
+      (0, import_react9.createElement)("div", {
         style: {
           height: 12,
           width: "80%",
@@ -12842,11 +12873,11 @@ function SearchHitCard({
   hit,
   index: index2
 }) {
-  const [hover, setHover] = (0, import_react8.useState)(false);
+  const [hover, setHover] = (0, import_react9.useState)(false);
   const href = hit.url === void 0 ? void 0 : safeHref(hit.url);
   const title = cleanSourceTitle(hit.title) || hit.site || hit.url || hit.title;
   const body = [
-    (0, import_react8.createElement)("span", {
+    (0, import_react9.createElement)("span", {
       key: "n",
       style: {
         flex: "0 0 auto",
@@ -12859,11 +12890,11 @@ function SearchHitCard({
         fontVariantNumeric: "tabular-nums"
       }
     }, String(index2 + 1)),
-    (0, import_react8.createElement)(SiteMark, { key: "m", site: hit.site, title }),
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(SiteMark, { key: "m", site: hit.site, title }),
+    (0, import_react9.createElement)(
       "span",
       { key: "t", style: { ...wrap, minWidth: 0, flex: 1 } },
-      (0, import_react8.createElement)("span", {
+      (0, import_react9.createElement)("span", {
         style: {
           display: "block",
           overflow: "hidden",
@@ -12875,7 +12906,7 @@ function SearchHitCard({
           color: PRIMARY
         }
       }, title),
-      hit.snippet !== void 0 ? (0, import_react8.createElement)("span", {
+      hit.snippet !== void 0 ? (0, import_react9.createElement)("span", {
         style: {
           ...wrap,
           display: "-webkit-box",
@@ -12902,9 +12933,9 @@ function SearchHitCard({
     textDecoration: "none"
   };
   if (href === void 0) {
-    return (0, import_react8.createElement)("div", { style: style2 }, ...body);
+    return (0, import_react9.createElement)("div", { style: style2 }, ...body);
   }
-  return (0, import_react8.createElement)("a", {
+  return (0, import_react9.createElement)("a", {
     href,
     target: "_blank",
     rel: "noreferrer",
@@ -12927,11 +12958,11 @@ function safeHref(url) {
 }
 function sourceHeader(title, site, href) {
   const inner = [
-    (0, import_react8.createElement)(SiteMark, { key: "m", site, title }),
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(SiteMark, { key: "m", site, title }),
+    (0, import_react9.createElement)(
       "span",
       { key: "t", style: { ...wrap, minWidth: 0, flex: 1 } },
-      (0, import_react8.createElement)("span", {
+      (0, import_react9.createElement)("span", {
         style: {
           display: "block",
           overflow: "hidden",
@@ -12943,7 +12974,7 @@ function sourceHeader(title, site, href) {
           color: PRIMARY
         }
       }, title),
-      site !== void 0 ? (0, import_react8.createElement)("span", {
+      site !== void 0 ? (0, import_react9.createElement)("span", {
         style: {
           display: "block",
           overflow: "hidden",
@@ -12967,8 +12998,8 @@ function sourceHeader(title, site, href) {
     textDecoration: "none",
     borderBottom: `0.5px solid ${line.subtle}`
   };
-  if (href === void 0) return (0, import_react8.createElement)("div", { style: style2 }, ...inner);
-  return (0, import_react8.createElement)("a", { href, target: "_blank", rel: "noreferrer", style: style2 }, ...inner);
+  if (href === void 0) return (0, import_react9.createElement)("div", { style: style2 }, ...inner);
+  return (0, import_react9.createElement)("a", { href, target: "_blank", rel: "noreferrer", style: style2 }, ...inner);
 }
 function FetchPageCard({
   page,
@@ -12978,7 +13009,7 @@ function FetchPageCard({
   const href = page.url === "" ? void 0 : safeHref(page.url);
   const hits = page.hits ?? [];
   const body = page.preview.replace(/\n+$/, "");
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "div",
     {
       "data-magic-ceo-fetch-page": true,
@@ -12993,7 +13024,7 @@ function FetchPageCard({
       }
     },
     sourceHeader(title, page.site, href),
-    hits.length > 0 ? (0, import_react8.createElement)("div", {
+    hits.length > 0 ? (0, import_react9.createElement)("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -13002,11 +13033,11 @@ function FetchPageCard({
         overflowY: "auto",
         padding: "4px 4px 8px"
       }
-    }, hits.map((hit, index2) => (0, import_react8.createElement)(SearchHitCard, {
+    }, hits.map((hit, index2) => (0, import_react9.createElement)(SearchHitCard, {
       key: `${hit.url ?? hit.title}-${String(index2)}`,
       hit,
       index: index2
-    }))) : (0, import_react8.createElement)("div", {
+    }))) : (0, import_react9.createElement)("div", {
       style: {
         ...wrap,
         maxHeight: 288,
@@ -13017,7 +13048,7 @@ function FetchPageCard({
         color: ink.secondary,
         background: "color-mix(in srgb, var(--dsw-alias-bg-layer-1, #1c1c24) 70%, transparent)"
       }
-    }, body === "" ? (0, import_react8.createElement)("span", { style: { color: MUTED } }, t("process.fetch.empty")) : (0, import_react8.createElement)("pre", {
+    }, body === "" ? (0, import_react9.createElement)("span", { style: { color: MUTED } }, t("process.fetch.empty")) : (0, import_react9.createElement)("pre", {
       style: {
         margin: 0,
         fontFamily: "inherit",
@@ -13036,19 +13067,19 @@ function FetchSourceCollection({
   t
 }) {
   const running = steps.some((step) => step.status === "running");
-  const [open, setOpen] = (0, import_react8.useState)(running);
+  const [open, setOpen] = (0, import_react9.useState)(running);
   const errors = steps.filter((step) => step.status === "error").length;
   const elapsed = useRunningElapsed(running);
   const pages = steps.map((step) => parseFetchPage(step.result, step.args));
   const title = t("process.fetch.collection", { count: steps.length });
   const runningHint = running ? [t("process.tool.running"), elapsed >= 1 ? `${String(elapsed)}s` : null].filter((item) => item !== null && item !== "").join(" \xB7 ") : "";
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "div",
     {
       "data-magic-ceo-fetch-collection": true,
       style: { ...wrap, display: "flex", flexDirection: "column", gap: 2 }
     },
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(
       "button",
       {
         type: "button",
@@ -13072,11 +13103,11 @@ function FetchSourceCollection({
           textAlign: "left"
         }
       },
-      (0, import_react8.createElement)(ToolGlyph, { kind: "globe" }),
-      (0, import_react8.createElement)(
+      (0, import_react9.createElement)(ToolGlyph, { kind: "globe" }),
+      (0, import_react9.createElement)(
         "span",
         { style: { minWidth: 0, flex: 1, overflow: "hidden" } },
-        (0, import_react8.createElement)(
+        (0, import_react9.createElement)(
           "span",
           {
             style: {
@@ -13086,7 +13117,7 @@ function FetchSourceCollection({
               overflow: "hidden"
             }
           },
-          (0, import_react8.createElement)("span", {
+          (0, import_react9.createElement)("span", {
             style: {
               flex: 1,
               minWidth: 0,
@@ -13095,11 +13126,11 @@ function FetchSourceCollection({
               whiteSpace: "nowrap"
             }
           }, title),
-          errors > 0 ? (0, import_react8.createElement)("span", { style: { marginLeft: 6, color: DANGER } }, `${String(errors)} failed`) : null,
-          running ? (0, import_react8.createElement)(RunningDot) : null,
-          (0, import_react8.createElement)(Chevron, { open })
+          errors > 0 ? (0, import_react9.createElement)("span", { style: { marginLeft: 6, color: DANGER } }, `${String(errors)} failed`) : null,
+          running ? (0, import_react9.createElement)(RunningDot) : null,
+          (0, import_react9.createElement)(Chevron, { open })
         ),
-        runningHint !== "" ? (0, import_react8.createElement)("span", {
+        runningHint !== "" ? (0, import_react9.createElement)("span", {
           style: {
             display: "block",
             overflow: "hidden",
@@ -13112,7 +13143,7 @@ function FetchSourceCollection({
         }, runningHint) : null
       )
     ),
-    open ? (0, import_react8.createElement)("div", {
+    open ? (0, import_react9.createElement)("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -13121,7 +13152,7 @@ function FetchSourceCollection({
         overflowY: "auto",
         padding: "0 4px 4px 8px"
       }
-    }, pages.map((page, index2) => (0, import_react8.createElement)(SearchHitCard, {
+    }, pages.map((page, index2) => (0, import_react9.createElement)(SearchHitCard, {
       key: `${page.url}-${String(index2)}`,
       hit: {
         title: cleanSourceTitle(page.title) || page.site || page.url,
@@ -13136,9 +13167,9 @@ function FetchSourceCollection({
 function SiteMark({ site, title }) {
   const domain = site?.trim();
   const letter = (domain || title || "?").charAt(0).toUpperCase() || "?";
-  const [failedDomain, setFailedDomain] = (0, import_react8.useState)(null);
+  const [failedDomain, setFailedDomain] = (0, import_react9.useState)(null);
   const showImg = domain !== void 0 && domain !== "" && failedDomain !== domain;
-  return (0, import_react8.createElement)("span", {
+  return (0, import_react9.createElement)("span", {
     "aria-hidden": true,
     style: {
       display: "inline-flex",
@@ -13155,7 +13186,7 @@ function SiteMark({ site, title }) {
       fontSize: 10,
       fontWeight: 510
     }
-  }, showImg && domain !== void 0 ? (0, import_react8.createElement)("img", {
+  }, showImg && domain !== void 0 ? (0, import_react9.createElement)("img", {
     src: faviconUrl(domain),
     alt: "",
     width: 16,
@@ -13172,7 +13203,7 @@ function ToolStep({
 }) {
   const isSearch = step.name === "web_search";
   const isFetch = step.name === "web_fetch";
-  const [open, setOpen] = (0, import_react8.useState)(isSearch || isFetch);
+  const [open, setOpen] = (0, import_react9.useState)(isSearch || isFetch);
   const running = step.status === "running";
   const elapsed = useRunningElapsed(running);
   const label = toolDisplayName(step.name);
@@ -13186,14 +13217,14 @@ function ToolStep({
   const hasBody = isSearch ? step.status !== "running" && (query !== "" || hits.length > 0 || step.result !== void 0 && step.result.trim() !== "") : isFetch ? page !== void 0 && (page.url !== "" || page.preview !== "") : step.result !== void 0 && step.result.trim() !== "" && looksLikeStructuredDump(step.result) === false;
   const meta = running || failed ? void 0 : search?.empty === true ? t("process.search.none") : search !== void 0 && search.count > 0 ? t("process.search.results", { count: search.count }) : page?.statusCode !== void 0 ? `${t("process.fetch.http")} ${String(page.statusCode)}` : void 0;
   const runningHint = running ? [isSearch ? t("process.search.searching") : t("process.tool.running"), elapsed >= 1 ? `${String(elapsed)}s` : null].filter((item) => item !== null && item !== "").join(" \xB7 ") : "";
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "div",
     {
       "data-magic-ceo-process-tool": step.toolCallId,
       "data-status": step.status,
       style: { ...wrap, display: "flex", flexDirection: "column", gap: 2 }
     },
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(
       "button",
       {
         type: "button",
@@ -13218,11 +13249,11 @@ function ToolStep({
           textAlign: "left"
         }
       },
-      (0, import_react8.createElement)(ToolGlyph, { kind: toolIconKind(step.name) }),
-      (0, import_react8.createElement)(
+      (0, import_react9.createElement)(ToolGlyph, { kind: toolIconKind(step.name) }),
+      (0, import_react9.createElement)(
         "span",
         { style: { minWidth: 0, flex: 1, overflow: "hidden" } },
-        (0, import_react8.createElement)(
+        (0, import_react9.createElement)(
           "span",
           {
             style: {
@@ -13232,7 +13263,7 @@ function ToolStep({
               overflow: "hidden"
             }
           },
-          (0, import_react8.createElement)(
+          (0, import_react9.createElement)(
             "span",
             {
               style: {
@@ -13243,10 +13274,10 @@ function ToolStep({
                 whiteSpace: "nowrap"
               }
             },
-            (0, import_react8.createElement)("span", null, label),
-            detail !== "" ? (0, import_react8.createElement)("span", { style: { marginLeft: 6, color: MUTED } }, detail) : null
+            (0, import_react9.createElement)("span", null, label),
+            detail !== "" ? (0, import_react9.createElement)("span", { style: { marginLeft: 6, color: MUTED } }, detail) : null
           ),
-          meta !== void 0 ? (0, import_react8.createElement)("span", {
+          meta !== void 0 ? (0, import_react9.createElement)("span", {
             style: {
               flex: "0 0 auto",
               maxWidth: "40%",
@@ -13258,11 +13289,11 @@ function ToolStep({
               opacity: 0.85
             }
           }, `\xB7 ${meta}`) : null,
-          running ? (0, import_react8.createElement)(RunningDot) : null,
-          failed ? (0, import_react8.createElement)(ErrorMark) : null,
-          hasBody ? (0, import_react8.createElement)(Chevron, { open }) : null
+          running ? (0, import_react9.createElement)(RunningDot) : null,
+          failed ? (0, import_react9.createElement)(ErrorMark) : null,
+          hasBody ? (0, import_react9.createElement)(Chevron, { open }) : null
         ),
-        runningHint !== "" ? (0, import_react8.createElement)("span", {
+        runningHint !== "" ? (0, import_react9.createElement)("span", {
           style: {
             display: "block",
             overflow: "hidden",
@@ -13275,7 +13306,7 @@ function ToolStep({
         }, runningHint) : null
       )
     ),
-    !open && failurePeek !== void 0 ? (0, import_react8.createElement)("span", {
+    !open && failurePeek !== void 0 ? (0, import_react9.createElement)("span", {
       style: {
         ...wrap,
         display: "block",
@@ -13288,8 +13319,8 @@ function ToolStep({
         whiteSpace: "nowrap"
       }
     }, failurePeek) : null,
-    running && isSearch ? (0, import_react8.createElement)(WebSearchSkeleton) : null,
-    open && isSearch && query !== "" ? (0, import_react8.createElement)("div", {
+    running && isSearch ? (0, import_react9.createElement)(WebSearchSkeleton) : null,
+    open && isSearch && query !== "" ? (0, import_react9.createElement)("div", {
       style: {
         ...wrap,
         padding: "4px 4px 6px 22px",
@@ -13298,7 +13329,7 @@ function ToolStep({
         color: MUTED
       }
     }, `${t("process.search.query")}${query}`) : null,
-    open && isSearch && hits.length > 0 ? (0, import_react8.createElement)("div", {
+    open && isSearch && hits.length > 0 ? (0, import_react9.createElement)("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -13309,11 +13340,11 @@ function ToolStep({
         overflowY: "auto",
         padding: "0 4px 4px 8px"
       }
-    }, hits.map((hit, index2) => (0, import_react8.createElement)(SearchHitCard, {
+    }, hits.map((hit, index2) => (0, import_react9.createElement)(SearchHitCard, {
       key: `${hit.url ?? hit.title}-${String(index2)}`,
       hit,
       index: index2
-    }))) : open && isFetch && page !== void 0 ? (0, import_react8.createElement)(FetchPageCard, { page, t }) : open && step.result && isSearch === false && isFetch === false && looksLikeStructuredDump(step.result) === false ? (0, import_react8.createElement)("div", {
+    }))) : open && isFetch && page !== void 0 ? (0, import_react9.createElement)(FetchPageCard, { page, t }) : open && step.result && isSearch === false && isFetch === false && looksLikeStructuredDump(step.result) === false ? (0, import_react9.createElement)("div", {
       style: {
         ...wrap,
         maxHeight: 288,
@@ -13332,17 +13363,17 @@ function ReasoningBlock({
   streaming,
   t
 }) {
-  const [userOpen, setUserOpen] = (0, import_react8.useState)(void 0);
+  const [userOpen, setUserOpen] = (0, import_react9.useState)(void 0);
   const open = userOpen ?? streaming;
   const body = texts.join("\n\n");
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "div",
     {
       "data-magic-ceo-process-thought": true,
       "data-open": open ? "true" : void 0,
       style: { ...wrap, display: "flex", flexDirection: "column", gap: 6 }
     },
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(
       "button",
       {
         type: "button",
@@ -13364,11 +13395,11 @@ function ReasoningBlock({
           fontWeight: 400
         }
       },
-      streaming ? (0, import_react8.createElement)(ThinkingDots) : null,
+      streaming ? (0, import_react9.createElement)(ThinkingDots) : null,
       t(streaming ? "process.thinking" : "process.thought.show"),
-      streaming ? null : (0, import_react8.createElement)(Chevron, { open })
+      streaming ? null : (0, import_react9.createElement)(Chevron, { open })
     ),
-    open ? (0, import_react8.createElement)("div", {
+    open ? (0, import_react9.createElement)("div", {
       style: {
         ...wrap,
         fontSize: 13,
@@ -13380,7 +13411,7 @@ function ReasoningBlock({
   );
 }
 function ThinkingTail({ t }) {
-  return (0, import_react8.createElement)("div", {
+  return (0, import_react9.createElement)("div", {
     "data-magic-ceo-process-thinking-tail": true,
     style: {
       display: "inline-flex",
@@ -13390,7 +13421,7 @@ function ThinkingTail({ t }) {
       lineHeight: "20px",
       color: MUTED
     }
-  }, (0, import_react8.createElement)(ThinkingDots), t("process.thinking"));
+  }, (0, import_react9.createElement)(ThinkingDots), t("process.thinking"));
 }
 function shouldShowThinkingTail(steps, live) {
   if (!live) return false;
@@ -13400,21 +13431,64 @@ function shouldShowThinkingTail(steps, live) {
   if (last.kind === "tool") return last.status !== "running";
   return true;
 }
+function summaryLabel(summary, t) {
+  const state = summary.running ? "running" : "done";
+  const parts = [];
+  for (const category of ["explore", "search", "edit", "run", "other"]) {
+    const count = summary.counts[category];
+    if (count > 0) parts.push(t(`process.summary.${category}.${state}`, { count }));
+  }
+  return parts.join(" \xB7 ");
+}
 function CeoProcessTimeline({
   steps,
   live,
   hideReportContent = false,
   t
 }) {
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     ensurePulseCss();
   }, []);
+  const summary = summarizeProcessSteps(steps);
+  const [userExpanded, setUserExpanded] = (0, import_react9.useState)(void 0);
   if (steps.length === 0 && !live) return null;
+  const expanded = userExpanded ?? timelineDefaultExpanded(summary);
+  const summaryBar = summary.total > 0 ? (0, import_react9.createElement)(
+    "button",
+    {
+      type: "button",
+      "data-magic-ceo-process-summary": true,
+      onClick: () => {
+        setUserExpanded(!expanded);
+      },
+      title: expanded ? t("process.summary.collapse") : t("process.summary.expand"),
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: 0,
+        border: 0,
+        background: "transparent",
+        color: MUTED,
+        cursor: "pointer",
+        fontSize: 12,
+        lineHeight: "18px",
+        textAlign: "left"
+      }
+    },
+    (0, import_react9.createElement)(Chevron, { open: expanded }),
+    (0, import_react9.createElement)(
+      "span",
+      { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+      summaryLabel(summary, t)
+    ),
+    summary.running ? (0, import_react9.createElement)(RunningDot) : null
+  ) : null;
   const nodes = [];
   let reasoning = [];
   const flushReasoning = (streaming) => {
     if (reasoning.length === 0) return;
-    nodes.push((0, import_react8.createElement)(ReasoningBlock, {
+    nodes.push((0, import_react9.createElement)(ReasoningBlock, {
       key: `thought-${String(nodes.length)}`,
       texts: reasoning,
       streaming,
@@ -13438,19 +13512,19 @@ function CeoProcessTimeline({
           index2 += 1;
           grouped.push(next);
         }
-        nodes.push(grouped.length >= 2 ? (0, import_react8.createElement)(FetchSourceCollection, {
+        nodes.push(grouped.length >= 2 ? (0, import_react9.createElement)(FetchSourceCollection, {
           key: `fetch-group-${grouped[0].toolCallId}`,
           steps: grouped,
           t
-        }) : (0, import_react8.createElement)(ToolStep, { key: `tool-${step.toolCallId}-${String(index2)}`, step, t }));
+        }) : (0, import_react9.createElement)(ToolStep, { key: `tool-${step.toolCallId}-${String(index2)}`, step, t }));
         continue;
       }
-      nodes.push((0, import_react8.createElement)(ToolStep, { key: `tool-${step.toolCallId}-${String(index2)}`, step, t }));
+      nodes.push((0, import_react9.createElement)(ToolStep, { key: `tool-${step.toolCallId}-${String(index2)}`, step, t }));
       continue;
     }
     if (hideReportContent && looksLikeMemberReport(step.text)) continue;
     if (hideReportContent && looksLikeStructuredDump(step.text)) continue;
-    nodes.push((0, import_react8.createElement)("div", {
+    nodes.push((0, import_react9.createElement)("div", {
       key: `content-${String(index2)}`,
       "data-magic-ceo-process-content": true,
       style: {
@@ -13464,26 +13538,28 @@ function CeoProcessTimeline({
   }
   flushReasoning(live && steps.at(-1)?.kind === "reasoning");
   if (shouldShowThinkingTail(steps, live)) {
-    nodes.push((0, import_react8.createElement)(ThinkingTail, { key: "thinking-tail", t }));
+    nodes.push((0, import_react9.createElement)(ThinkingTail, { key: "thinking-tail", t }));
   }
-  if (nodes.length === 0) return null;
-  return (0, import_react8.createElement)("div", {
+  if (nodes.length === 0 && summaryBar === null) return null;
+  const children2 = expanded || summaryBar === null ? nodes : [];
+  return (0, import_react9.createElement)("div", {
     "data-magic-ceo-process": true,
+    "data-process-collapsed": summaryBar !== null && !expanded ? "true" : void 0,
     style: { ...wrap, display: "flex", flexDirection: "column", gap: 10 }
-  }, ...nodes);
+  }, ...summaryBar !== null ? [summaryBar] : [], ...children2);
 }
 
 // src/client/FailureCard.ts
-var import_react9 = require("react");
+var import_react10 = require("react");
 var MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 function fieldRow(label, value) {
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "div",
     { style: { display: "flex", gap: 8, minWidth: 0 } },
-    (0, import_react9.createElement)("span", {
+    (0, import_react10.createElement)("span", {
       style: { flex: "0 0 auto", fontSize: 11, lineHeight: "18px", color: "rgba(160,160,175,1)" }
     }, label),
-    (0, import_react9.createElement)("span", { style: { minWidth: 0, flex: 1, fontSize: 12, lineHeight: "18px" } }, value)
+    (0, import_react10.createElement)("span", { style: { minWidth: 0, flex: 1, fontSize: 12, lineHeight: "18px" } }, value)
   );
 }
 function MemberFailureCard({
@@ -13494,7 +13570,7 @@ function MemberFailureCard({
 }) {
   const failed = card.kind === "failed";
   const tone = failed ? "var(--dsw-alias-state-danger, #dc2626)" : "var(--dsw-alias-state-warning, #d97706)";
-  const actionButton = (label, onClick, primary) => (0, import_react9.createElement)("button", {
+  const actionButton = (label, onClick, primary) => (0, import_react10.createElement)("button", {
     type: "button",
     disabled: onClick === void 0,
     onClick,
@@ -13511,7 +13587,7 @@ function MemberFailureCard({
       opacity: onClick === void 0 ? 0.45 : 1
     }
   }, label);
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "div",
     {
       "data-magic-ceo-failure-card": card.kind,
@@ -13527,10 +13603,10 @@ function MemberFailureCard({
         background: `color-mix(in srgb, ${tone} 7%, transparent)`
       }
     },
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8 } },
-      (0, import_react9.createElement)("span", {
+      (0, import_react10.createElement)("span", {
         "aria-hidden": true,
         style: {
           flex: "0 0 auto",
@@ -13546,7 +13622,7 @@ function MemberFailureCard({
           fontWeight: 700
         }
       }, "!"),
-      (0, import_react9.createElement)(
+      (0, import_react10.createElement)(
         "span",
         { style: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: 510, color: tone } },
         failed ? t("failure.title") : t("blocked.title")
@@ -13555,7 +13631,7 @@ function MemberFailureCard({
       failed ? actionButton(t("failure.replan"), onReplan, true) : null
     ),
     failed && card.toolName !== void 0 ? fieldRow(t("failure.tool"), card.toolName) : null,
-    failed && card.errorText !== void 0 && card.errorText !== "" ? fieldRow(t("failure.error"), (0, import_react9.createElement)("span", {
+    failed && card.errorText !== void 0 && card.errorText !== "" ? fieldRow(t("failure.error"), (0, import_react10.createElement)("span", {
       style: {
         display: "block",
         maxHeight: 88,
@@ -13571,10 +13647,10 @@ function MemberFailureCard({
     failed && card.notDone !== void 0 ? fieldRow(t("failure.notDone"), card.notDone) : null,
     !failed && card.waitingOn.length > 0 ? fieldRow(
       t("blocked.waitingFor"),
-      (0, import_react9.createElement)(
+      (0, import_react10.createElement)(
         "span",
         { style: { display: "flex", flexWrap: "wrap", gap: 4 } },
-        card.waitingOn.map((name) => (0, import_react9.createElement)("span", {
+        card.waitingOn.map((name) => (0, import_react10.createElement)("span", {
           key: name,
           style: {
             padding: "1px 8px",
@@ -13625,18 +13701,18 @@ function badgeStyle(status) {
 }
 function sectionTitle(label, tone) {
   const color2 = tone === "danger" ? DANGER2 : tone === "warn" ? WARN : MUTED2;
-  return (0, import_react10.createElement)("h3", {
+  return (0, import_react11.createElement)("h3", {
     style: { margin: 0, fontSize: 12, fontWeight: 510, color: color2, lineHeight: "16px" }
   }, label);
 }
 function section(label, body, tone) {
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "section",
     {
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(label, tone),
-    (0, import_react10.createElement)("div", {
+    (0, import_react11.createElement)("div", {
       style: {
         ...wrap,
         fontSize: 13,
@@ -13651,10 +13727,10 @@ function CollapsibleTask({
   text,
   t
 }) {
-  const [open, setOpen] = (0, import_react10.useState)(false);
-  const [overflow, setOverflow] = (0, import_react10.useState)(false);
-  const measure = (0, import_react10.useRef)(null);
-  (0, import_react10.useLayoutEffect)(() => {
+  const [open, setOpen] = (0, import_react11.useState)(false);
+  const [overflow, setOverflow] = (0, import_react11.useState)(false);
+  const measure = (0, import_react11.useRef)(null);
+  (0, import_react11.useLayoutEffect)(() => {
     const el = measure.current;
     if (el === null) return;
     const check = () => {
@@ -13668,22 +13744,22 @@ function CollapsibleTask({
       observer.disconnect();
     };
   }, [text]);
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "section",
     {
       "data-magic-ceo-task": true,
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(t("field.task")),
-    (0, import_react10.createElement)(
+    (0, import_react11.createElement)(
       "div",
       { style: { position: "relative", minWidth: 0 } },
-      (0, import_react10.createElement)(
+      (0, import_react11.createElement)(
         "div",
         {
           style: open || overflow === false ? void 0 : { maxHeight: TASK_COLLAPSE_H, overflow: "hidden" }
         },
-        (0, import_react10.createElement)("div", {
+        (0, import_react11.createElement)("div", {
           ref: measure,
           style: {
             ...wrap,
@@ -13694,7 +13770,7 @@ function CollapsibleTask({
           }
         }, text)
       ),
-      overflow && open === false ? (0, import_react10.createElement)("div", {
+      overflow && open === false ? (0, import_react11.createElement)("div", {
         "aria-hidden": true,
         style: {
           position: "absolute",
@@ -13707,7 +13783,7 @@ function CollapsibleTask({
         }
       }) : null
     ),
-    overflow ? (0, import_react10.createElement)("button", {
+    overflow ? (0, import_react11.createElement)("button", {
       type: "button",
       onClick: () => {
         setOpen((current) => !current);
@@ -13730,10 +13806,10 @@ function CollapsibleField({
   tone,
   t
 }) {
-  const [open, setOpen] = (0, import_react10.useState)(false);
-  const [overflow, setOverflow] = (0, import_react10.useState)(false);
-  const measure = (0, import_react10.useRef)(null);
-  (0, import_react10.useLayoutEffect)(() => {
+  const [open, setOpen] = (0, import_react11.useState)(false);
+  const [overflow, setOverflow] = (0, import_react11.useState)(false);
+  const measure = (0, import_react11.useRef)(null);
+  (0, import_react11.useLayoutEffect)(() => {
     const el = measure.current;
     if (el === null) return;
     const check = () => {
@@ -13747,27 +13823,27 @@ function CollapsibleField({
       observer.disconnect();
     };
   }, [body]);
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "div",
     {
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }
     },
-    (0, import_react10.createElement)("div", {
+    (0, import_react11.createElement)("div", {
       style: {
         fontSize: 12,
         fontWeight: 510,
         color: tone === "danger" ? DANGER2 : tone === "warn" ? WARN : MUTED2
       }
     }, label),
-    (0, import_react10.createElement)(
+    (0, import_react11.createElement)(
       "div",
       { style: { position: "relative", minWidth: 0 } },
-      (0, import_react10.createElement)(
+      (0, import_react11.createElement)(
         "div",
         {
           style: open || overflow === false ? void 0 : { maxHeight: FIELD_COLLAPSE_H, overflow: "hidden" }
         },
-        (0, import_react10.createElement)("div", {
+        (0, import_react11.createElement)("div", {
           ref: measure,
           style: {
             ...wrap,
@@ -13778,7 +13854,7 @@ function CollapsibleField({
           }
         }, body)
       ),
-      overflow && open === false ? (0, import_react10.createElement)("div", {
+      overflow && open === false ? (0, import_react11.createElement)("div", {
         "aria-hidden": true,
         style: {
           position: "absolute",
@@ -13791,7 +13867,7 @@ function CollapsibleField({
         }
       }) : null
     ),
-    overflow ? (0, import_react10.createElement)("button", {
+    overflow ? (0, import_react11.createElement)("button", {
       type: "button",
       onClick: () => {
         setOpen((current) => !current);
@@ -13813,16 +13889,16 @@ function DebriefCard({
   details,
   t
 }) {
-  const [open, setOpen] = (0, import_react10.useState)(false);
+  const [open, setOpen] = (0, import_react11.useState)(false);
   const hasDetails = details.length > 0;
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "section",
     {
       "data-magic-ceo-debrief": true,
       style: { display: "flex", flexDirection: "column", gap: 6, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(t("debrief.title")),
-    (0, import_react10.createElement)(
+    (0, import_react11.createElement)(
       "div",
       {
         style: {
@@ -13835,7 +13911,7 @@ function DebriefCard({
           background: surface.layer2
         }
       },
-      (0, import_react10.createElement)("div", {
+      (0, import_react11.createElement)("div", {
         style: {
           ...wrap,
           fontSize: 14,
@@ -13845,14 +13921,14 @@ function DebriefCard({
           whiteSpace: "pre-wrap"
         }
       }, summary),
-      hasDetails && open ? details.map((item) => (0, import_react10.createElement)(CollapsibleField, {
+      hasDetails && open ? details.map((item) => (0, import_react11.createElement)(CollapsibleField, {
         key: item.label,
         label: item.label,
         body: item.body,
         tone: item.tone,
         t
       })) : null,
-      hasDetails ? (0, import_react10.createElement)("button", {
+      hasDetails ? (0, import_react11.createElement)("button", {
         type: "button",
         onClick: () => {
           setOpen((current) => !current);
@@ -13876,10 +13952,10 @@ function InterveneControls({
   t
 }) {
   const running = member.status === "running";
-  const [note, setNote] = (0, import_react10.useState)("");
+  const [note, setNote] = (0, import_react11.useState)("");
   const draft = note.trim();
   const runId = member.runId ?? member.rawId ?? member.callId;
-  const button = (label, message, tone, disabled) => (0, import_react10.createElement)("button", {
+  const button = (label, message, tone, disabled) => (0, import_react11.createElement)("button", {
     type: "button",
     disabled,
     onClick: () => {
@@ -13897,20 +13973,20 @@ function InterveneControls({
       fontWeight: 510
     }
   }, label);
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "div",
     {
       "data-magic-ceo-intervene": member.callId,
       style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }
     },
-    (0, import_react10.createElement)("div", { style: { fontSize: 12, fontWeight: 510, color: MUTED2 } }, t("intervene.title")),
-    (0, import_react10.createElement)(
+    (0, import_react11.createElement)("div", { style: { fontSize: 12, fontWeight: 510, color: MUTED2 } }, t("intervene.title")),
+    (0, import_react11.createElement)(
       "div",
       { style: { display: "flex", gap: 6 } },
       running ? button(t("intervene.halt"), haltMessageFor(runId), "danger", false) : null,
       !running && member.report?.status === "unknown_after_restart" ? button(t("intervene.resume"), resumeMessageFor(runId), "accent", false) : null
     ),
-    running ? (0, import_react10.createElement)("textarea", {
+    running ? (0, import_react11.createElement)("textarea", {
       value: note,
       rows: 2,
       placeholder: t("intervene.placeholder"),
@@ -13930,7 +14006,7 @@ function InterveneControls({
         lineHeight: "18px"
       }
     }) : null,
-    running && draft !== "" ? (0, import_react10.createElement)("button", {
+    running && draft !== "" ? (0, import_react11.createElement)("button", {
       type: "button",
       onClick: () => {
         send(`Call ceo_replan with redirect run_id ${runId} and note: ${draft}`);
@@ -13961,6 +14037,14 @@ function replanNoteFor(card) {
 function resumeMessageFor(runId) {
   return `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.`;
 }
+function LiveElapsedBadge({ t }) {
+  const elapsed = useElapsedSeconds(true);
+  return (0, import_react11.createElement)(
+    "span",
+    { "data-magic-ceo-elapsed": true, style: { fontVariantNumeric: "tabular-nums", opacity: 0.75 } },
+    ` \xB7 ${t("inspector.processing", { duration: formatElapsed(elapsed) })}`
+  );
+}
 function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
   const process2 = member.process ?? [];
   const report = presentCeoMemberReport(member);
@@ -13982,7 +14066,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
   }));
   const showDebrief = summary !== "" || debriefDetails.length > 0;
   const showEmpty = filled.length === 0 && !member.lastMessage && process2.length === 0 && !live;
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "aside",
     {
       "data-magic-ceo-inspector": member.callId,
@@ -13996,12 +14080,12 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
         flexDirection: "column"
       }
     },
-    (0, import_react10.createElement)(
+    (0, import_react11.createElement)(
       "header",
       {
         style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0, marginBottom: 16 }
       },
-      (0, import_react10.createElement)("span", {
+      (0, import_react11.createElement)("span", {
         style: {
           ...wrap,
           flex: 1,
@@ -14014,11 +14098,11 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           color: PRIMARY2
         }
       }, displayCeoSeat(member, roster2)),
-      (0, import_react10.createElement)("span", {
+      (0, import_react11.createElement)("span", {
         style: badgeStyle(presentation.viewStatus)
       }, t(`status.${presentation.viewStatus}`))
     ),
-    failureCard !== void 0 ? (0, import_react10.createElement)(MemberFailureCard, {
+    failureCard !== void 0 ? (0, import_react11.createElement)(MemberFailureCard, {
       card: failureCard,
       onRetry: onIntervene === void 0 || failureCard.runId === void 0 ? void 0 : () => {
         onIntervene("retry", "");
@@ -14028,7 +14112,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       },
       t
     }) : null,
-    live ? (0, import_react10.createElement)("div", {
+    live ? (0, import_react11.createElement)("div", {
       style: {
         marginBottom: 16,
         padding: "10px 12px",
@@ -14039,10 +14123,10 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
         lineHeight: "20px",
         color: PRIMARY2
       }
-    }, t("inspector.live")) : null,
-    (0, import_react10.createElement)(CollapsibleTask, { text: member.task, t }),
+    }, t("inspector.live"), (0, import_react11.createElement)(LiveElapsedBadge, { t })) : null,
+    (0, import_react11.createElement)(CollapsibleTask, { text: member.task, t }),
     member.dependsOn.length > 0 ? section(t("depends.on"), member.dependsOn.join(", ")) : null,
-    member.usage !== void 0 ? (0, import_react10.createElement)(
+    member.usage !== void 0 ? (0, import_react11.createElement)(
       "div",
       {
         "data-magic-ceo-usage": true,
@@ -14056,7 +14140,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           color: MUTED2
         }
       },
-      (0, import_react10.createElement)("span", {
+      (0, import_react11.createElement)("span", {
         style: {
           padding: "2px 8px",
           borderRadius: 99,
@@ -14067,9 +14151,9 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           member.usage.totalTokens ?? member.usage.inputTokens + member.usage.outputTokens
         )
       })),
-      (0, import_react10.createElement)("span", null, t("tokens.input", { tokens: formatTokenCount(member.usage.inputTokens) })),
-      (0, import_react10.createElement)("span", null, t("tokens.output", { tokens: formatTokenCount(member.usage.outputTokens) })),
-      member.usage.cacheReadTokens !== void 0 ? (0, import_react10.createElement)("span", null, t("tokens.cache", { tokens: formatTokenCount(member.usage.cacheReadTokens) })) : null
+      (0, import_react11.createElement)("span", null, t("tokens.input", { tokens: formatTokenCount(member.usage.inputTokens) })),
+      (0, import_react11.createElement)("span", null, t("tokens.output", { tokens: formatTokenCount(member.usage.outputTokens) })),
+      member.usage.cacheReadTokens !== void 0 ? (0, import_react11.createElement)("span", null, t("tokens.cache", { tokens: formatTokenCount(member.usage.cacheReadTokens) })) : null
     ) : null,
     member.contextChannels !== void 0 && member.contextChannels.length > 0 ? section(
       t("context.title"),
@@ -14078,31 +14162,31 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       ).join("\n")
     ) : null,
     member.redirectedNote !== void 0 ? section(t("intervene.redirected"), member.redirectedNote, "warn") : null,
-    onIntervene !== void 0 && (member.status === "running" || presentation.viewStatus === "unknown_after_restart") ? (0, import_react10.createElement)(InterveneControls, {
+    onIntervene !== void 0 && (member.status === "running" || presentation.viewStatus === "unknown_after_restart") ? (0, import_react11.createElement)(InterveneControls, {
       member,
       send: (message) => {
         onIntervene("halt", message);
       },
       t
     }) : null,
-    process2.length > 0 || live ? (0, import_react10.createElement)(
+    process2.length > 0 || live ? (0, import_react11.createElement)(
       "div",
       { style: { marginBottom: 16 } },
-      (0, import_react10.createElement)(CeoProcessTimeline, {
+      (0, import_react11.createElement)(CeoProcessTimeline, {
         steps: process2,
         live,
         hideReportContent: true,
         t
       })
     ) : null,
-    presentation.viewStatus === "unknown_after_restart" ? (0, import_react10.createElement)("div", {
+    presentation.viewStatus === "unknown_after_restart" ? (0, import_react11.createElement)("div", {
       style: { marginBottom: 16, fontSize: 12, color: MUTED2 }
-    }, t("inspector.unknown")) : showEmpty ? (0, import_react10.createElement)("div", {
+    }, t("inspector.unknown")) : showEmpty ? (0, import_react11.createElement)("div", {
       style: { marginBottom: 16, fontSize: 12, color: MUTED2 }
     }, t(
       member.status === "queued" ? "inspector.queued" : "inspector.noReport"
     )) : null,
-    presentation.needsDecision ? (0, import_react10.createElement)("div", {
+    presentation.needsDecision ? (0, import_react11.createElement)("div", {
       style: {
         marginBottom: 16,
         padding: "10px 12px",
@@ -14115,7 +14199,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       }
     }, t("inspector.decisionInChat")) : null,
     presentation.hasBlocker && report?.risksOrBlockers ? section(t("badge.blocker"), report.risksOrBlockers, "danger") : null,
-    showDebrief ? (0, import_react10.createElement)(DebriefCard, {
+    showDebrief ? (0, import_react11.createElement)(DebriefCard, {
       summary: summary || t("field.conclusion"),
       details: debriefDetails,
       t
@@ -14137,12 +14221,12 @@ function nextStickState(stuck, gap) {
   return gap < STICK_ATTACH_PX;
 }
 function useStickToBottom(resetKey, followOnReset) {
-  const scrollRef = (0, import_react11.useRef)(null);
-  const contentRef = (0, import_react11.useRef)(null);
-  const stickRef = (0, import_react11.useRef)(true);
-  const followRef = (0, import_react11.useRef)(followOnReset);
+  const scrollRef = (0, import_react12.useRef)(null);
+  const contentRef = (0, import_react12.useRef)(null);
+  const stickRef = (0, import_react12.useRef)(true);
+  const followRef = (0, import_react12.useRef)(followOnReset);
   followRef.current = followOnReset;
-  const [atBottom, setAtBottom] = (0, import_react11.useState)(true);
+  const [atBottom, setAtBottom] = (0, import_react12.useState)(true);
   const applyStick = (stuck) => {
     stickRef.current = stuck;
     setAtBottom(stuck);
@@ -14156,7 +14240,7 @@ function useStickToBottom(resetKey, followOnReset) {
     applyStick(true);
     scrollToBottom();
   };
-  (0, import_react11.useEffect)(() => {
+  (0, import_react12.useEffect)(() => {
     const el = scrollRef.current;
     if (el === null) return;
     const onScroll = () => {
@@ -14172,7 +14256,7 @@ function useStickToBottom(resetKey, followOnReset) {
       el.removeEventListener("wheel", onWheel);
     };
   }, [resetKey]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react12.useEffect)(() => {
     const content = contentRef.current;
     const viewport = scrollRef.current;
     if (content === null || typeof ResizeObserver === "undefined") return;
@@ -14193,7 +14277,7 @@ function useStickToBottom(resetKey, followOnReset) {
       observer.disconnect();
     };
   }, [resetKey]);
-  (0, import_react11.useLayoutEffect)(() => {
+  (0, import_react12.useLayoutEffect)(() => {
     if (followRef.current) {
       applyStick(true);
       scrollToBottom();
@@ -14209,7 +14293,7 @@ function ToBottomButton({
   onClick,
   label
 }) {
-  return (0, import_react11.createElement)(
+  return (0, import_react12.createElement)(
     "button",
     {
       type: "button",
@@ -14235,7 +14319,7 @@ function ToBottomButton({
         cursor: "pointer"
       }
     },
-    (0, import_react11.createElement)("svg", {
+    (0, import_react12.createElement)("svg", {
       "aria-hidden": true,
       width: 16,
       height: 16,
@@ -14245,7 +14329,7 @@ function ToBottomButton({
       strokeWidth: 2,
       strokeLinecap: "round",
       strokeLinejoin: "round"
-    }, (0, import_react11.createElement)("path", { d: "m6 9 6 6 6-6" }))
+    }, (0, import_react12.createElement)("path", { d: "m6 9 6 6 6-6" }))
   );
 }
 function attentionTone(kind) {
@@ -14263,7 +14347,7 @@ function attentionPreview(member, kind) {
   return member.report?.notDone ?? member.lastMessage ?? member.task;
 }
 function rowButton(key, title, preview, meta, tone, onSelect) {
-  return (0, import_react11.createElement)(
+  return (0, import_react12.createElement)(
     "button",
     {
       key,
@@ -14283,11 +14367,11 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
         cursor: "pointer"
       }
     },
-    (0, import_react11.createElement)(
+    (0, import_react12.createElement)(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8 } },
-      (0, import_react11.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, title),
-      (0, import_react11.createElement)("span", {
+      (0, import_react12.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, title),
+      (0, import_react12.createElement)("span", {
         style: {
           marginLeft: "auto",
           fontSize: 11,
@@ -14295,7 +14379,7 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
         }
       }, meta)
     ),
-    (0, import_react11.createElement)("div", {
+    (0, import_react12.createElement)("div", {
       style: {
         fontSize: 12,
         lineHeight: "18px",
@@ -14312,17 +14396,17 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
 function overview(roster2, t) {
   const attention = ceoAttentionItems(roster2);
   if (roster2.length === 0) {
-    return (0, import_react11.createElement)("div", {
+    return (0, import_react12.createElement)("div", {
       style: { fontSize: 13, lineHeight: "20px", color: ink.tertiary }
     }, t("workspace.empty"));
   }
-  return (0, import_react11.createElement)(
+  return (0, import_react12.createElement)(
     "div",
     { style: { display: "flex", flexDirection: "column", gap: 16 } },
-    attention.length > 0 ? (0, import_react11.createElement)(
+    attention.length > 0 ? (0, import_react12.createElement)(
       "section",
       { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      (0, import_react11.createElement)("div", {
+      (0, import_react12.createElement)("div", {
         style: { fontSize: 12, fontWeight: 510, color: ink.tertiary }
       }, t("attention.title")),
       ...attention.map((item) => rowButton(
@@ -14336,10 +14420,10 @@ function overview(roster2, t) {
         }
       ))
     ) : null,
-    (0, import_react11.createElement)(
+    (0, import_react12.createElement)(
       "section",
       { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      (0, import_react11.createElement)("div", {
+      (0, import_react12.createElement)("div", {
         style: { fontSize: 12, fontWeight: 510, color: ink.tertiary }
       }, t("roster.title")),
       ...roster2.map((member) => {
@@ -14359,10 +14443,10 @@ function overview(roster2, t) {
   );
 }
 function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, taskBoardApi, t }) {
-  const boardState = (0, import_react11.useSyncExternalStore)(taskBoard?.subscribe ?? noopBoardSubscribe, taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot, getEmptyTaskBoardSnapshot);
+  const boardState = (0, import_react12.useSyncExternalStore)(taskBoard?.subscribe ?? noopBoardSubscribe, taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot, getEmptyTaskBoardSnapshot);
   const selectedTask = boardState.selectedTaskId === void 0 ? void 0 : boardState.tasks.find((task) => task.id === boardState.selectedTaskId);
-  const selected3 = (0, import_react11.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
-  const roster2 = (0, import_react11.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
+  const selected3 = (0, import_react12.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
+  const roster2 = (0, import_react12.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
   const tabActions = useTabInfo().tab.actions;
   const close = () => {
     if (selected3 !== null) {
@@ -14371,7 +14455,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
     }
     tabActions.close();
   };
-  const inspector = selected3 === null ? null : (0, import_react11.createElement)(CeoMemberInspector, {
+  const inspector = selected3 === null ? null : (0, import_react12.createElement)(CeoMemberInspector, {
     key: selected3.callId,
     member: selected3,
     roster: roster2,
@@ -14386,7 +14470,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
     selected3?.callId ?? sessionId ?? "",
     selected3?.status === "running"
   );
-  return (0, import_react11.createElement)(
+  return (0, import_react12.createElement)(
     "div",
     {
       "data-magic-ceo-workspace": true,
@@ -14402,7 +14486,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
         color: ink.primary
       }
     },
-    selected3 === null ? (0, import_react11.createElement)(
+    selected3 === null ? (0, import_react12.createElement)(
       "header",
       {
         style: {
@@ -14413,7 +14497,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           borderBottom: `0.5px solid ${line.subtle}`
         }
       },
-      (0, import_react11.createElement)("div", {
+      (0, import_react12.createElement)("div", {
         style: {
           overflow: "hidden",
           fontSize: 14,
@@ -14423,7 +14507,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           whiteSpace: "nowrap"
         }
       }, t("workspace.title")),
-      (0, import_react11.createElement)("button", {
+      (0, import_react12.createElement)("button", {
         type: "button",
         "aria-label": t("workspace.close"),
         onClick: close,
@@ -14439,7 +14523,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           fontSize: 11
         }
       }, t("workspace.close"))
-    ) : (0, import_react11.createElement)(
+    ) : (0, import_react12.createElement)(
       "div",
       {
         style: {
@@ -14448,7 +14532,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           padding: "8px 12px 0"
         }
       },
-      (0, import_react11.createElement)("button", {
+      (0, import_react12.createElement)("button", {
         type: "button",
         "aria-label": t("workspace.close"),
         onClick: close,
@@ -14465,7 +14549,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
         }
       }, "\xD7")
     ),
-    (0, import_react11.createElement)(
+    (0, import_react12.createElement)(
       "div",
       {
         style: {
@@ -14475,7 +14559,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           minHeight: 0
         }
       },
-      (0, import_react11.createElement)(
+      (0, import_react12.createElement)(
         "div",
         {
           ref: scrollRef,
@@ -14487,15 +14571,15 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
             overflowY: "auto"
           }
         },
-        (0, import_react11.createElement)(
+        (0, import_react12.createElement)(
           "div",
           { ref: contentRef },
           selected3 === null ? overview(roster2, t) : inspector,
-          (0, import_react11.createElement)(
+          (0, import_react12.createElement)(
             "div",
             { style: { marginTop: 16, borderTop: `0.5px solid ${line.subtle}`, paddingTop: 8 } },
-            (0, import_react11.createElement)("div", { style: { fontSize: 12, fontWeight: 510, marginBottom: 4, color: ink.secondary } }, t("tasks.title")),
-            selectedTask !== void 0 ? (0, import_react11.createElement)(TaskBoardDetail, {
+            (0, import_react12.createElement)("div", { style: { fontSize: 12, fontWeight: 510, marginBottom: 4, color: ink.secondary } }, t("tasks.title")),
+            selectedTask !== void 0 ? (0, import_react12.createElement)(TaskBoardDetail, {
               key: selectedTask.id,
               task: selectedTask,
               onComplete: taskBoard === void 0 ? void 0 : () => {
@@ -14503,11 +14587,11 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
                 taskBoard.reload();
               },
               t
-            }) : (0, import_react11.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, t })
+            }) : (0, import_react12.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, t })
           )
         )
       ),
-      selected3 !== null && atBottom === false ? (0, import_react11.createElement)(ToBottomButton, { onClick: jumpToBottom, label: t("workspace.toBottom") }) : null
+      selected3 !== null && atBottom === false ? (0, import_react12.createElement)(ToBottomButton, { onClick: jumpToBottom, label: t("workspace.toBottom") }) : null
     )
   );
 }
@@ -14838,7 +14922,21 @@ var zh = {
   "blocked.title": "\u7B49\u5F85\u4E0A\u6E38",
   "blocked.waitingFor": "\u7B49\u5F85",
   "blocked.blockers": "\u963B\u585E\u8BF4\u660E",
-  "badge.blocked": "\u963B\u585E"
+  "badge.blocked": "\u963B\u585E",
+  "inspector.processing": "\u6B63\u5728\u5904\u7406 {duration}",
+  "process.summary.running": "\u8FD0\u884C\u4E2D",
+  "process.summary.expand": "\u5C55\u5F00\u8FC7\u7A0B\u660E\u7EC6",
+  "process.summary.collapse": "\u6536\u8D77\u8FC7\u7A0B\u660E\u7EC6",
+  "process.summary.explore.done": "\u5DF2\u63A2\u7D22 {count} \u9879",
+  "process.summary.explore.running": "\u6B63\u5728\u63A2\u7D22 {count} \u9879",
+  "process.summary.search.done": "\u5DF2\u641C\u7D22 {count} \u6B21",
+  "process.summary.search.running": "\u6B63\u5728\u641C\u7D22 {count} \u6B21",
+  "process.summary.edit.done": "\u5DF2\u7F16\u8F91 {count} \u4E2A\u6587\u4EF6",
+  "process.summary.edit.running": "\u6B63\u5728\u7F16\u8F91 {count} \u4E2A\u6587\u4EF6",
+  "process.summary.run.done": "\u5DF2\u8FD0\u884C {count} \u6761\u547D\u4EE4",
+  "process.summary.run.running": "\u6B63\u5728\u8FD0\u884C {count} \u6761\u547D\u4EE4",
+  "process.summary.other.done": "\u5DF2\u6267\u884C {count} \u4E2A\u64CD\u4F5C",
+  "process.summary.other.running": "\u6B63\u5728\u6267\u884C {count} \u4E2A\u64CD\u4F5C"
 };
 var en = {
   "graph.title": "CEO graph",
@@ -14975,7 +15073,21 @@ var en = {
   "blocked.title": "Waiting on upstream",
   "blocked.waitingFor": "Waiting for",
   "blocked.blockers": "Blockers",
-  "badge.blocked": "Blocked"
+  "badge.blocked": "Blocked",
+  "inspector.processing": "Processing {duration}",
+  "process.summary.running": "Running",
+  "process.summary.expand": "Expand process details",
+  "process.summary.collapse": "Collapse process details",
+  "process.summary.explore.done": "Explored {count}",
+  "process.summary.explore.running": "Exploring {count}",
+  "process.summary.search.done": "Searched {count}",
+  "process.summary.search.running": "Searching {count}",
+  "process.summary.edit.done": "Edited {count}",
+  "process.summary.edit.running": "Editing {count}",
+  "process.summary.run.done": "Ran {count} commands",
+  "process.summary.run.running": "Running {count} commands",
+  "process.summary.other.done": "{count} operations",
+  "process.summary.other.running": "{count} operations"
 };
 var CEO_MEMBER_TAB_KIND = "magicCeoMember";
 var CEO_MEMBER_TAB_ID = "@magic/dsh-ceo-ui/member-workspace";

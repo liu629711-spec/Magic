@@ -21,6 +21,7 @@ import {
 import xyflowCss from '@xyflow/react/dist/style.css'
 import { ceoFlowMemberId, ceoTeamSinkStatus, createRosterMerger, layoutCeoTeamFlow, type CeoFlowEdgeKind, type CeoFlowLane, type CeoFlowTask } from '../flow.ts'
 import { waitingOnOf } from '../failure-card.ts'
+import { formatElapsed, useElapsedSeconds } from './elapsed.ts'
 import { parseCeoMemberReport } from '../team.ts'
 import { getEmptyTaskBoardSnapshot, selectCeoTask, type TaskBoardSnapshot } from './task-board-store.ts'
 import { toolDisplayName } from '../processView.ts'
@@ -130,13 +131,6 @@ function roleGlyph(role: string): string {
   const key = role.trim()
   if (key === '') return '?'
   return Array.from(key)[0] ?? '?'
-}
-
-function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${String(seconds)}s`
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds % 60
-  return rest === 0 ? `${String(minutes)}m` : `${String(minutes)}m ${String(rest)}s`
 }
 
 function memberPreview(member: CeoTeamMember): string {
@@ -848,26 +842,6 @@ const nodeTypes = {
 
 const edgeTypes = {
   flow: FlowEdge,
-}
-
-/** Re-renders once per second so elapsed labels tick without re-rendering the graph above. */
-function useElapsedSeconds(live: boolean): number {
-  const [, setTick] = useState(0)
-  const startedRef = useRef<number | null>(null)
-  const frozenRef = useRef(0)
-  if (live && startedRef.current === null) startedRef.current = Date.now()
-  if (!live && startedRef.current !== null) {
-    frozenRef.current = Math.max(0, Math.floor((Date.now() - startedRef.current) / 1000))
-    startedRef.current = null
-  }
-  useEffect(() => {
-    if (!live) return undefined
-    const id = setInterval(() => { setTick(value => value + 1) }, 1000)
-    return () => { clearInterval(id) }
-  }, [live])
-  return live && startedRef.current !== null
-    ? Math.max(0, Math.floor((Date.now() - startedRef.current) / 1000))
-    : frozenRef.current
 }
 
 /** 任务板泳道底带 + 标题（视觉与 WaveLanes 同族）。 */
