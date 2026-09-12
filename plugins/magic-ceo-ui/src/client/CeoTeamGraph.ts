@@ -20,6 +20,7 @@ import {
 } from '@xyflow/react'
 import xyflowCss from '@xyflow/react/dist/style.css'
 import { ceoFlowMemberId, ceoTeamSinkStatus, createRosterMerger, layoutCeoTeamFlow, type CeoFlowEdgeKind, type CeoFlowLane, type CeoFlowTask } from '../flow.ts'
+import { waitingOnOf } from '../failure-card.ts'
 import { parseCeoMemberReport } from '../team.ts'
 import { getEmptyTaskBoardSnapshot, selectCeoTask, type TaskBoardSnapshot } from './task-board-store.ts'
 import { toolDisplayName } from '../processView.ts'
@@ -548,6 +549,11 @@ function MemberNode({ data }: NodeProps<Node<MemberNodeData>>) {
   const flashColor = presentation.viewStatus === 'failed' || presentation.viewStatus === 'error'
     ? 'var(--dsw-alias-state-danger, #dc2626)'
     : 'var(--dsw-alias-state-success, #16a34a)'
+  // PRD-04 §12：阻塞节点要提示「在等谁」，不能只有一个红点。
+  const blockedWait = presentation.viewStatus === 'blocked' ? waitingOnOf(member, data.roster) : []
+  const blockedBadgeText = [data.t('badge.blocked'), blockedWait.join(', ')]
+    .filter(part => part !== '')
+    .join(' · ')
   return h('div', {
     'data-magic-ceo-member': data.member.memberId ?? data.member.callId,
     'data-magic-ceo-node': 'member',
@@ -647,7 +653,19 @@ function MemberNode({ data }: NodeProps<Node<MemberNodeData>>) {
         color: ink.tertiary,
       },
     },
-      presentation.needsDecision
+      presentation.viewStatus === 'blocked'
+        ? h('span', {
+          'data-badge': 'blocked',
+          title: blockedBadgeText,
+          style: {
+            fontSize: 12,
+            padding: '2px 6px',
+            borderRadius: 8,
+            background: 'color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 14%, transparent)',
+            color: 'var(--dsw-alias-state-warning, #d97706)',
+          },
+        }, blockedBadgeText)
+        : presentation.needsDecision
         ? h('span', {
           'data-badge': 'decision',
           style: {

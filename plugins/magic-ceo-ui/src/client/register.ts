@@ -133,6 +133,16 @@ export const zh = {
   'intervene.resume': '重新派发',
   'intervene.placeholder': '写下新方向，例如：聚焦中国市场，不要海外数据',
   'intervene.redirected': '已重派方向',
+  'failure.title': '任务失败',
+  'failure.tool': '失败工具',
+  'failure.error': '错误信息',
+  'failure.notDone': '未完成',
+  'failure.retry': '重试',
+  'failure.replan': '交回 CEO 重规划',
+  'blocked.title': '等待上游',
+  'blocked.waitingFor': '等待',
+  'blocked.blockers': '阻塞说明',
+  'badge.blocked': '阻塞',
 }
 
 export const en = {
@@ -261,6 +271,16 @@ export const en = {
   'intervene.resume': '重新派发',
   'intervene.placeholder': '写下新的方向，例如：聚焦中国市场，不要海外数据',
   'intervene.redirected': '已重派方向',
+  'failure.title': 'Task failed',
+  'failure.tool': 'Failed tool',
+  'failure.error': 'Error',
+  'failure.notDone': 'Not done',
+  'failure.retry': 'Retry',
+  'failure.replan': 'Send back to CEO',
+  'blocked.title': 'Waiting on upstream',
+  'blocked.waitingFor': 'Waiting for',
+  'blocked.blockers': 'Blockers',
+  'badge.blocked': 'Blocked',
 }
 
 export interface CeoUiContext {

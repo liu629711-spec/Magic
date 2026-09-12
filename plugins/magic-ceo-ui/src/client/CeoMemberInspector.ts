@@ -12,6 +12,8 @@ import {
   type CeoTeamMember,
 } from '../team.ts'
 import { CeoProcessTimeline } from './CeoProcessTimeline.ts'
+import { MemberFailureCard } from './FailureCard.ts'
+import { failureCardOf, type CeoFailureCard } from '../failure-card.ts'
 import { ink, line, surface, wrap } from './theme.ts'
 
 const TASK_COLLAPSE_H = 144
@@ -28,8 +30,8 @@ export interface CeoMemberInspectorProps {
   member: CeoTeamMember
   roster?: readonly CeoTeamMember[]
   t: (key: string, params?: Record<string, unknown>) => string
-  /** Per-member intervention: ask the CEO to halt / redirect / resume this node. */
-  onIntervene?: (action: 'halt' | 'redirect' | 'resume', note: string) => void
+  /** Per-member intervention: ask the CEO to halt / redirect / resume / retry / replan this node. */
+  onIntervene?: (action: 'halt' | 'redirect' | 'resume' | 'retry' | 'replan', note: string) => void
 }
 
 const REPORT_FIELDS: Array<{ key: keyof CeoMemberReport; label: string }> = [
@@ -416,6 +418,15 @@ function haltMessageFor(runId: string): string {
   return `Call ceo_replan with halt run_id ${runId}. The member was stopped by the user; do not rewrite its work as success.`
 }
 
+/** 重规划动作带给 CEO 的失败上下文（节选，全文在过程流里）。 */
+function replanNoteFor(card: CeoFailureCard): string {
+  const tool = card.toolName !== undefined ? ` at tool ${card.toolName}` : ''
+  const error = card.errorText !== undefined && card.errorText !== ''
+    ? `: ${card.errorText.slice(0, 200)}`
+    : ''
+  return `The member failed${tool}${error}. Evaluate replanning instead of retrying.`
+}
+
 function resumeMessageFor(runId: string): string {
   return `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.`
 }
@@ -426,6 +437,7 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
   const presentation = presentCeoMember({ ...member, report })
   const live = member.status === 'running' && presentation.viewStatus === 'running'
   const reportSource = member.lastMessage ?? reportTextFromProcess(process)
+  const failureCard = failureCardOf(member, roster)
   const filled = REPORT_FIELDS.filter(field => {
     const value = report?.[field.key]
     if (typeof value !== 'string' || value.trim() === '') return false
@@ -480,6 +492,18 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
       style: badgeStyle(presentation.viewStatus),
     }, t(`status.${presentation.viewStatus}`)),
   ),
+  failureCard !== undefined
+    ? h(MemberFailureCard, {
+      card: failureCard,
+      onRetry: onIntervene === undefined || failureCard.runId === undefined
+        ? undefined
+        : () => { onIntervene('retry', '') },
+      onReplan: onIntervene === undefined || failureCard.runId === undefined
+        ? undefined
+        : () => { onIntervene('replan', replanNoteFor(failureCard)) },
+      t,
+    })
+    : null,
   live
     ? h('div', {
       style: {

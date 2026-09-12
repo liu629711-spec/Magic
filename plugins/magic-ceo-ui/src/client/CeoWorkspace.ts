@@ -327,13 +327,17 @@ export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoar
       roster,
       onIntervene: sendIntervention === undefined
         ? undefined
-        : (action: 'halt' | 'redirect' | 'resume', note: string) => {
+        : (action: 'halt' | 'redirect' | 'resume' | 'retry' | 'replan', note: string) => {
           const runId = selected.runId ?? selected.rawId ?? selected.callId
           const message = action === 'halt'
             ? `Call ceo_replan with halt run_id ${runId}. The member was stopped by the user; do not rewrite its work as success.`
             : action === 'resume'
               ? `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.`
-              : note
+              : action === 'retry'
+                ? `Call ceo_replan with retry run_id ${runId}. Redispatch this failed node from scratch; keep the original task unchanged.`
+                : action === 'replan'
+                  ? `Call ceo_replan with replan run_id ${runId}. ${note}`
+                  : note
           sendIntervention(message)
         },
       t,

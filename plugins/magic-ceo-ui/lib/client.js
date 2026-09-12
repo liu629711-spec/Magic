@@ -2909,11 +2909,11 @@ function hex(value) {
   value = clampi(value);
   return (value < 16 ? "0" : "") + value.toString(16);
 }
-function hsla(h8, s, l, a) {
-  if (a <= 0) h8 = s = l = NaN;
-  else if (l <= 0 || l >= 1) h8 = s = NaN;
-  else if (s <= 0) h8 = NaN;
-  return new Hsl(h8, s, l, a);
+function hsla(h9, s, l, a) {
+  if (a <= 0) h9 = s = l = NaN;
+  else if (l <= 0 || l >= 1) h9 = s = NaN;
+  else if (s <= 0) h9 = NaN;
+  return new Hsl(h9, s, l, a);
 }
 function hslConvert(o) {
   if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
@@ -2921,23 +2921,23 @@ function hslConvert(o) {
   if (!o) return new Hsl();
   if (o instanceof Hsl) return o;
   o = o.rgb();
-  var r = o.r / 255, g = o.g / 255, b = o.b / 255, min = Math.min(r, g, b), max = Math.max(r, g, b), h8 = NaN, s = max - min, l = (max + min) / 2;
+  var r = o.r / 255, g = o.g / 255, b = o.b / 255, min = Math.min(r, g, b), max = Math.max(r, g, b), h9 = NaN, s = max - min, l = (max + min) / 2;
   if (s) {
-    if (r === max) h8 = (g - b) / s + (g < b) * 6;
-    else if (g === max) h8 = (b - r) / s + 2;
-    else h8 = (r - g) / s + 4;
+    if (r === max) h9 = (g - b) / s + (g < b) * 6;
+    else if (g === max) h9 = (b - r) / s + 2;
+    else h9 = (r - g) / s + 4;
     s /= l < 0.5 ? max + min : 2 - max - min;
-    h8 *= 60;
+    h9 *= 60;
   } else {
-    s = l > 0 && l < 1 ? 0 : h8;
+    s = l > 0 && l < 1 ? 0 : h9;
   }
-  return new Hsl(h8, s, l, o.opacity);
+  return new Hsl(h9, s, l, o.opacity);
 }
-function hsl(h8, s, l, opacity) {
-  return arguments.length === 1 ? hslConvert(h8) : new Hsl(h8, s, l, opacity == null ? 1 : opacity);
+function hsl(h9, s, l, opacity) {
+  return arguments.length === 1 ? hslConvert(h9) : new Hsl(h9, s, l, opacity == null ? 1 : opacity);
 }
-function Hsl(h8, s, l, opacity) {
-  this.h = +h8;
+function Hsl(h9, s, l, opacity) {
+  this.h = +h9;
   this.s = +s;
   this.l = +l;
   this.opacity = +opacity;
@@ -2952,11 +2952,11 @@ define_default(Hsl, hsl, extend(Color, {
     return new Hsl(this.h, this.s, this.l * k, this.opacity);
   },
   rgb() {
-    var h8 = this.h % 360 + (this.h < 0) * 360, s = isNaN(h8) || isNaN(this.s) ? 0 : this.s, l = this.l, m2 = l + (l < 0.5 ? l : 1 - l) * s, m1 = 2 * l - m2;
+    var h9 = this.h % 360 + (this.h < 0) * 360, s = isNaN(h9) || isNaN(this.s) ? 0 : this.s, l = this.l, m2 = l + (l < 0.5 ? l : 1 - l) * s, m1 = 2 * l - m2;
     return new Rgb(
-      hsl2rgb(h8 >= 240 ? h8 - 240 : h8 + 120, m1, m2),
-      hsl2rgb(h8, m1, m2),
-      hsl2rgb(h8 < 120 ? h8 + 240 : h8 - 120, m1, m2),
+      hsl2rgb(h9 >= 240 ? h9 - 240 : h9 + 120, m1, m2),
+      hsl2rgb(h9, m1, m2),
+      hsl2rgb(h9 < 120 ? h9 + 240 : h9 - 120, m1, m2),
       this.opacity
     );
   },
@@ -2978,8 +2978,8 @@ function clamph(value) {
 function clampt(value) {
   return Math.max(0, Math.min(1, value || 0));
 }
-function hsl2rgb(h8, m1, m2) {
-  return (h8 < 60 ? m1 + (m2 - m1) * h8 / 60 : h8 < 180 ? m2 : h8 < 240 ? m1 + (m2 - m1) * (240 - h8) / 60 : m1) * 255;
+function hsl2rgb(h9, m1, m2) {
+  return (h9 < 60 ? m1 + (m2 - m1) * h9 / 60 : h9 < 180 ? m2 : h9 < 240 ? m1 + (m2 - m1) * (240 - h9) / 60 : m1) * 255;
 }
 
 // ../../node_modules/.pnpm/d3-interpolate@3.0.1/node_modules/d3-interpolate/src/basis.js
@@ -6200,7 +6200,7 @@ function getHandle(nodeId, handleType, handleId, nodeLookup, connectionMode, wit
     return null;
   }
   const handles2 = connectionMode === "strict" ? node.internals.handleBounds?.[handleType] : [...node.internals.handleBounds?.source ?? [], ...node.internals.handleBounds?.target ?? []];
-  const handle = (handleId ? handles2?.find((h8) => h8.id === handleId) : handles2?.[0]) ?? null;
+  const handle = (handleId ? handles2?.find((h9) => h9.id === handleId) : handles2?.[0]) ?? null;
   return handle && withAbsolutePosition ? { ...handle, ...getHandlePosition(node, handle, handle.position, true) } : handle;
 }
 function getHandleType(edgeUpdaterType, handleDomNode) {
@@ -10836,6 +10836,46 @@ function createRosterMerger() {
   };
 }
 
+// src/failure-card.ts
+var ERROR_CLIP = 600;
+function clipText(text) {
+  const trimmed = text?.trim() ?? "";
+  if (trimmed === "") return "";
+  if (trimmed.length <= ERROR_CLIP) return trimmed;
+  return `${trimmed.slice(0, ERROR_CLIP)}\u2026`;
+}
+function waitingOnOf(member, roster2 = []) {
+  return member.dependsOn.map(
+    (dep) => roster2.find((item) => item.callId === dep)?.role ?? dep
+  );
+}
+function failureCardOf(member, roster2 = []) {
+  const viewStatus = presentCeoMember(member).viewStatus;
+  const runId = member.runId ?? member.rawId;
+  if (viewStatus === "failed" || viewStatus === "error") {
+    const failedStep = [...member.process ?? []].reverse().find((step) => step.kind === "tool" && step.status === "error");
+    const notDone = clipText(member.report?.notDone);
+    return {
+      kind: "failed",
+      runId,
+      toolName: failedStep?.name,
+      errorText: clipText(failedStep?.result ?? member.lastMessage),
+      notDone: notDone !== "" ? notDone : void 0,
+      waitingOn: []
+    };
+  }
+  if (viewStatus === "blocked") {
+    const blockers = clipText(member.report?.risksOrBlockers);
+    return {
+      kind: "blocked",
+      runId,
+      waitingOn: waitingOnOf(member, roster2),
+      blockers: blockers !== "" ? blockers : void 0
+    };
+  }
+  return void 0;
+}
+
 // src/client/task-board-data.ts
 function taskMutationFailure(result) {
   if (result === void 0) return "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528";
@@ -11640,6 +11680,8 @@ function MemberNode({ data }) {
   const flashing = useTerminalFlash(presentation.viewStatus);
   const face = running ? activity?.phase === "tool" ? `\u6B63\u5728\u751F\u6210 ${toolDisplayName(activity.toolName ?? "\u8FD0\u884C\u4E2D")}` : activity?.phase === "thinking" ? "\u6B63\u5728\u5206\u6790" : activity?.phase === "winding_down" ? "\u6B63\u5728\u6536\u5C3E" : data.t("status.running") : presentation.viewStatus === "queued" && data.member.dependsOn.length > 0 ? "\u7B49\u5F85\u4F9D\u8D56" : data.t(`status.${presentation.viewStatus}`);
   const flashColor = presentation.viewStatus === "failed" || presentation.viewStatus === "error" ? "var(--dsw-alias-state-danger, #dc2626)" : "var(--dsw-alias-state-success, #16a34a)";
+  const blockedWait = presentation.viewStatus === "blocked" ? waitingOnOf(member, data.roster) : [];
+  const blockedBadgeText = [data.t("badge.blocked"), blockedWait.join(", ")].filter((part) => part !== "").join(" \xB7 ");
   return (0, import_react5.createElement)(
     "div",
     {
@@ -11739,7 +11781,17 @@ function MemberNode({ data }) {
             color: ink.tertiary
           }
         },
-        presentation.needsDecision ? (0, import_react5.createElement)("span", {
+        presentation.viewStatus === "blocked" ? (0, import_react5.createElement)("span", {
+          "data-badge": "blocked",
+          title: blockedBadgeText,
+          style: {
+            fontSize: 12,
+            padding: "2px 6px",
+            borderRadius: 8,
+            background: "color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 14%, transparent)",
+            color: "var(--dsw-alias-state-warning, #d97706)"
+          }
+        }, blockedBadgeText) : presentation.needsDecision ? (0, import_react5.createElement)("span", {
           "data-badge": "decision",
           style: {
             fontSize: 12,
@@ -12365,7 +12417,7 @@ function CeoTeamGraph(props) {
 }
 
 // src/client/CeoWorkspace.ts
-var import_react10 = require("react");
+var import_react11 = require("react");
 
 // src/client/TaskBoard.ts
 var import_react7 = require("react");
@@ -12574,7 +12626,7 @@ function TaskBoardDetail({
 }
 
 // src/client/CeoMemberInspector.ts
-var import_react9 = require("react");
+var import_react10 = require("react");
 
 // src/client/CeoProcessTimeline.ts
 var import_react8 = require("react");
@@ -13421,6 +13473,124 @@ function CeoProcessTimeline({
   }, ...nodes);
 }
 
+// src/client/FailureCard.ts
+var import_react9 = require("react");
+var MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+function fieldRow(label, value) {
+  return (0, import_react9.createElement)(
+    "div",
+    { style: { display: "flex", gap: 8, minWidth: 0 } },
+    (0, import_react9.createElement)("span", {
+      style: { flex: "0 0 auto", fontSize: 11, lineHeight: "18px", color: "rgba(160,160,175,1)" }
+    }, label),
+    (0, import_react9.createElement)("span", { style: { minWidth: 0, flex: 1, fontSize: 12, lineHeight: "18px" } }, value)
+  );
+}
+function MemberFailureCard({
+  card,
+  onRetry,
+  onReplan,
+  t
+}) {
+  const failed = card.kind === "failed";
+  const tone = failed ? "var(--dsw-alias-state-danger, #dc2626)" : "var(--dsw-alias-state-warning, #d97706)";
+  const actionButton = (label, onClick, primary) => (0, import_react9.createElement)("button", {
+    type: "button",
+    disabled: onClick === void 0,
+    onClick,
+    style: {
+      flex: "0 0 auto",
+      padding: "3px 10px",
+      borderRadius: 99,
+      border: primary ? 0 : `0.5px solid color-mix(in srgb, ${tone} 45%, transparent)`,
+      background: primary ? `color-mix(in srgb, ${tone} 16%, transparent)` : "transparent",
+      color: tone,
+      cursor: onClick === void 0 ? "default" : "pointer",
+      fontSize: 11,
+      fontWeight: 510,
+      opacity: onClick === void 0 ? 0.45 : 1
+    }
+  }, label);
+  return (0, import_react9.createElement)(
+    "div",
+    {
+      "data-magic-ceo-failure-card": card.kind,
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginBottom: 16,
+        padding: "10px 12px",
+        borderRadius: 10,
+        border: `0.5px solid color-mix(in srgb, ${tone} 32%, transparent)`,
+        borderLeft: `3px solid ${tone}`,
+        background: `color-mix(in srgb, ${tone} 7%, transparent)`
+      }
+    },
+    (0, import_react9.createElement)(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 8 } },
+      (0, import_react9.createElement)("span", {
+        "aria-hidden": true,
+        style: {
+          flex: "0 0 auto",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 16,
+          height: 16,
+          borderRadius: 99,
+          background: `color-mix(in srgb, ${tone} 18%, transparent)`,
+          color: tone,
+          fontSize: 11,
+          fontWeight: 700
+        }
+      }, "!"),
+      (0, import_react9.createElement)(
+        "span",
+        { style: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: 510, color: tone } },
+        failed ? t("failure.title") : t("blocked.title")
+      ),
+      failed ? actionButton(t("failure.retry"), onRetry, false) : null,
+      failed ? actionButton(t("failure.replan"), onReplan, true) : null
+    ),
+    failed && card.toolName !== void 0 ? fieldRow(t("failure.tool"), card.toolName) : null,
+    failed && card.errorText !== void 0 && card.errorText !== "" ? fieldRow(t("failure.error"), (0, import_react9.createElement)("span", {
+      style: {
+        display: "block",
+        maxHeight: 88,
+        overflowY: "auto",
+        fontFamily: MONO,
+        fontSize: 11,
+        lineHeight: "16px",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        opacity: 0.9
+      }
+    }, card.errorText)) : null,
+    failed && card.notDone !== void 0 ? fieldRow(t("failure.notDone"), card.notDone) : null,
+    !failed && card.waitingOn.length > 0 ? fieldRow(
+      t("blocked.waitingFor"),
+      (0, import_react9.createElement)(
+        "span",
+        { style: { display: "flex", flexWrap: "wrap", gap: 4 } },
+        card.waitingOn.map((name) => (0, import_react9.createElement)("span", {
+          key: name,
+          style: {
+            padding: "1px 8px",
+            borderRadius: 99,
+            border: "0.5px solid rgba(255,255,255,0.14)",
+            background: "rgba(255,255,255,0.04)",
+            fontSize: 11,
+            lineHeight: "16px"
+          }
+        }, name))
+      )
+    ) : null,
+    !failed && card.blockers !== void 0 ? fieldRow(t("blocked.blockers"), card.blockers) : null
+  );
+}
+
 // src/client/CeoMemberInspector.ts
 var TASK_COLLAPSE_H = 144;
 var FIELD_COLLAPSE_H = 168;
@@ -13455,18 +13625,18 @@ function badgeStyle(status) {
 }
 function sectionTitle(label, tone) {
   const color2 = tone === "danger" ? DANGER2 : tone === "warn" ? WARN : MUTED2;
-  return (0, import_react9.createElement)("h3", {
+  return (0, import_react10.createElement)("h3", {
     style: { margin: 0, fontSize: 12, fontWeight: 510, color: color2, lineHeight: "16px" }
   }, label);
 }
 function section(label, body, tone) {
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "section",
     {
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(label, tone),
-    (0, import_react9.createElement)("div", {
+    (0, import_react10.createElement)("div", {
       style: {
         ...wrap,
         fontSize: 13,
@@ -13481,10 +13651,10 @@ function CollapsibleTask({
   text,
   t
 }) {
-  const [open, setOpen] = (0, import_react9.useState)(false);
-  const [overflow, setOverflow] = (0, import_react9.useState)(false);
-  const measure = (0, import_react9.useRef)(null);
-  (0, import_react9.useLayoutEffect)(() => {
+  const [open, setOpen] = (0, import_react10.useState)(false);
+  const [overflow, setOverflow] = (0, import_react10.useState)(false);
+  const measure = (0, import_react10.useRef)(null);
+  (0, import_react10.useLayoutEffect)(() => {
     const el = measure.current;
     if (el === null) return;
     const check = () => {
@@ -13498,22 +13668,22 @@ function CollapsibleTask({
       observer.disconnect();
     };
   }, [text]);
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "section",
     {
       "data-magic-ceo-task": true,
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(t("field.task")),
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)(
       "div",
       { style: { position: "relative", minWidth: 0 } },
-      (0, import_react9.createElement)(
+      (0, import_react10.createElement)(
         "div",
         {
           style: open || overflow === false ? void 0 : { maxHeight: TASK_COLLAPSE_H, overflow: "hidden" }
         },
-        (0, import_react9.createElement)("div", {
+        (0, import_react10.createElement)("div", {
           ref: measure,
           style: {
             ...wrap,
@@ -13524,7 +13694,7 @@ function CollapsibleTask({
           }
         }, text)
       ),
-      overflow && open === false ? (0, import_react9.createElement)("div", {
+      overflow && open === false ? (0, import_react10.createElement)("div", {
         "aria-hidden": true,
         style: {
           position: "absolute",
@@ -13537,7 +13707,7 @@ function CollapsibleTask({
         }
       }) : null
     ),
-    overflow ? (0, import_react9.createElement)("button", {
+    overflow ? (0, import_react10.createElement)("button", {
       type: "button",
       onClick: () => {
         setOpen((current) => !current);
@@ -13560,10 +13730,10 @@ function CollapsibleField({
   tone,
   t
 }) {
-  const [open, setOpen] = (0, import_react9.useState)(false);
-  const [overflow, setOverflow] = (0, import_react9.useState)(false);
-  const measure = (0, import_react9.useRef)(null);
-  (0, import_react9.useLayoutEffect)(() => {
+  const [open, setOpen] = (0, import_react10.useState)(false);
+  const [overflow, setOverflow] = (0, import_react10.useState)(false);
+  const measure = (0, import_react10.useRef)(null);
+  (0, import_react10.useLayoutEffect)(() => {
     const el = measure.current;
     if (el === null) return;
     const check = () => {
@@ -13577,27 +13747,27 @@ function CollapsibleField({
       observer.disconnect();
     };
   }, [body]);
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "div",
     {
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }
     },
-    (0, import_react9.createElement)("div", {
+    (0, import_react10.createElement)("div", {
       style: {
         fontSize: 12,
         fontWeight: 510,
         color: tone === "danger" ? DANGER2 : tone === "warn" ? WARN : MUTED2
       }
     }, label),
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)(
       "div",
       { style: { position: "relative", minWidth: 0 } },
-      (0, import_react9.createElement)(
+      (0, import_react10.createElement)(
         "div",
         {
           style: open || overflow === false ? void 0 : { maxHeight: FIELD_COLLAPSE_H, overflow: "hidden" }
         },
-        (0, import_react9.createElement)("div", {
+        (0, import_react10.createElement)("div", {
           ref: measure,
           style: {
             ...wrap,
@@ -13608,7 +13778,7 @@ function CollapsibleField({
           }
         }, body)
       ),
-      overflow && open === false ? (0, import_react9.createElement)("div", {
+      overflow && open === false ? (0, import_react10.createElement)("div", {
         "aria-hidden": true,
         style: {
           position: "absolute",
@@ -13621,7 +13791,7 @@ function CollapsibleField({
         }
       }) : null
     ),
-    overflow ? (0, import_react9.createElement)("button", {
+    overflow ? (0, import_react10.createElement)("button", {
       type: "button",
       onClick: () => {
         setOpen((current) => !current);
@@ -13643,16 +13813,16 @@ function DebriefCard({
   details,
   t
 }) {
-  const [open, setOpen] = (0, import_react9.useState)(false);
+  const [open, setOpen] = (0, import_react10.useState)(false);
   const hasDetails = details.length > 0;
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "section",
     {
       "data-magic-ceo-debrief": true,
       style: { display: "flex", flexDirection: "column", gap: 6, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(t("debrief.title")),
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)(
       "div",
       {
         style: {
@@ -13665,7 +13835,7 @@ function DebriefCard({
           background: surface.layer2
         }
       },
-      (0, import_react9.createElement)("div", {
+      (0, import_react10.createElement)("div", {
         style: {
           ...wrap,
           fontSize: 14,
@@ -13675,14 +13845,14 @@ function DebriefCard({
           whiteSpace: "pre-wrap"
         }
       }, summary),
-      hasDetails && open ? details.map((item) => (0, import_react9.createElement)(CollapsibleField, {
+      hasDetails && open ? details.map((item) => (0, import_react10.createElement)(CollapsibleField, {
         key: item.label,
         label: item.label,
         body: item.body,
         tone: item.tone,
         t
       })) : null,
-      hasDetails ? (0, import_react9.createElement)("button", {
+      hasDetails ? (0, import_react10.createElement)("button", {
         type: "button",
         onClick: () => {
           setOpen((current) => !current);
@@ -13706,10 +13876,10 @@ function InterveneControls({
   t
 }) {
   const running = member.status === "running";
-  const [note, setNote] = (0, import_react9.useState)("");
+  const [note, setNote] = (0, import_react10.useState)("");
   const draft = note.trim();
   const runId = member.runId ?? member.rawId ?? member.callId;
-  const button = (label, message, tone, disabled) => (0, import_react9.createElement)("button", {
+  const button = (label, message, tone, disabled) => (0, import_react10.createElement)("button", {
     type: "button",
     disabled,
     onClick: () => {
@@ -13727,20 +13897,20 @@ function InterveneControls({
       fontWeight: 510
     }
   }, label);
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "div",
     {
       "data-magic-ceo-intervene": member.callId,
       style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }
     },
-    (0, import_react9.createElement)("div", { style: { fontSize: 12, fontWeight: 510, color: MUTED2 } }, t("intervene.title")),
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)("div", { style: { fontSize: 12, fontWeight: 510, color: MUTED2 } }, t("intervene.title")),
+    (0, import_react10.createElement)(
       "div",
       { style: { display: "flex", gap: 6 } },
       running ? button(t("intervene.halt"), haltMessageFor(runId), "danger", false) : null,
       !running && member.report?.status === "unknown_after_restart" ? button(t("intervene.resume"), resumeMessageFor(runId), "accent", false) : null
     ),
-    running ? (0, import_react9.createElement)("textarea", {
+    running ? (0, import_react10.createElement)("textarea", {
       value: note,
       rows: 2,
       placeholder: t("intervene.placeholder"),
@@ -13760,7 +13930,7 @@ function InterveneControls({
         lineHeight: "18px"
       }
     }) : null,
-    running && draft !== "" ? (0, import_react9.createElement)("button", {
+    running && draft !== "" ? (0, import_react10.createElement)("button", {
       type: "button",
       onClick: () => {
         send(`Call ceo_replan with redirect run_id ${runId} and note: ${draft}`);
@@ -13783,6 +13953,11 @@ function InterveneControls({
 function haltMessageFor(runId) {
   return `Call ceo_replan with halt run_id ${runId}. The member was stopped by the user; do not rewrite its work as success.`;
 }
+function replanNoteFor(card) {
+  const tool = card.toolName !== void 0 ? ` at tool ${card.toolName}` : "";
+  const error = card.errorText !== void 0 && card.errorText !== "" ? `: ${card.errorText.slice(0, 200)}` : "";
+  return `The member failed${tool}${error}. Evaluate replanning instead of retrying.`;
+}
 function resumeMessageFor(runId) {
   return `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.`;
 }
@@ -13792,6 +13967,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
   const presentation = presentCeoMember({ ...member, report });
   const live = member.status === "running" && presentation.viewStatus === "running";
   const reportSource = member.lastMessage ?? reportTextFromProcess(process2);
+  const failureCard = failureCardOf(member, roster2);
   const filled = REPORT_FIELDS.filter((field) => {
     const value = report?.[field.key];
     if (typeof value !== "string" || value.trim() === "") return false;
@@ -13806,7 +13982,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
   }));
   const showDebrief = summary !== "" || debriefDetails.length > 0;
   const showEmpty = filled.length === 0 && !member.lastMessage && process2.length === 0 && !live;
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "aside",
     {
       "data-magic-ceo-inspector": member.callId,
@@ -13820,12 +13996,12 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
         flexDirection: "column"
       }
     },
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)(
       "header",
       {
         style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0, marginBottom: 16 }
       },
-      (0, import_react9.createElement)("span", {
+      (0, import_react10.createElement)("span", {
         style: {
           ...wrap,
           flex: 1,
@@ -13838,11 +14014,21 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           color: PRIMARY2
         }
       }, displayCeoSeat(member, roster2)),
-      (0, import_react9.createElement)("span", {
+      (0, import_react10.createElement)("span", {
         style: badgeStyle(presentation.viewStatus)
       }, t(`status.${presentation.viewStatus}`))
     ),
-    live ? (0, import_react9.createElement)("div", {
+    failureCard !== void 0 ? (0, import_react10.createElement)(MemberFailureCard, {
+      card: failureCard,
+      onRetry: onIntervene === void 0 || failureCard.runId === void 0 ? void 0 : () => {
+        onIntervene("retry", "");
+      },
+      onReplan: onIntervene === void 0 || failureCard.runId === void 0 ? void 0 : () => {
+        onIntervene("replan", replanNoteFor(failureCard));
+      },
+      t
+    }) : null,
+    live ? (0, import_react10.createElement)("div", {
       style: {
         marginBottom: 16,
         padding: "10px 12px",
@@ -13854,9 +14040,9 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
         color: PRIMARY2
       }
     }, t("inspector.live")) : null,
-    (0, import_react9.createElement)(CollapsibleTask, { text: member.task, t }),
+    (0, import_react10.createElement)(CollapsibleTask, { text: member.task, t }),
     member.dependsOn.length > 0 ? section(t("depends.on"), member.dependsOn.join(", ")) : null,
-    member.usage !== void 0 ? (0, import_react9.createElement)(
+    member.usage !== void 0 ? (0, import_react10.createElement)(
       "div",
       {
         "data-magic-ceo-usage": true,
@@ -13870,7 +14056,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           color: MUTED2
         }
       },
-      (0, import_react9.createElement)("span", {
+      (0, import_react10.createElement)("span", {
         style: {
           padding: "2px 8px",
           borderRadius: 99,
@@ -13881,9 +14067,9 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           member.usage.totalTokens ?? member.usage.inputTokens + member.usage.outputTokens
         )
       })),
-      (0, import_react9.createElement)("span", null, t("tokens.input", { tokens: formatTokenCount(member.usage.inputTokens) })),
-      (0, import_react9.createElement)("span", null, t("tokens.output", { tokens: formatTokenCount(member.usage.outputTokens) })),
-      member.usage.cacheReadTokens !== void 0 ? (0, import_react9.createElement)("span", null, t("tokens.cache", { tokens: formatTokenCount(member.usage.cacheReadTokens) })) : null
+      (0, import_react10.createElement)("span", null, t("tokens.input", { tokens: formatTokenCount(member.usage.inputTokens) })),
+      (0, import_react10.createElement)("span", null, t("tokens.output", { tokens: formatTokenCount(member.usage.outputTokens) })),
+      member.usage.cacheReadTokens !== void 0 ? (0, import_react10.createElement)("span", null, t("tokens.cache", { tokens: formatTokenCount(member.usage.cacheReadTokens) })) : null
     ) : null,
     member.contextChannels !== void 0 && member.contextChannels.length > 0 ? section(
       t("context.title"),
@@ -13892,31 +14078,31 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       ).join("\n")
     ) : null,
     member.redirectedNote !== void 0 ? section(t("intervene.redirected"), member.redirectedNote, "warn") : null,
-    onIntervene !== void 0 && (member.status === "running" || presentation.viewStatus === "unknown_after_restart") ? (0, import_react9.createElement)(InterveneControls, {
+    onIntervene !== void 0 && (member.status === "running" || presentation.viewStatus === "unknown_after_restart") ? (0, import_react10.createElement)(InterveneControls, {
       member,
       send: (message) => {
         onIntervene("halt", message);
       },
       t
     }) : null,
-    process2.length > 0 || live ? (0, import_react9.createElement)(
+    process2.length > 0 || live ? (0, import_react10.createElement)(
       "div",
       { style: { marginBottom: 16 } },
-      (0, import_react9.createElement)(CeoProcessTimeline, {
+      (0, import_react10.createElement)(CeoProcessTimeline, {
         steps: process2,
         live,
         hideReportContent: true,
         t
       })
     ) : null,
-    presentation.viewStatus === "unknown_after_restart" ? (0, import_react9.createElement)("div", {
+    presentation.viewStatus === "unknown_after_restart" ? (0, import_react10.createElement)("div", {
       style: { marginBottom: 16, fontSize: 12, color: MUTED2 }
-    }, t("inspector.unknown")) : showEmpty ? (0, import_react9.createElement)("div", {
+    }, t("inspector.unknown")) : showEmpty ? (0, import_react10.createElement)("div", {
       style: { marginBottom: 16, fontSize: 12, color: MUTED2 }
     }, t(
       member.status === "queued" ? "inspector.queued" : "inspector.noReport"
     )) : null,
-    presentation.needsDecision ? (0, import_react9.createElement)("div", {
+    presentation.needsDecision ? (0, import_react10.createElement)("div", {
       style: {
         marginBottom: 16,
         padding: "10px 12px",
@@ -13929,7 +14115,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       }
     }, t("inspector.decisionInChat")) : null,
     presentation.hasBlocker && report?.risksOrBlockers ? section(t("badge.blocker"), report.risksOrBlockers, "danger") : null,
-    showDebrief ? (0, import_react9.createElement)(DebriefCard, {
+    showDebrief ? (0, import_react10.createElement)(DebriefCard, {
       summary: summary || t("field.conclusion"),
       details: debriefDetails,
       t
@@ -13951,12 +14137,12 @@ function nextStickState(stuck, gap) {
   return gap < STICK_ATTACH_PX;
 }
 function useStickToBottom(resetKey, followOnReset) {
-  const scrollRef = (0, import_react10.useRef)(null);
-  const contentRef = (0, import_react10.useRef)(null);
-  const stickRef = (0, import_react10.useRef)(true);
-  const followRef = (0, import_react10.useRef)(followOnReset);
+  const scrollRef = (0, import_react11.useRef)(null);
+  const contentRef = (0, import_react11.useRef)(null);
+  const stickRef = (0, import_react11.useRef)(true);
+  const followRef = (0, import_react11.useRef)(followOnReset);
   followRef.current = followOnReset;
-  const [atBottom, setAtBottom] = (0, import_react10.useState)(true);
+  const [atBottom, setAtBottom] = (0, import_react11.useState)(true);
   const applyStick = (stuck) => {
     stickRef.current = stuck;
     setAtBottom(stuck);
@@ -13970,7 +14156,7 @@ function useStickToBottom(resetKey, followOnReset) {
     applyStick(true);
     scrollToBottom();
   };
-  (0, import_react10.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     const el = scrollRef.current;
     if (el === null) return;
     const onScroll = () => {
@@ -13986,7 +14172,7 @@ function useStickToBottom(resetKey, followOnReset) {
       el.removeEventListener("wheel", onWheel);
     };
   }, [resetKey]);
-  (0, import_react10.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     const content = contentRef.current;
     const viewport = scrollRef.current;
     if (content === null || typeof ResizeObserver === "undefined") return;
@@ -14007,7 +14193,7 @@ function useStickToBottom(resetKey, followOnReset) {
       observer.disconnect();
     };
   }, [resetKey]);
-  (0, import_react10.useLayoutEffect)(() => {
+  (0, import_react11.useLayoutEffect)(() => {
     if (followRef.current) {
       applyStick(true);
       scrollToBottom();
@@ -14023,7 +14209,7 @@ function ToBottomButton({
   onClick,
   label
 }) {
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "button",
     {
       type: "button",
@@ -14049,7 +14235,7 @@ function ToBottomButton({
         cursor: "pointer"
       }
     },
-    (0, import_react10.createElement)("svg", {
+    (0, import_react11.createElement)("svg", {
       "aria-hidden": true,
       width: 16,
       height: 16,
@@ -14059,7 +14245,7 @@ function ToBottomButton({
       strokeWidth: 2,
       strokeLinecap: "round",
       strokeLinejoin: "round"
-    }, (0, import_react10.createElement)("path", { d: "m6 9 6 6 6-6" }))
+    }, (0, import_react11.createElement)("path", { d: "m6 9 6 6 6-6" }))
   );
 }
 function attentionTone(kind) {
@@ -14077,7 +14263,7 @@ function attentionPreview(member, kind) {
   return member.report?.notDone ?? member.lastMessage ?? member.task;
 }
 function rowButton(key, title, preview, meta, tone, onSelect) {
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "button",
     {
       key,
@@ -14097,11 +14283,11 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
         cursor: "pointer"
       }
     },
-    (0, import_react10.createElement)(
+    (0, import_react11.createElement)(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8 } },
-      (0, import_react10.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, title),
-      (0, import_react10.createElement)("span", {
+      (0, import_react11.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, title),
+      (0, import_react11.createElement)("span", {
         style: {
           marginLeft: "auto",
           fontSize: 11,
@@ -14109,7 +14295,7 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
         }
       }, meta)
     ),
-    (0, import_react10.createElement)("div", {
+    (0, import_react11.createElement)("div", {
       style: {
         fontSize: 12,
         lineHeight: "18px",
@@ -14126,17 +14312,17 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
 function overview(roster2, t) {
   const attention = ceoAttentionItems(roster2);
   if (roster2.length === 0) {
-    return (0, import_react10.createElement)("div", {
+    return (0, import_react11.createElement)("div", {
       style: { fontSize: 13, lineHeight: "20px", color: ink.tertiary }
     }, t("workspace.empty"));
   }
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "div",
     { style: { display: "flex", flexDirection: "column", gap: 16 } },
-    attention.length > 0 ? (0, import_react10.createElement)(
+    attention.length > 0 ? (0, import_react11.createElement)(
       "section",
       { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      (0, import_react10.createElement)("div", {
+      (0, import_react11.createElement)("div", {
         style: { fontSize: 12, fontWeight: 510, color: ink.tertiary }
       }, t("attention.title")),
       ...attention.map((item) => rowButton(
@@ -14150,10 +14336,10 @@ function overview(roster2, t) {
         }
       ))
     ) : null,
-    (0, import_react10.createElement)(
+    (0, import_react11.createElement)(
       "section",
       { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      (0, import_react10.createElement)("div", {
+      (0, import_react11.createElement)("div", {
         style: { fontSize: 12, fontWeight: 510, color: ink.tertiary }
       }, t("roster.title")),
       ...roster2.map((member) => {
@@ -14173,10 +14359,10 @@ function overview(roster2, t) {
   );
 }
 function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, taskBoardApi, t }) {
-  const boardState = (0, import_react10.useSyncExternalStore)(taskBoard?.subscribe ?? noopBoardSubscribe, taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot, getEmptyTaskBoardSnapshot);
+  const boardState = (0, import_react11.useSyncExternalStore)(taskBoard?.subscribe ?? noopBoardSubscribe, taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot, getEmptyTaskBoardSnapshot);
   const selectedTask = boardState.selectedTaskId === void 0 ? void 0 : boardState.tasks.find((task) => task.id === boardState.selectedTaskId);
-  const selected3 = (0, import_react10.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
-  const roster2 = (0, import_react10.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
+  const selected3 = (0, import_react11.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
+  const roster2 = (0, import_react11.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
   const tabActions = useTabInfo().tab.actions;
   const close = () => {
     if (selected3 !== null) {
@@ -14185,13 +14371,13 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
     }
     tabActions.close();
   };
-  const inspector = selected3 === null ? null : (0, import_react10.createElement)(CeoMemberInspector, {
+  const inspector = selected3 === null ? null : (0, import_react11.createElement)(CeoMemberInspector, {
     key: selected3.callId,
     member: selected3,
     roster: roster2,
     onIntervene: sendIntervention === void 0 ? void 0 : (action, note) => {
       const runId = selected3.runId ?? selected3.rawId ?? selected3.callId;
-      const message = action === "halt" ? `Call ceo_replan with halt run_id ${runId}. The member was stopped by the user; do not rewrite its work as success.` : action === "resume" ? `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.` : note;
+      const message = action === "halt" ? `Call ceo_replan with halt run_id ${runId}. The member was stopped by the user; do not rewrite its work as success.` : action === "resume" ? `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.` : action === "retry" ? `Call ceo_replan with retry run_id ${runId}. Redispatch this failed node from scratch; keep the original task unchanged.` : action === "replan" ? `Call ceo_replan with replan run_id ${runId}. ${note}` : note;
       sendIntervention(message);
     },
     t
@@ -14200,7 +14386,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
     selected3?.callId ?? sessionId ?? "",
     selected3?.status === "running"
   );
-  return (0, import_react10.createElement)(
+  return (0, import_react11.createElement)(
     "div",
     {
       "data-magic-ceo-workspace": true,
@@ -14216,7 +14402,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
         color: ink.primary
       }
     },
-    selected3 === null ? (0, import_react10.createElement)(
+    selected3 === null ? (0, import_react11.createElement)(
       "header",
       {
         style: {
@@ -14227,7 +14413,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           borderBottom: `0.5px solid ${line.subtle}`
         }
       },
-      (0, import_react10.createElement)("div", {
+      (0, import_react11.createElement)("div", {
         style: {
           overflow: "hidden",
           fontSize: 14,
@@ -14237,7 +14423,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           whiteSpace: "nowrap"
         }
       }, t("workspace.title")),
-      (0, import_react10.createElement)("button", {
+      (0, import_react11.createElement)("button", {
         type: "button",
         "aria-label": t("workspace.close"),
         onClick: close,
@@ -14253,7 +14439,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           fontSize: 11
         }
       }, t("workspace.close"))
-    ) : (0, import_react10.createElement)(
+    ) : (0, import_react11.createElement)(
       "div",
       {
         style: {
@@ -14262,7 +14448,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           padding: "8px 12px 0"
         }
       },
-      (0, import_react10.createElement)("button", {
+      (0, import_react11.createElement)("button", {
         type: "button",
         "aria-label": t("workspace.close"),
         onClick: close,
@@ -14279,7 +14465,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
         }
       }, "\xD7")
     ),
-    (0, import_react10.createElement)(
+    (0, import_react11.createElement)(
       "div",
       {
         style: {
@@ -14289,7 +14475,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
           minHeight: 0
         }
       },
-      (0, import_react10.createElement)(
+      (0, import_react11.createElement)(
         "div",
         {
           ref: scrollRef,
@@ -14301,15 +14487,15 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
             overflowY: "auto"
           }
         },
-        (0, import_react10.createElement)(
+        (0, import_react11.createElement)(
           "div",
           { ref: contentRef },
           selected3 === null ? overview(roster2, t) : inspector,
-          (0, import_react10.createElement)(
+          (0, import_react11.createElement)(
             "div",
             { style: { marginTop: 16, borderTop: `0.5px solid ${line.subtle}`, paddingTop: 8 } },
-            (0, import_react10.createElement)("div", { style: { fontSize: 12, fontWeight: 510, marginBottom: 4, color: ink.secondary } }, t("tasks.title")),
-            selectedTask !== void 0 ? (0, import_react10.createElement)(TaskBoardDetail, {
+            (0, import_react11.createElement)("div", { style: { fontSize: 12, fontWeight: 510, marginBottom: 4, color: ink.secondary } }, t("tasks.title")),
+            selectedTask !== void 0 ? (0, import_react11.createElement)(TaskBoardDetail, {
               key: selectedTask.id,
               task: selectedTask,
               onComplete: taskBoard === void 0 ? void 0 : () => {
@@ -14317,11 +14503,11 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
                 taskBoard.reload();
               },
               t
-            }) : (0, import_react10.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, t })
+            }) : (0, import_react11.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, t })
           )
         )
       ),
-      selected3 !== null && atBottom === false ? (0, import_react10.createElement)(ToBottomButton, { onClick: jumpToBottom, label: t("workspace.toBottom") }) : null
+      selected3 !== null && atBottom === false ? (0, import_react11.createElement)(ToBottomButton, { onClick: jumpToBottom, label: t("workspace.toBottom") }) : null
     )
   );
 }
@@ -14642,7 +14828,17 @@ var zh = {
   "intervene.redirect": "\u6309\u65B0\u65B9\u5411\u91CD\u6D3E",
   "intervene.resume": "\u91CD\u65B0\u6D3E\u53D1",
   "intervene.placeholder": "\u5199\u4E0B\u65B0\u65B9\u5411\uFF0C\u4F8B\u5982\uFF1A\u805A\u7126\u4E2D\u56FD\u5E02\u573A\uFF0C\u4E0D\u8981\u6D77\u5916\u6570\u636E",
-  "intervene.redirected": "\u5DF2\u91CD\u6D3E\u65B9\u5411"
+  "intervene.redirected": "\u5DF2\u91CD\u6D3E\u65B9\u5411",
+  "failure.title": "\u4EFB\u52A1\u5931\u8D25",
+  "failure.tool": "\u5931\u8D25\u5DE5\u5177",
+  "failure.error": "\u9519\u8BEF\u4FE1\u606F",
+  "failure.notDone": "\u672A\u5B8C\u6210",
+  "failure.retry": "\u91CD\u8BD5",
+  "failure.replan": "\u4EA4\u56DE CEO \u91CD\u89C4\u5212",
+  "blocked.title": "\u7B49\u5F85\u4E0A\u6E38",
+  "blocked.waitingFor": "\u7B49\u5F85",
+  "blocked.blockers": "\u963B\u585E\u8BF4\u660E",
+  "badge.blocked": "\u963B\u585E"
 };
 var en = {
   "graph.title": "CEO graph",
@@ -14769,7 +14965,17 @@ var en = {
   "intervene.redirect": "\u6309\u65B0\u65B9\u5411\u91CD\u6D3E",
   "intervene.resume": "\u91CD\u65B0\u6D3E\u53D1",
   "intervene.placeholder": "\u5199\u4E0B\u65B0\u7684\u65B9\u5411\uFF0C\u4F8B\u5982\uFF1A\u805A\u7126\u4E2D\u56FD\u5E02\u573A\uFF0C\u4E0D\u8981\u6D77\u5916\u6570\u636E",
-  "intervene.redirected": "\u5DF2\u91CD\u6D3E\u65B9\u5411"
+  "intervene.redirected": "\u5DF2\u91CD\u6D3E\u65B9\u5411",
+  "failure.title": "Task failed",
+  "failure.tool": "Failed tool",
+  "failure.error": "Error",
+  "failure.notDone": "Not done",
+  "failure.retry": "Retry",
+  "failure.replan": "Send back to CEO",
+  "blocked.title": "Waiting on upstream",
+  "blocked.waitingFor": "Waiting for",
+  "blocked.blockers": "Blockers",
+  "badge.blocked": "Blocked"
 };
 var CEO_MEMBER_TAB_KIND = "magicCeoMember";
 var CEO_MEMBER_TAB_ID = "@magic/dsh-ceo-ui/member-workspace";
