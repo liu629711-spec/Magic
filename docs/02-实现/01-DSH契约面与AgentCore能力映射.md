@@ -1,7 +1,7 @@
 ---
 status: active
-version: 2.0
-date: 2026-09-11
+version: 2.1
+date: 2026-09-13
 owner: Magic 项目
 authority: technical-implementation-reference
 dsh: 0.1.5-rc.2 / c291e7961a
@@ -124,7 +124,7 @@ AgentCore 是自带执行引擎的完整独立产品，**不是 Magic 的生产�
 | 会话历史检索 | `tools/builtin/search_conversations.py`、`read_conversation.py` | **DSH 原生** `tool-session-query` 五工具（session_search / session_event_search / session_trace / session_event_trace / session_event_read） | patch 启用（`patches/web.patch.yml`：sqlite 持久索引 + first-search + 路径挂载工具包） | **已启用并真机验证（2026-09-11）** |
 | 交付物导出 | `tools/builtin/md_to_docx.py`、`md_to_pdf.py`、`docs_export/layout.py` | `plugins/magic-export`（`md_to_docx` / `md_to_pdf` 工具，样式/manifest 逐项对齐蓝本；PDF CJK 字形缺字体分支按蓝本降级） | **已建**（2026-09-11，16 测试） |
 | 成员开发工具集 | `git_ops/`（2857 行）、`archive_create/extract`、`package_install`、`code_search`+`workspace/indexing`、`code_diagnostics` | `plugins/magic-devtools`：`archive_create` / `archive_extract` / `git_ops`（白名单+硬禁+保护分支） / `package_install`（registry 钉源+参数黑名单）/ `code_search`（web-tree-sitter 符号抽取 + BM25）/ `code_diagnostics`（tsc 路线，DSH LSP 无诊断口） | **已建**（2026-09-11，50 测试；规格见 06 文档） |
-| 任务板产品化 | 官方任务板（agent-team/src/index.ts Remote + client-ui-agent-team TeamAction） | `remote.agentTeams`（ui-agent-team 挂载；客户端经 reflect 免注入读取） | magic-ceo-ui 工作区「任务板」区块（列表/新建/CAS 完成） | **已建**（2026-09-11） |
+| 任务板产品化 | 官方任务板（agent-team/src/index.ts Remote + client-ui-agent-team TeamAction） | `remote.agentTeams`（ui-agent-team 挂载；客户端经 reflect 免注入读取） | 画布只读任务泳道（官方 view 单层数据源）；UI 写路径已随 PRD-04 §12 只读裁定移除 | **已建并只读化**（2026-09-13） |
 
 ### 4.3 后续（2026-09-11 用户裁定为二期：首版第一梯队验收通过后启动）
 

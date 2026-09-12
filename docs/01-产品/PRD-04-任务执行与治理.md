@@ -1,7 +1,7 @@
 ---
 status: active
-version: 1.3
-date: 2026-09-11
+version: 1.4
+date: 2026-09-13
 owner: Magic 项目 PM
 authority: canonical-product-prd
 ---
