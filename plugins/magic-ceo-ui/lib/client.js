@@ -12427,6 +12427,7 @@ var import_react8 = require("react");
 function TaskBoardCard({
   sessionId,
   api,
+  onMutated,
   t
 }) {
   const [state, setState] = (0, import_react8.useState)({ kind: "loading", tasks: [] });
@@ -12464,6 +12465,7 @@ function TaskBoardCard({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
+    onMutated?.();
     try {
       if (api !== void 0 && sessionId !== void 0) setState(taskRowsFromResult(await api.view(sessionId)));
     } catch {
@@ -14587,7 +14589,9 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
                 taskBoard.reload();
               },
               t
-            }) : (0, import_react12.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, t })
+            }) : (0, import_react12.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, onMutated: () => {
+              taskBoard?.reload();
+            }, t })
           )
         )
       ),

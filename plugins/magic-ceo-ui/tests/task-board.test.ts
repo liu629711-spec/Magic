@@ -48,4 +48,8 @@ test('TaskBoardCard.run：写操作必须走双层信封判定 taskMutationFailu
   assert.match(source, /taskMutationFailure\(await operation\(\)\)/)
   // 旧实现把结果断言成单层载波并只判外层 ok —— 回归到该写法必须报红。
   assert.doesNotMatch(source, /as \{ ok\?: boolean/)
+  // 卡片写完必须通知宿主重拉共享 store，否则画布泳道不跟随（双通路失步）。
+  assert.match(source, /onMutated\?\.\(\)/)
+  const workspace = await readFile(new URL('../src/client/CeoWorkspace.ts', import.meta.url), 'utf8')
+  assert.match(workspace, /onMutated: \(\) => \{ taskBoard\?\.reload\(\) \}/)
 })

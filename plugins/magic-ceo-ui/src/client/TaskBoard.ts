@@ -21,10 +21,13 @@ type Translate = (key: string, params?: Record<string, unknown>) => string
 export function TaskBoardCard({
   sessionId,
   api,
+  onMutated,
   t,
 }: {
   sessionId?: string
   api?: TaskBoardApi
+  /** 卡片写操作（新建/完成）落定后回调：宿主用它重拉共享 store，让画布泳道即时跟随。 */
+  onMutated?: () => void
   t: Translate
 }): ReactNode {
   const [state, setState] = useState<TaskBoardState>({ kind: 'loading', tasks: [] })
@@ -64,6 +67,9 @@ export function TaskBoardCard({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
+    // 双通路同步：卡片走 api 直连，画布泳道走共享 store——写操作落定后（无论成败，
+    // 失败也要刷新本地过期的 revision）让宿主重拉 store，泳道不必等重挂载。
+    onMutated?.()
     try {
       if (api !== undefined && sessionId !== undefined) setState(taskRowsFromResult(await api.view(sessionId)))
     } catch {
