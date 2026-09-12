@@ -1184,8 +1184,9 @@ function recordCeoUserDecision(callId, answer) {
   if (index2 === -1) return;
   const next = applyCeoUserDecision(roster[index2], answer);
   if (next === roster[index2]) return;
-  roster = roster.slice();
-  roster[index2] = next;
+  const copy = roster.slice();
+  copy[index2] = next;
+  roster = copy;
   refreshSelected();
   notify();
 }
@@ -12371,7 +12372,7 @@ function TaskBoardCard({
     }
     try {
       setState(taskRowsFromResult(await api.view(sessionId)));
-      setError(void 0);
+      setError("");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setState({ kind: "unavailable", tasks: [], message });

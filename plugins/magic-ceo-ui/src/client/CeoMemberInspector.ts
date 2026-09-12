@@ -597,5 +597,3 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
     : null,
   )
 }
-
-export type { CeoMemberInspectorProps }

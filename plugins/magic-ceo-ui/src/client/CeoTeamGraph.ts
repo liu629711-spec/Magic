@@ -58,13 +58,15 @@ export interface CeoTeamGraphProps {
 
 type Translate = CeoTeamGraphProps['t']
 
-interface GoalNodeData {
+// 节点 data 必须是 type 别名（而非 interface）：@xyflow/react 的 Node<T> 约束要求
+// T 满足 Record<string, unknown>，interface 没有隐式索引签名，type 别名才有。
+type GoalNodeData = {
   preview: string
   enterIndex: number
   t: Translate
 }
 
-interface MemberNodeData {
+type MemberNodeData = {
   member: CeoTeamMember
   roster: readonly CeoTeamMember[]
   selected: boolean
@@ -72,7 +74,7 @@ interface MemberNodeData {
   t: Translate
 }
 
-interface CeoNodeData {
+type CeoNodeData = {
   status: CeoMemberViewStatus
   enterIndex: number
   t: Translate
@@ -149,7 +151,7 @@ function initiatorPreview(text: string): string {
   return clipOneLine(base)
 }
 
-type CanvasNode = Node<GoalNodeData | MemberNodeData | CeoNodeData>
+type CanvasNode = Node<GoalNodeData | MemberNodeData | CeoNodeData | TaskNodeData>
 
 const STATUS_COLOR: Record<CeoMemberViewStatus, string> = {
   queued: 'var(--dsw-alias-label-tertiary, #9a9a9a)',
@@ -485,7 +487,7 @@ function endpointAvatar(kind: 'goal' | 'ceo', status: CeoMemberViewStatus): Reac
   }, kind === 'goal' ? '你' : '汇')
 }
 
-function handles(kind: 'goal' | 'member' | 'ceo'): ReactNode {
+function handles(kind: 'goal' | 'member' | 'ceo'): ReactNode[] {
   return [
     kind === 'goal' ? null : h(Handle, { key: 'in', type: 'target', position: Position.Left }),
     kind === 'ceo' ? null : h(Handle, { key: 'out', type: 'source', position: Position.Right }),
@@ -769,7 +771,7 @@ const noopTaskBoardSubscribe = (listener: () => void): (() => void) => {
   return () => undefined
 }
 
-interface TaskNodeData {
+type TaskNodeData = {
   task: CeoFlowTask
   selected: boolean
   enterIndex: number
@@ -885,7 +887,7 @@ function TaskLaneBand({ lane }: { lane: CeoFlowLane }): ReactNode {
 
 /** AgentCore WaveLanes: one soft backdrop band per wave column, rendered under
  *  the nodes in the viewport portal so pan/zoom carries it for free. */
-function WaveLanes({ lanes }: { lanes: CeoFlowLane[] }): ReactNode {
+function WaveLanes({ lanes }: { lanes: readonly CeoFlowLane[] }): ReactNode {
   if (lanes.length === 0) return null
   return h(ViewportPortal, null,
     lanes.map(lane => h(Fragment, { key: lane.id },
@@ -1140,9 +1142,9 @@ const Canvas = memo(function Canvas(props: {
         nodesFocusable: false,
         elementsSelectable: false,
         proOptions: { hideAttribution: true },
-        onNodeMouseEnter: (_event: unknown, node: CanvasNode) => { setHoveredId(node.id) },
+        onNodeMouseEnter: (_event, node) => { setHoveredId(node.id) },
         onNodeMouseLeave: () => { setHoveredId(null) },
-        onNodeClick: (_event: unknown, node: CanvasNode) => {
+        onNodeClick: (_event, node) => {
           if (node.type === 'member') {
             const member = (node.data as MemberNodeData).member
             selectCeoMember(member)

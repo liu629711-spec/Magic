@@ -15,7 +15,7 @@ interface PendingMemberMessage {
 }
 
 let selected: CeoTeamMember | null = null
-let roster: CeoTeamMember[] = []
+let roster: readonly CeoTeamMember[] = []
 let rosterSessionId: string | undefined
 let pendingMessages: PendingMemberMessage[] = []
 const listeners = new Set<Listener>()
@@ -104,8 +104,9 @@ export function recordCeoUserDecision(callId: string, answer: string): void {
   if (index === -1) return
   const next = applyCeoUserDecision(roster[index]!, answer)
   if (next === roster[index]) return
-  roster = roster.slice()
-  roster[index] = next
+  const copy = roster.slice()
+  copy[index] = next
+  roster = copy
   refreshSelected()
   notify()
 }

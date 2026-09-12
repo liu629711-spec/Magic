@@ -41,7 +41,7 @@ export function TaskBoardCard({
     }
     try {
       setState(taskRowsFromResult(await api.view(sessionId)))
-      setError(undefined)
+      setError('')
     } catch (cause) {
       // 传输异常（如页面加载初期网关未连上）→ 有界自动重试；详情透出到界面。
       const message = cause instanceof Error ? cause.message : String(cause)

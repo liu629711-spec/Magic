@@ -12,5 +12,10 @@
     "build": "pnpm -r --filter \"./plugins/**\" run build",
     "typecheck": "pnpm -r --filter \"./plugins/**\" run typecheck",
     "test": "pnpm -r --filter \"./plugins/**\" run test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.4",
+    "@types/react": "18.3.31",
+    "typescript": "6.0.3"
   }
 }

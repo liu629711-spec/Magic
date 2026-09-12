@@ -740,7 +740,7 @@ export function applyCeoMemberMessage(
     text: string
     sourceKind: 'agent-message' | 'subagent-settled'
   },
-): CeoTeamMember[] {
+): readonly CeoTeamMember[] {
   const body = unwrapMemberMessage(event.memberId, event.text)
   const parsed = parseCeoMemberReport(body)
   const settlement = event.sourceKind === 'subagent-settled'

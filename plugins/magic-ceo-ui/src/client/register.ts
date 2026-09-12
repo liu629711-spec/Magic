@@ -293,7 +293,10 @@ export interface CeoUiContext {
    * 运行时按需注入（core-cordis 原生能力）：remote.agentTeams 由 ui-agent-team 的
    * Remote contribution 挂载，点号命名空间不能走静态 inject 列表（loader 不支持），
    * 必须照官方 client-ui-agent-team/mount.ts 的方式用 ctx.inject 在回调里取。
+   * 宿主也会把这两个服务直接挂在 ctx 上（cordis 代理按需注入），故声明为可选字段。
    */
+  remote?: { agentTeams?: TaskBoardApi }
+  'remote.agentTeams'?: TaskBoardApi
   inject?: (names: readonly string[], fn: (scoped: {
     remote?: { agentTeams?: TaskBoardApi }
   }) => unknown) => unknown
@@ -380,7 +383,7 @@ export function registerCeoUi(
   const readAgentTeams = (): TaskBoardApi => {
     // 命名空间是独立注入服务名 'remote.agentTeams'（ui-agent-team $mount 注册）；
     // 属性访问 ctx.remote.agentTeams 会被 cordis 代理拦截并要求注入该名。
-    const teams = (ctx as unknown as Record<string, TaskBoardApi | undefined>)['remote.agentTeams']
+    const teams = ctx['remote.agentTeams']
     if (teams === undefined) {
       throw new Error('任务板通道未就绪（remote.agentTeams 未注入）')
     }

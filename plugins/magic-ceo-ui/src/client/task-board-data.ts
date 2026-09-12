@@ -121,7 +121,7 @@ export function statusDotColor(status: TeamTaskDuck['status']): string {
 /** 一行任务的展示数据（纯函数）。 */
 export function taskRowOf(task: TeamTaskDuck): {
   title: string
-  statusText: 'pending' | 'in_progress' | 'completed'
+  statusText: TeamTaskDuck['status']
   blockedByText: string
   completable: boolean
 } {

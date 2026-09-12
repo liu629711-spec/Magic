@@ -4,7 +4,7 @@ import { CEO_MEMBER_TAB_ID, CEO_MEMBER_TAB_KIND, inject, registerCeoUi, zh } fro
 
 const fakeTaskBoard = {
   // 线上载波信封的载荷字段是 value（官方 RemoteResult<T>），不是 data
-  view: async () => ({ ok: true as const, value: { tasks: [] } }),
+  view: async (_sessionId: string) => ({ ok: true as const, value: { tasks: [] } }),
   createTask: async () => ({ ok: true as const, value: { ok: true as const } }),
   updateTask: async () => ({ ok: true as const, value: { ok: true as const } }),
 }

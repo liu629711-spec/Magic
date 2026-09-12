@@ -47,6 +47,9 @@ export const ceoTeamDefinition = {
       name?: unknown
       callId?: unknown
       arguments?: unknown
+      runs?: unknown
+      runId?: unknown
+      op?: unknown
       planId?: unknown
       summary?: unknown
       analysis?: unknown
@@ -81,6 +84,7 @@ export const ceoTeamDefinition = {
       type: string
       seq: number
       data: {
+        turn?: unknown
         callId?: unknown
         name?: unknown
         arguments?: unknown
@@ -93,6 +97,9 @@ export const ceoTeamDefinition = {
         analysis?: unknown
         teamBrief?: unknown
         tasks?: unknown
+        usage?: unknown
+        channels?: unknown
+        note?: unknown
         output?: unknown
         stopReason?: unknown
         status?: unknown

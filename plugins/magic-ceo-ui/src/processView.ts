@@ -298,7 +298,7 @@ function parseMarkdownHits(text: string): SearchHit[] {
 
 export function parseSearchHits(
   result: string | undefined,
-  sources?: ReadonlyArray<{ url: string; title?: string; snippet?: string }>,
+  sources?: ReadonlyArray<{ url?: string; title?: string; snippet?: string }>,
 ): SearchHit[] {
   if (sources !== undefined && sources.length > 0) {
     return sources.flatMap(item => {
@@ -345,7 +345,7 @@ export function searchFailurePeek(result: string | undefined): string {
 
 export function searchResultCount(
   result: string | undefined,
-  sources?: ReadonlyArray<{ url: string; title?: string; snippet?: string }>,
+  sources?: ReadonlyArray<{ url?: string; title?: string; snippet?: string }>,
 ): { count: number; empty: boolean } {
   if (result !== undefined && /No results found/i.test(result)) {
     return { count: 0, empty: true }
