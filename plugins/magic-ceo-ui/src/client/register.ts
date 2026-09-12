@@ -157,6 +157,12 @@ export const zh = {
   'process.summary.run.running': '正在运行 {count} 条命令',
   'process.summary.other.done': '已执行 {count} 个操作',
   'process.summary.other.running': '正在执行 {count} 个操作',
+  'turn.processing': '正在处理 {duration}',
+  'turn.processed': '已处理 {duration}',
+  'turn.toolCalls': '工具调用 {count}',
+  'turn.messages': '消息 {count}',
+  'turn.subagents': '子代理 {count}',
+  'turn.thought': '处理了一会儿',
 }
 
 export const en = {
@@ -309,6 +315,12 @@ export const en = {
   'process.summary.run.running': 'Running {count} commands',
   'process.summary.other.done': '{count} operations',
   'process.summary.other.running': '{count} operations',
+  'turn.processing': 'Processing {duration}',
+  'turn.processed': 'Processed {duration}',
+  'turn.toolCalls': '{count} tool calls',
+  'turn.messages': '{count} messages',
+  'turn.subagents': '{count} subagents',
+  'turn.thought': 'Thought for a while',
 }
 
 export interface CeoUiContext {
@@ -371,7 +383,7 @@ export const CEO_MEMBER_TAB_ID = '@magic/dsh-ceo-ui/member-workspace'
 
 export function registerCeoUi(
   ctx: CeoUiContext,
-  components: { graph: unknown; row: unknown; workspace: unknown; drawer: unknown },
+  components: { graph: unknown; row: unknown; workspace: unknown; drawer: unknown; turnProcess: unknown },
 ) {
   ctx.uiConversation.events.register(ceoTeamDefinition)
   ctx.uiConversation.events.register(ceoMemberReportDefinition)
@@ -417,6 +429,15 @@ export function registerCeoUi(
     key: 'ceo_delegate',
     locale: 'magicCeo',
   }, components.row))
+  // codex 式 turn 折叠摘要：同 key 注册即替换 ui-chat 的 turn-process 渲染器
+  // （ui-chat contract/slots.ts 的 SlotMap 注释明示「Reusing a key replaces that
+  // node renderer」；本插件 inject 依赖 ui-chat，apply 晚于其注册，替换生效）。
+  // 只替换披露行本身；展开后的过程明细仍由 DSH seat 渲染。
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+    name: 'conversation.chat.node',
+    key: 'turn-process',
+    locale: 'magicCeo',
+  }, components.turnProcess))
   // Stage two of the tab: the body under the definition's id. The seat's
   // default inject supplies `useTabInfo` (tab.actions.close, tab.navigation);
   // the framework merges it with this spec's own inject.

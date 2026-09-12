@@ -100,7 +100,7 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
       },
     },
     effect: (factory) => factory(),
-  }, { graph: 'graph', row: 'row', workspace: 'workspace', drawer: 'drawer' })
+  }, { graph: 'graph', row: 'row', workspace: 'workspace', drawer: 'drawer', turnProcess: 'turn-process' })
 
   assert.deepEqual(inject, ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.agentTeams'])
   assert.equal(definitions[0]?.kind, 'ceo-team')
@@ -112,6 +112,7 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
     { name: 'conversation.chat.node', key: 'ceo-team', priority: undefined },
     { name: 'conversation.input.dock', key: undefined, priority: undefined },
     { name: 'tool.call.toolview', key: 'ceo_delegate', priority: undefined },
+    { name: 'conversation.chat.node', key: 'turn-process', priority: undefined },
     { name: 'sidebar.right.pane.tab', key: CEO_MEMBER_TAB_ID, priority: undefined },
   ])
 
@@ -132,7 +133,8 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
   assert.equal(graphBoard.getSnapshot(), graphBoard.getSnapshot(), 'getSnapshot 必须引用稳定（否则 React #185）')
 
   // The workspace body gets its session id and intervention sender from the seat.
-  const workspaceSpec = slots[3]!.spec as { inject: (sessionId: string) => Record<string, unknown> }
+  // slots[3] 现在是 turn-process 替换渲染器（阶段二），右坞 tab 顺延到 slots[4]。
+  const workspaceSpec = slots[4]!.spec as { inject: (sessionId: string) => Record<string, unknown> }
   const workspaceInject = workspaceSpec.inject('session-1') as Record<string, unknown>
   assert.equal(workspaceInject.sessionId, 'session-1')
   assert.equal(typeof workspaceInject.sendIntervention, 'function')

@@ -57,7 +57,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
             "The result of getSnapshot should be cached to avoid an infinite loop"
           ), didWarnUncachedGetSnapshot = true);
         }
-        cachedValue = useState9({
+        cachedValue = useState10({
           inst: { value, getSnapshot }
         });
         var inst = cachedValue[0].inst, forceUpdate = cachedValue[1];
@@ -69,7 +69,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
           },
           [subscribe, value, getSnapshot]
         );
-        useEffect7(
+        useEffect8(
           function() {
             checkIfSnapshotChanged(inst) && forceUpdate({ inst });
             return subscribe(function() {
@@ -95,7 +95,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
         return getSnapshot();
       }
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var React = require("react"), objectIs = "function" === typeof Object.is ? Object.is : is, useState9 = React.useState, useEffect7 = React.useEffect, useLayoutEffect4 = React.useLayoutEffect, useDebugValue2 = React.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
+      var React = require("react"), objectIs = "function" === typeof Object.is ? Object.is : is, useState10 = React.useState, useEffect8 = React.useEffect, useLayoutEffect4 = React.useLayoutEffect, useDebugValue2 = React.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
       exports.useSyncExternalStore = void 0 !== React.useSyncExternalStore ? React.useSyncExternalStore : shim;
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
@@ -123,7 +123,7 @@ var require_with_selector_development = __commonJS({
         return x === y && (0 !== x || 1 / x === 1 / y) || x !== x && y !== y;
       }
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var React = require("react"), shim = require_shim(), objectIs = "function" === typeof Object.is ? Object.is : is, useSyncExternalStore4 = shim.useSyncExternalStore, useRef7 = React.useRef, useEffect7 = React.useEffect, useMemo3 = React.useMemo, useDebugValue2 = React.useDebugValue;
+      var React = require("react"), shim = require_shim(), objectIs = "function" === typeof Object.is ? Object.is : is, useSyncExternalStore4 = shim.useSyncExternalStore, useRef7 = React.useRef, useEffect8 = React.useEffect, useMemo3 = React.useMemo, useDebugValue2 = React.useDebugValue;
       exports.useSyncExternalStoreWithSelector = function(subscribe, getSnapshot, getServerSnapshot, selector, isEqual) {
         var instRef = useRef7(null);
         if (null === instRef.current) {
@@ -166,7 +166,7 @@ var require_with_selector_development = __commonJS({
           [getSnapshot, getServerSnapshot, selector, isEqual]
         );
         var value = useSyncExternalStore4(subscribe, instRef[0], instRef[1]);
-        useEffect7(
+        useEffect8(
           function() {
             inst.hasValue = true;
             inst.value = value;
@@ -2909,11 +2909,11 @@ function hex(value) {
   value = clampi(value);
   return (value < 16 ? "0" : "") + value.toString(16);
 }
-function hsla(h9, s, l, a) {
-  if (a <= 0) h9 = s = l = NaN;
-  else if (l <= 0 || l >= 1) h9 = s = NaN;
-  else if (s <= 0) h9 = NaN;
-  return new Hsl(h9, s, l, a);
+function hsla(h10, s, l, a) {
+  if (a <= 0) h10 = s = l = NaN;
+  else if (l <= 0 || l >= 1) h10 = s = NaN;
+  else if (s <= 0) h10 = NaN;
+  return new Hsl(h10, s, l, a);
 }
 function hslConvert(o) {
   if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
@@ -2921,23 +2921,23 @@ function hslConvert(o) {
   if (!o) return new Hsl();
   if (o instanceof Hsl) return o;
   o = o.rgb();
-  var r = o.r / 255, g = o.g / 255, b = o.b / 255, min = Math.min(r, g, b), max = Math.max(r, g, b), h9 = NaN, s = max - min, l = (max + min) / 2;
+  var r = o.r / 255, g = o.g / 255, b = o.b / 255, min = Math.min(r, g, b), max = Math.max(r, g, b), h10 = NaN, s = max - min, l = (max + min) / 2;
   if (s) {
-    if (r === max) h9 = (g - b) / s + (g < b) * 6;
-    else if (g === max) h9 = (b - r) / s + 2;
-    else h9 = (r - g) / s + 4;
+    if (r === max) h10 = (g - b) / s + (g < b) * 6;
+    else if (g === max) h10 = (b - r) / s + 2;
+    else h10 = (r - g) / s + 4;
     s /= l < 0.5 ? max + min : 2 - max - min;
-    h9 *= 60;
+    h10 *= 60;
   } else {
-    s = l > 0 && l < 1 ? 0 : h9;
+    s = l > 0 && l < 1 ? 0 : h10;
   }
-  return new Hsl(h9, s, l, o.opacity);
+  return new Hsl(h10, s, l, o.opacity);
 }
-function hsl(h9, s, l, opacity) {
-  return arguments.length === 1 ? hslConvert(h9) : new Hsl(h9, s, l, opacity == null ? 1 : opacity);
+function hsl(h10, s, l, opacity) {
+  return arguments.length === 1 ? hslConvert(h10) : new Hsl(h10, s, l, opacity == null ? 1 : opacity);
 }
-function Hsl(h9, s, l, opacity) {
-  this.h = +h9;
+function Hsl(h10, s, l, opacity) {
+  this.h = +h10;
   this.s = +s;
   this.l = +l;
   this.opacity = +opacity;
@@ -2952,11 +2952,11 @@ define_default(Hsl, hsl, extend(Color, {
     return new Hsl(this.h, this.s, this.l * k, this.opacity);
   },
   rgb() {
-    var h9 = this.h % 360 + (this.h < 0) * 360, s = isNaN(h9) || isNaN(this.s) ? 0 : this.s, l = this.l, m2 = l + (l < 0.5 ? l : 1 - l) * s, m1 = 2 * l - m2;
+    var h10 = this.h % 360 + (this.h < 0) * 360, s = isNaN(h10) || isNaN(this.s) ? 0 : this.s, l = this.l, m2 = l + (l < 0.5 ? l : 1 - l) * s, m1 = 2 * l - m2;
     return new Rgb(
-      hsl2rgb(h9 >= 240 ? h9 - 240 : h9 + 120, m1, m2),
-      hsl2rgb(h9, m1, m2),
-      hsl2rgb(h9 < 120 ? h9 + 240 : h9 - 120, m1, m2),
+      hsl2rgb(h10 >= 240 ? h10 - 240 : h10 + 120, m1, m2),
+      hsl2rgb(h10, m1, m2),
+      hsl2rgb(h10 < 120 ? h10 + 240 : h10 - 120, m1, m2),
       this.opacity
     );
   },
@@ -2978,8 +2978,8 @@ function clamph(value) {
 function clampt(value) {
   return Math.max(0, Math.min(1, value || 0));
 }
-function hsl2rgb(h9, m1, m2) {
-  return (h9 < 60 ? m1 + (m2 - m1) * h9 / 60 : h9 < 180 ? m2 : h9 < 240 ? m1 + (m2 - m1) * (240 - h9) / 60 : m1) * 255;
+function hsl2rgb(h10, m1, m2) {
+  return (h10 < 60 ? m1 + (m2 - m1) * h10 / 60 : h10 < 180 ? m2 : h10 < 240 ? m1 + (m2 - m1) * (240 - h10) / 60 : m1) * 255;
 }
 
 // ../../node_modules/.pnpm/d3-interpolate@3.0.1/node_modules/d3-interpolate/src/basis.js
@@ -6200,7 +6200,7 @@ function getHandle(nodeId, handleType, handleId, nodeLookup, connectionMode, wit
     return null;
   }
   const handles2 = connectionMode === "strict" ? node.internals.handleBounds?.[handleType] : [...node.internals.handleBounds?.source ?? [], ...node.internals.handleBounds?.target ?? []];
-  const handle = (handleId ? handles2?.find((h9) => h9.id === handleId) : handles2?.[0]) ?? null;
+  const handle = (handleId ? handles2?.find((h10) => h10.id === handleId) : handles2?.[0]) ?? null;
   return handle && withAbsolutePosition ? { ...handle, ...getHandlePosition(node, handle, handle.position, true) } : handle;
 }
 function getHandleType(edgeUpdaterType, handleDomNode) {
@@ -14596,6 +14596,138 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, task
   );
 }
 
+// src/client/TurnProcessSummary.ts
+var import_react13 = require("react");
+
+// src/turn-summary.ts
+var EMPTY_TURN_TOOL_SUMMARY = { names: [] };
+function collectTurnToolNames(nodes, spec) {
+  const names = [];
+  for (const node of nodes) {
+    if (node.kind !== "tool-result") continue;
+    if (node.seq < spec.processStartSeq) continue;
+    if (spec.answerAnchorSeq !== null && node.seq >= spec.answerAnchorSeq) continue;
+    names.push(node.call?.name ?? "unknown");
+  }
+  return names;
+}
+function categorizeToolNames(names) {
+  const counts = { explore: 0, search: 0, edit: 0, run: 0, other: 0 };
+  for (const name of names) counts[classifyToolName(name)] += 1;
+  return counts;
+}
+var selectorCache = /* @__PURE__ */ new WeakMap();
+function selectTurnTools(snapshot2, spec) {
+  const nodes = snapshot2?.legacy?.nodes;
+  const timings = snapshot2?.legacy?.turnTimings;
+  if (nodes === void 0 || timings === void 0) return EMPTY_TURN_TOOL_SUMMARY;
+  let entry = selectorCache.get(nodes);
+  if (entry === void 0 || entry.timings !== timings) {
+    entry = { timings, byTurn: /* @__PURE__ */ new Map() };
+    selectorCache.set(nodes, entry);
+  }
+  const key = `${String(spec.turn)}:${String(spec.processStartSeq)}:${String(spec.answerAnchorSeq)}`;
+  const cached = entry.byTurn.get(key);
+  if (cached !== void 0) return cached;
+  const timing = timings.get(spec.turn);
+  const summary = {
+    names: collectTurnToolNames(nodes, spec),
+    startTime: timing?.startTime,
+    endTime: timing?.endTime
+  };
+  entry.byTurn.set(key, summary);
+  return summary;
+}
+
+// src/client/TurnProcessSummary.ts
+function useTickingNow(active) {
+  const [, setTick] = (0, import_react13.useState)(0);
+  (0, import_react13.useEffect)(() => {
+    if (!active) return void 0;
+    const id2 = setInterval(() => {
+      setTick((value) => value + 1);
+    }, 1e3);
+    return () => {
+      clearInterval(id2);
+    };
+  }, [active]);
+  return Date.now();
+}
+function TurnProcessSummary({ node, turnProcess, useChat, t }) {
+  const summary = useChat !== void 0 ? useChat((snapshot2) => selectTurnTools(snapshot2, node.data)) : EMPTY_TURN_TOOL_SUMMARY;
+  const timingRunning = summary.startTime !== void 0 && summary.endTime === void 0;
+  const now2 = useTickingNow(timingRunning);
+  if (turnProcess === void 0 || !turnProcess.foldable) return null;
+  const counts = categorizeToolNames(summary.names);
+  const parts = [];
+  for (const category of ["explore", "search", "edit", "run", "other"]) {
+    const count = counts[category];
+    if (count > 0) parts.push(t(`process.summary.${category}.done`, { count }));
+  }
+  if (parts.length === 0 && node.data.toolCallCount > 0) {
+    parts.push(t("turn.toolCalls", { count: node.data.toolCallCount }));
+  }
+  if (node.data.messageCount > 0) parts.push(t("turn.messages", { count: node.data.messageCount }));
+  if (node.data.subagentCount > 0) parts.push(t("turn.subagents", { count: node.data.subagentCount }));
+  let duration = null;
+  if (summary.startTime !== void 0) {
+    const seconds = timingRunning ? Math.max(0, Math.floor((now2 - summary.startTime) / 1e3)) : summary.endTime !== void 0 ? Math.max(0, Math.floor((summary.endTime - summary.startTime) / 1e3)) : null;
+    if (seconds !== null) {
+      duration = timingRunning ? t("turn.processing", { duration: formatElapsed(seconds) }) : t("turn.processed", { duration: formatElapsed(seconds) });
+    }
+  }
+  const label = [duration, ...parts].filter((part) => part !== null && part !== "").join(" \xB7 ");
+  const finalLabel = label === "" ? t("turn.thought") : label;
+  return (0, import_react13.createElement)(
+    "button",
+    {
+      type: "button",
+      "data-magic-ceo-turn-summary": "true",
+      "data-turn-process": String(node.data.turn),
+      "data-open": turnProcess.open || void 0,
+      "aria-expanded": turnProcess.open,
+      onClick: (event) => {
+        event.currentTarget.focus();
+        turnProcess.setOpen(!turnProcess.open);
+      },
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        width: "100%",
+        padding: "4px 8px",
+        border: 0,
+        borderRadius: 8,
+        background: "transparent",
+        color: "var(--dsw-alias-label-tertiary, #9a9a9a)",
+        cursor: "pointer",
+        fontSize: 12,
+        lineHeight: "18px",
+        textAlign: "left"
+      }
+    },
+    (0, import_react13.createElement)("span", {
+      "aria-hidden": true,
+      style: {
+        flex: "0 0 auto",
+        fontSize: 10,
+        transition: "transform .15s ease",
+        transform: turnProcess.open ? "rotate(0deg)" : "rotate(-90deg)"
+      }
+    }, "\u25BE"),
+    (0, import_react13.createElement)("span", {
+      style: {
+        flex: 1,
+        minWidth: 0,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        fontVariantNumeric: "tabular-nums"
+      }
+    }, finalLabel)
+  );
+}
+
 // src/client/definition.ts
 function resultText2(content) {
   return textFromContent(content);
@@ -14936,7 +15068,13 @@ var zh = {
   "process.summary.run.done": "\u5DF2\u8FD0\u884C {count} \u6761\u547D\u4EE4",
   "process.summary.run.running": "\u6B63\u5728\u8FD0\u884C {count} \u6761\u547D\u4EE4",
   "process.summary.other.done": "\u5DF2\u6267\u884C {count} \u4E2A\u64CD\u4F5C",
-  "process.summary.other.running": "\u6B63\u5728\u6267\u884C {count} \u4E2A\u64CD\u4F5C"
+  "process.summary.other.running": "\u6B63\u5728\u6267\u884C {count} \u4E2A\u64CD\u4F5C",
+  "turn.processing": "\u6B63\u5728\u5904\u7406 {duration}",
+  "turn.processed": "\u5DF2\u5904\u7406 {duration}",
+  "turn.toolCalls": "\u5DE5\u5177\u8C03\u7528 {count}",
+  "turn.messages": "\u6D88\u606F {count}",
+  "turn.subagents": "\u5B50\u4EE3\u7406 {count}",
+  "turn.thought": "\u5904\u7406\u4E86\u4E00\u4F1A\u513F"
 };
 var en = {
   "graph.title": "CEO graph",
@@ -15087,7 +15225,13 @@ var en = {
   "process.summary.run.done": "Ran {count} commands",
   "process.summary.run.running": "Running {count} commands",
   "process.summary.other.done": "{count} operations",
-  "process.summary.other.running": "{count} operations"
+  "process.summary.other.running": "{count} operations",
+  "turn.processing": "Processing {duration}",
+  "turn.processed": "Processed {duration}",
+  "turn.toolCalls": "{count} tool calls",
+  "turn.messages": "{count} messages",
+  "turn.subagents": "{count} subagents",
+  "turn.thought": "Thought for a while"
 };
 var CEO_MEMBER_TAB_KIND = "magicCeoMember";
 var CEO_MEMBER_TAB_ID = "@magic/dsh-ceo-ui/member-workspace";
@@ -15136,6 +15280,11 @@ function registerCeoUi(ctx, components) {
     key: "ceo_delegate",
     locale: "magicCeo"
   }, components.row));
+  ctx.slots.inject("conversation.chat.node", () => ctx.slots.register({
+    name: "conversation.chat.node",
+    key: "turn-process",
+    locale: "magicCeo"
+  }, components.turnProcess));
   const leadSessionIdOf = (sessionId) => {
     const parent = ctx.sessions.binding?.(sessionId)?.session?.getSnapshot?.().subagent?.address?.parentSessionId;
     return parent ?? sessionId;
@@ -15197,7 +15346,8 @@ function apply(ctx) {
     graph: CeoTeamGraph,
     row: CeoDelegateRow,
     workspace: CeoWorkspace,
-    drawer: CeoDecisionDock
+    drawer: CeoDecisionDock,
+    turnProcess: TurnProcessSummary
   });
 }
 /*! Bundled license information:
