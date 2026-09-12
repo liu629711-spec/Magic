@@ -70,22 +70,30 @@ export function TaskBoardCard({
   const sorted = [...state.tasks].sort((a, b) => (a.status === 'completed' ? 1 : 0) - (b.status === 'completed' ? 1 : 0))
   const rows = sorted.map(taskRowOf)
 
-  return h('div', { 'data-magic-ceo-taskboard': true, style: { display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px' } },
+  return h('div', {
+    'data-magic-ceo-taskboard': true,
+    style: {
+      display: 'flex', flexDirection: 'column', gap: 8,
+      padding: 10, borderRadius: 10,
+      border: '0.5px solid rgba(255,255,255,0.08)',
+      background: 'rgba(255,255,255,0.03)',
+    },
+  },
     state.kind === 'loading'
-      ? h('div', { style: { fontSize: 12, opacity: 0.7 } }, t('tasks.loading'))
+      ? h('div', { style: { fontSize: 12, opacity: 0.7, textAlign: 'center', padding: '6px 0' } }, t('tasks.loading'))
       : state.kind === 'unavailable'
-        ? h('div', { style: { fontSize: 12, color: 'rgba(220,120,120,1)' } }, t('tasks.unavailable'))
+        ? h('div', { style: { fontSize: 12, color: 'rgba(220,120,120,1)', textAlign: 'center', padding: '6px 0' } }, t('tasks.unavailable'))
         : state.kind === 'empty'
-          ? h('div', { style: { fontSize: 12, opacity: 0.7 } }, t('tasks.empty'))
+          ? h('div', { style: { fontSize: 12, opacity: 0.6, textAlign: 'center', padding: '10px 0' } }, t('tasks.empty'))
           : h('div', {
-            style: { display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 240, overflowY: 'auto' },
+            style: { display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 240, overflowY: 'auto', margin: '-2px' },
           },
             rows.map((row, index) => {
               const task = sorted[index]
               const done = row.statusText === 'completed'
               return h('div', {
                 key: task?.id ?? String(index),
-                style: { display: 'flex', flexDirection: 'column', gap: 2, padding: '5px 8px', borderRadius: 8, background: done ? 'transparent' : 'rgba(255,255,255,0.04)', opacity: done ? 0.55 : 1 },
+                style: { display: 'flex', flexDirection: 'column', gap: 2, padding: '5px 8px', borderRadius: 7, background: done ? 'transparent' : 'rgba(255,255,255,0.045)', opacity: done ? 0.5 : 1 },
               },
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
                   h('span', {
@@ -102,30 +110,40 @@ export function TaskBoardCard({
                       onClick: () => {
                         if (task !== undefined) void run(() => api.updateTask(sessionId, completePayload(task)))
                       },
-                      style: { marginLeft: 'auto', flex: '0 0 auto', border: `0.5px solid ${line.subtle}`, borderRadius: 6, padding: '1px 8px', cursor: busy ? 'default' : 'pointer', fontSize: 11, background: 'transparent', color: 'inherit', opacity: busy ? 0.5 : 1 },
+                      style: { marginLeft: 'auto', flex: '0 0 auto', border: 0, borderRadius: 6, padding: '2px 7px', cursor: busy ? 'default' : 'pointer', fontSize: 11, background: 'transparent', color: 'inherit', opacity: 0.55 },
                     }, t('tasks.complete'))
                     : null,
                 ),
-                row.blockedByByText === '' ? null : h('div', { style: { fontSize: 11, opacity: 0.65, paddingLeft: 15 } }, row.blockedByByText),
+                row.blockedByByText === '' ? null : h('div', { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByByText),
               )
             })),
     h('div', { style: { display: 'flex', gap: 6 } },
       h('input', {
         value: draft,
         placeholder: t('tasks.subject'),
+        disabled: busy,
         onChange: (event: { target: { value: string } }) => { setDraft(event.target.value) },
-        style: { flex: 1, fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'inherit' },
+        onKeyDown: (event: { key: string }) => {
+          if (event.key === 'Enter' && draft.trim() !== '' && !busy) {
+            void run(() => api.createTask(sessionId, { subject: draft.trim(), description: '', blockedBy: [], writeScopes: [] }))
+            setDraft('')
+          }
+        },
+        style: { flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '5px 10px', borderRadius: 7, border: '0.5px solid rgba(255,255,255,0.14)', background: 'rgba(0,0,0,0.2)', color: 'inherit', fontSize: 12 },
       }),
       h('button', {
         type: 'button',
         disabled: busy || draft.trim() === '',
         onClick: () => {
-          const subject = draft.trim()
-          if (subject === '') return
-          void run(() => api.createTask(sessionId, { subject, description: '', blockedBy: [], writeScopes: [] }))
+          void run(() => api.createTask(sessionId, { subject: draft.trim(), description: '', blockedBy: [], writeScopes: [] }))
           setDraft('')
         },
-        style: { border: 0, borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 },
+        style: {
+          flex: '0 0 auto', padding: '5px 12px', borderRadius: 7, border: 0, cursor: busy || draft.trim() === '' ? 'default' : 'pointer',
+          fontSize: 12, fontWeight: 510,
+          background: draft.trim() === '' || busy ? 'rgba(255,255,255,0.08)' : 'var(--dsw-alias-state-business-primary, #3b82f6)',
+          color: draft.trim() === '' || busy ? 'rgba(255,255,255,0.5)' : '#fff',
+        },
       }, t('tasks.create')),
     ),
     error === '' ? null : h('div', { style: { fontSize: 11, color: 'rgba(220,120,120,1)' } }, error),

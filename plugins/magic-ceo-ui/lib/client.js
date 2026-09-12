@@ -1281,22 +1281,30 @@ function CeoDecisionDrawer({ members, sendDecision, t }) {
     {
       "data-magic-ceo-decision-drawer": current.callId,
       style: {
-        margin: "0 0 10px",
+        boxSizing: "border-box",
+        width: "calc(100% - var(--dsh-composer-side-clearance) * 2 - var(--dsh-composer-dock-inset) * 2)",
+        maxWidth: "calc(var(--dsh-composer-card-max-width) - var(--dsh-composer-dock-inset) * 2)",
+        margin: "0 auto 10px",
         border: `0.5px solid ${line.subtle}`,
-        borderLeft: `2px solid var(--dsw-alias-state-warning, #d97706)`,
-        borderRadius: 10,
+        borderRadius: 12,
         background: surface.layer2,
+        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.18)",
         overflow: "hidden"
       }
     },
     (0, import_react.createElement)(
       "header",
       {
+        onClick: () => {
+          setExpandedQuestion((value) => !value);
+        },
         style: {
           display: "flex",
           alignItems: "flex-start",
           gap: 8,
-          padding: "10px 12px"
+          padding: "10px 12px",
+          cursor: "pointer",
+          userSelect: "none"
         }
       },
       (0, import_react.createElement)(
@@ -1319,9 +1327,6 @@ function CeoDecisionDrawer({ members, sendDecision, t }) {
           (0, import_react.createElement)("span", { style: { fontSize: 11, color: ink.secondary, lineHeight: "16px" } }, seat)
         ),
         question === "" ? null : (0, import_react.createElement)("div", {
-          onClick: () => {
-            setExpandedQuestion((value) => !value);
-          },
           style: {
             ...wrap,
             margin: "4px 0 0",
@@ -1440,7 +1445,10 @@ function iconButton(label, disabled, onClick, glyph) {
     title: label,
     "aria-label": label,
     disabled,
-    onClick,
+    onClick: (event) => {
+      event.stopPropagation();
+      onClick();
+    },
     style: style2
   }, glyph);
 }
@@ -12083,11 +12091,22 @@ function TaskBoardCard({
   const rows = sorted.map(taskRowOf);
   return (0, import_react7.createElement)(
     "div",
-    { "data-magic-ceo-taskboard": true, style: { display: "flex", flexDirection: "column", gap: 8, padding: "8px 10px" } },
-    state.kind === "loading" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.7 } }, t("tasks.loading")) : state.kind === "unavailable" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, color: "rgba(220,120,120,1)" } }, t("tasks.unavailable")) : state.kind === "empty" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.7 } }, t("tasks.empty")) : (0, import_react7.createElement)(
+    {
+      "data-magic-ceo-taskboard": true,
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        padding: 10,
+        borderRadius: 10,
+        border: "0.5px solid rgba(255,255,255,0.08)",
+        background: "rgba(255,255,255,0.03)"
+      }
+    },
+    state.kind === "loading" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.7, textAlign: "center", padding: "6px 0" } }, t("tasks.loading")) : state.kind === "unavailable" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, color: "rgba(220,120,120,1)", textAlign: "center", padding: "6px 0" } }, t("tasks.unavailable")) : state.kind === "empty" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.6, textAlign: "center", padding: "10px 0" } }, t("tasks.empty")) : (0, import_react7.createElement)(
       "div",
       {
-        style: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflowY: "auto" }
+        style: { display: "flex", flexDirection: "column", gap: 3, maxHeight: 240, overflowY: "auto", margin: "-2px" }
       },
       rows.map((row, index2) => {
         const task = sorted[index2];
@@ -12096,7 +12115,7 @@ function TaskBoardCard({
           "div",
           {
             key: task?.id ?? String(index2),
-            style: { display: "flex", flexDirection: "column", gap: 2, padding: "5px 8px", borderRadius: 8, background: done ? "transparent" : "rgba(255,255,255,0.04)", opacity: done ? 0.55 : 1 }
+            style: { display: "flex", flexDirection: "column", gap: 2, padding: "5px 8px", borderRadius: 7, background: done ? "transparent" : "rgba(255,255,255,0.045)", opacity: done ? 0.5 : 1 }
           },
           (0, import_react7.createElement)(
             "div",
@@ -12114,10 +12133,10 @@ function TaskBoardCard({
               onClick: () => {
                 if (task !== void 0) void run(() => api.updateTask(sessionId, completePayload(task)));
               },
-              style: { marginLeft: "auto", flex: "0 0 auto", border: `0.5px solid ${line.subtle}`, borderRadius: 6, padding: "1px 8px", cursor: busy ? "default" : "pointer", fontSize: 11, background: "transparent", color: "inherit", opacity: busy ? 0.5 : 1 }
+              style: { marginLeft: "auto", flex: "0 0 auto", border: 0, borderRadius: 6, padding: "2px 7px", cursor: busy ? "default" : "pointer", fontSize: 11, background: "transparent", color: "inherit", opacity: 0.55 }
             }, t("tasks.complete")) : null
           ),
-          row.blockedByByText === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.65, paddingLeft: 15 } }, row.blockedByByText)
+          row.blockedByByText === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByByText)
         );
       })
     ),
@@ -12127,21 +12146,36 @@ function TaskBoardCard({
       (0, import_react7.createElement)("input", {
         value: draft,
         placeholder: t("tasks.subject"),
+        disabled: busy,
         onChange: (event) => {
           setDraft(event.target.value);
         },
-        style: { flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "inherit" }
+        onKeyDown: (event) => {
+          if (event.key === "Enter" && draft.trim() !== "" && !busy) {
+            void run(() => api.createTask(sessionId, { subject: draft.trim(), description: "", blockedBy: [], writeScopes: [] }));
+            setDraft("");
+          }
+        },
+        style: { flex: 1, minWidth: 0, boxSizing: "border-box", padding: "5px 10px", borderRadius: 7, border: "0.5px solid rgba(255,255,255,0.14)", background: "rgba(0,0,0,0.2)", color: "inherit", fontSize: 12 }
       }),
       (0, import_react7.createElement)("button", {
         type: "button",
         disabled: busy || draft.trim() === "",
         onClick: () => {
-          const subject = draft.trim();
-          if (subject === "") return;
-          void run(() => api.createTask(sessionId, { subject, description: "", blockedBy: [], writeScopes: [] }));
+          void run(() => api.createTask(sessionId, { subject: draft.trim(), description: "", blockedBy: [], writeScopes: [] }));
           setDraft("");
         },
-        style: { border: 0, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }
+        style: {
+          flex: "0 0 auto",
+          padding: "5px 12px",
+          borderRadius: 7,
+          border: 0,
+          cursor: busy || draft.trim() === "" ? "default" : "pointer",
+          fontSize: 12,
+          fontWeight: 510,
+          background: draft.trim() === "" || busy ? "rgba(255,255,255,0.08)" : "var(--dsw-alias-state-business-primary, #3b82f6)",
+          color: draft.trim() === "" || busy ? "rgba(255,255,255,0.5)" : "#fff"
+        }
       }, t("tasks.create"))
     ),
     error === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, color: "rgba(220,120,120,1)" } }, error)
@@ -14377,7 +14411,14 @@ function registerCeoUi(ctx, components) {
     const reflect = ctx.reflect;
     const remote = reflect?.get("remote", false);
     if (remote?.agentTeams === void 0) {
-      throw new Error("\u4EFB\u52A1\u677F\u901A\u9053\u672A\u5C31\u7EEA\uFF08remote.agentTeams \u672A\u6302\u8F7D\uFF09");
+      const remoteType = typeof remote;
+      const remoteKeys = remote !== null && remote !== void 0 ? Object.keys(remote).join(",") : "n/a";
+      const message = `\u4EFB\u52A1\u677F\u901A\u9053\u672A\u5C31\u7EEA\uFF1Areflect.get('remote')=${remoteType} keys=[${remoteKeys}] agentTeams=${typeof remote?.agentTeams}`;
+      try {
+        window.sessionStorage.setItem("magic-ceo-diag", message);
+      } catch {
+      }
+      throw new Error(message);
     }
     return remote.agentTeams;
   };

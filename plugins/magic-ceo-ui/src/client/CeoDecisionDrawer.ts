@@ -69,23 +69,31 @@ export function CeoDecisionDrawer({ members, sendDecision, t }: CeoDecisionDrawe
     })
   }
 
+  // 宽度对齐 composer 卡片（照抄官方 QueueDock.module.css 的 dock 公式：
+  // side-clearance / dock-inset / composer-card-max-width 同一套变量）。
   return h('aside', {
     'data-magic-ceo-decision-drawer': current.callId,
     style: {
-      margin: '0 0 10px',
+      boxSizing: 'border-box',
+      width: 'calc(100% - var(--dsh-composer-side-clearance) * 2 - var(--dsh-composer-dock-inset) * 2)',
+      maxWidth: 'calc(var(--dsh-composer-card-max-width) - var(--dsh-composer-dock-inset) * 2)',
+      margin: '0 auto 10px',
       border: `0.5px solid ${line.subtle}`,
-      borderLeft: `2px solid var(--dsw-alias-state-warning, #d97706)`,
-      borderRadius: 10,
+      borderRadius: 12,
       background: surface.layer2,
+      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.18)',
       overflow: 'hidden',
     },
   },
     h('header', {
+      onClick: () => { setExpandedQuestion(value => !value) },
       style: {
         display: 'flex',
         alignItems: 'flex-start',
         gap: 8,
         padding: '10px 12px',
+        cursor: 'pointer',
+        userSelect: 'none',
       },
     },
       h('div', { style: { minWidth: 0, flex: 1 } },
@@ -102,7 +110,6 @@ export function CeoDecisionDrawer({ members, sendDecision, t }: CeoDecisionDrawe
         question === ''
           ? null
           : h('div', {
-            onClick: () => { setExpandedQuestion(value => !value) },
             style: {
               ...wrap, margin: '4px 0 0', fontSize: 13, fontWeight: 510, lineHeight: '19px',
               color: ink.primary,
@@ -220,7 +227,11 @@ function iconButton(label: string, disabled: boolean, onClick: () => void, glyph
     title: label,
     'aria-label': label,
     disabled,
-    onClick,
+    onClick: (event: { stopPropagation: () => void }) => {
+      // 头部整行可点（切换问题展开）；图标按钮不冒泡，避免二次触发。
+      event.stopPropagation()
+      onClick()
+    },
     style,
   }, glyph)
 }

@@ -372,7 +372,11 @@ export function registerCeoUi(
     }).reflect
     const remote = reflect?.get('remote', false) as { agentTeams?: TaskBoardApi } | undefined
     if (remote?.agentTeams === undefined) {
-      throw new Error('任务板通道未就绪（remote.agentTeams 未挂载）')
+      const remoteType = typeof remote
+      const remoteKeys = remote !== null && remote !== undefined ? Object.keys(remote as object).join(',') : 'n/a'
+      const message = `任务板通道未就绪：reflect.get('remote')=${remoteType} keys=[${remoteKeys}] agentTeams=${typeof (remote as { agentTeams?: unknown } | undefined)?.agentTeams}`
+      try { window.sessionStorage.setItem('magic-ceo-diag', message) } catch { /* 忽略 */ }
+      throw new Error(message)
     }
     return remote.agentTeams
   }
