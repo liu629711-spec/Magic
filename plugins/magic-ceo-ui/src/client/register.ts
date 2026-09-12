@@ -1,6 +1,8 @@
 import { ceoMemberReportDefinition, ceoTeamDefinition } from './definition.ts'
-import type { TaskBoardApi } from './TaskBoard.ts'
+import type { TaskBoardApi } from './task-board-data.ts'
 import { getTaskBoardSnapshot, reloadTaskBoard, subscribeTaskBoard } from './task-board-store.ts'
+import { getCeoRoster, getSelectedCeoMember } from './selection.ts'
+import { displayCeoSeat } from '../team.ts'
 
 export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.agentTeams']
 
@@ -39,7 +41,7 @@ export const zh = {
   'status.error': '失败',
   'depends.on': '依赖',
   'tool.title': '委派图',
-  'workspace.title': '成员工作区',
+  'workspace.overview': '团队总览',
   'workspace.close': '关闭',
   'workspace.empty': '点选编排图中的成员，在右侧看他正在想、正在搜',
   'attention.title': '需要你处理',
@@ -66,14 +68,6 @@ export const zh = {
   'process.thought.show': '思考',
   'process.thought.hide': '收起思考',
   'workspace.toBottom': '回到底部',
-  'tasks.title': '任务板',
-  'tasks.loading': '任务板加载中…',
-  'tasks.unavailable': '任务板不可用（官方团队服务未就绪）',
-  'tasks.empty': '任务板上还没有任务',
-  'tasks.create': '新建',
-  'tasks.subject': '新任务标题',
-  'tasks.complete': '完成',
-  'tasks.retry': '重试',
   'tasks.status.pending': '待处理',
   'tasks.status.in_progress': '进行中',
   'tasks.status.completed': '已完成',
@@ -197,7 +191,6 @@ export const en = {
   'status.error': 'failed',
   'depends.on': 'depends on',
   'tool.title': 'Delegate graph',
-  'workspace.title': 'Member workspace',
   'workspace.close': 'Close',
   'workspace.empty': 'Select a member on the run graph to watch thinking, tools, and search',
   'attention.title': 'Needs your attention',
@@ -224,14 +217,6 @@ export const en = {
   'process.thought.show': 'Thought',
   'process.thought.hide': 'Hide Thought',
   'workspace.toBottom': 'Back to bottom',
-  'tasks.title': 'Task board',
-  'tasks.loading': 'Loading the task board…',
-  'tasks.unavailable': 'Task board unavailable (Agent Teams service not ready)',
-  'tasks.empty': 'No tasks on the board yet',
-  'tasks.create': 'Create',
-  'tasks.subject': 'New task title',
-  'tasks.complete': 'Done',
-  'tasks.retry': 'Retry',
   'tasks.status.pending': 'pending',
   'tasks.status.in_progress': 'in progress',
   'tasks.status.completed': 'completed',
@@ -403,7 +388,12 @@ export function registerCeoUi(
   ctx.effect(() => ctx.sidebarRightTabs.register({
     id: CEO_MEMBER_TAB_ID,
     kind: CEO_MEMBER_TAB_KIND,
-    title: () => t('workspace.title'),
+    // tab 名跟随当前选中成员（点谁开谁）；未选中时是团队总览。
+    // PRD-04 §12（2026-09-13 裁定）：不再使用泛化的「成员工作区」标题。
+    title: () => {
+      const selected = getSelectedCeoMember()
+      return selected === null ? t('workspace.overview') : displayCeoSeat(selected, getCeoRoster())
+    },
   }), 'magic-ceo-ui: member tab type')
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
@@ -482,9 +472,7 @@ export function registerCeoUi(
     locale: 'magicCeo',
     inject: (sessionId: string) => ({
       sessionId,
-      // 两个面各司其职：句柄供订阅（画布点选任务 → 右坞详情），api 供卡片自加载列表。
-      taskBoard: taskBoardHandle,
-      taskBoardApi,
+      // PRD-04 §12（2026-09-13 裁定）：任务板只在画布呈现，右坞不注入任务板面。
       sendIntervention: (message: string) => { void promptSession(sessionId, message) },
     }),
   }, components.workspace))

@@ -8,9 +8,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react'
-import { ceoAttentionItems, displayCeoSeat, presentCeoMember, type CeoAttentionKind, type CeoTeamMember } from '../team.ts'
-import { TaskBoardCard, TaskBoardDetail, type TaskBoardApi } from './TaskBoard.ts'
-import { getEmptyTaskBoardSnapshot, type TaskBoardSnapshot } from './task-board-store.ts'
+import { ceoAttentionItems, displayCeoSeat, formatTokenCount, presentCeoMember, type CeoAttentionKind, type CeoTeamMember } from '../team.ts'
 import { CeoMemberInspector } from './CeoMemberInspector.ts'
 import { ink, line, surface } from './theme.ts'
 import {
@@ -20,31 +18,12 @@ import {
   subscribeCeoSelection,
 } from './selection.ts'
 
-const noopBoardSubscribe = (): (() => void) => () => {}
-
-/**
- * 任务板状态句柄：订阅 + 重载 + 新建 + 完成。
- * 与 `TaskBoardApi`（RPC 本体）是**两个不同的面**：
- * 画布点选任务 → store 记 selectedTaskId → 右坞据此渲染详情，靠的是这里的 subscribe/getSnapshot。
- */
-export interface CeoWorkspaceTaskBoard {
-  subscribe: (listener: () => void) => () => void
-  getSnapshot: () => TaskBoardSnapshot
-  reload: () => void
-  create: (subject: string) => Promise<void>
-  complete: (taskId: string, revision: number) => Promise<void>
-}
-
 export interface CeoWorkspaceProps {
   sessionId?: string
   /** The right-Sidebar seat's default hook: read tab record and actions (close). */
   useTabInfo: () => { tab: { actions: { close: () => void } } }
   /** Send a per-member intervention (halt/redirect/resume) into the parent chat. */
   sendIntervention?: (message: string) => void
-  /** 任务板状态句柄（订阅/重载/新建/完成）；缺席时任务板降级。 */
-  taskBoard?: CeoWorkspaceTaskBoard
-  /** 官方 remote.agentTeams RPC 本体，供 TaskBoardCard 自加载列表。 */
-  taskBoardApi?: TaskBoardApi
   t: (key: string, params?: Record<string, unknown>) => string
 }
 
@@ -304,11 +283,7 @@ function overview(
   )
 }
 
-export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, taskBoardApi, t }: CeoWorkspaceProps) {
-  const boardState = useSyncExternalStore(taskBoard?.subscribe ?? noopBoardSubscribe, taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot, getEmptyTaskBoardSnapshot)
-  const selectedTask = boardState.selectedTaskId === undefined
-    ? undefined
-    : boardState.tasks.find((task) => task.id === boardState.selectedTaskId)
+export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }: CeoWorkspaceProps) {
   const selected = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember)
   const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster)
   const tabActions = useTabInfo().tab.actions
@@ -380,7 +355,7 @@ export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoar
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
         },
-      }, t('workspace.title')),
+      }, t('workspace.overview')),
       h('button', {
         type: 'button',
         'aria-label': t('workspace.close'),
@@ -442,16 +417,6 @@ export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoar
     },
       h('div', { ref: contentRef },
         selected === null ? overview(roster, t) : inspector,
-        h('div', { style: { marginTop: 16, borderTop: `0.5px solid ${line.subtle}`, paddingTop: 8 } },
-          h('div', { style: { fontSize: 12, fontWeight: 510, marginBottom: 4, color: ink.secondary } }, t('tasks.title')),
-          selectedTask !== undefined
-            ? h(TaskBoardDetail, {
-              key: selectedTask.id,
-              task: selectedTask,
-              t,
-            })
-            : h(TaskBoardCard, { sessionId, api: taskBoardApi, t }),
-        ),
       ),
     ),
     selected !== null && atBottom === false

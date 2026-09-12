@@ -1146,12 +1146,10 @@ const Canvas = memo(function Canvas(props: {
           }
           if (node.type === 'task') {
             const task = (node.data as TaskNodeData).task
-            // 必须传 id：store 的 selectedTaskId 是字符串，CeoWorkspace 用
-            // `tasks.find(t => t.id === selectedTaskId)` 匹配。传对象则永不命中，
-            // 点任务节点只会打开右坞的普通列表、出不来任务详情。
+            // 任务板只在画布呈现（PRD-04 §12 裁定）：点任务节点仅切换选中高亮，
+            // 不再打开右坞工作区（右坞是成员观察面）。
             selectCeoTask(task.id)
             selectCeoMember(null)
-            props.openWorkspace()
             return
           }
           if (node.type === 'ceo') {
