@@ -10820,6 +10820,21 @@ function layoutTaskLaneOnly(tasks) {
     }
   };
 }
+function createRosterMerger() {
+  let cache;
+  return (turnMembers, roster2) => {
+    const cached = cache;
+    if (cached !== void 0 && cached.turn === turnMembers && cached.roster === roster2) {
+      return cached.merged;
+    }
+    const merged = turnMembers.map(
+      (member) => roster2.find((item) => item.callId === member.callId) ?? member
+    );
+    const equivalent = cached !== void 0 && cached.merged.length === merged.length && cached.merged.every((member, index2) => merged[index2] === member);
+    cache = { turn: turnMembers, roster: roster2, merged: equivalent ? cached.merged : merged };
+    return cache.merged;
+  };
+}
 
 // src/client/task-board-data.ts
 function taskMutationFailure(result) {
@@ -12221,9 +12236,8 @@ function CeoTeamGraph(props) {
     props.taskBoard?.reload();
   }, [props.taskBoard]);
   const turnMembers = props.node.data.members;
-  const members = turnMembers.map(
-    (member) => roster2.find((item) => item.callId === member.callId) ?? member
-  );
+  const mergeRoster = (0, import_react5.useMemo)(createRosterMerger, []);
+  const members = mergeRoster(turnMembers, roster2);
   const sinkStatus = ceoTeamSinkStatus(members);
   const live = sinkStatus === "running" || sinkStatus === "queued";
   const [expanded, setExpanded] = (0, import_react5.useState)(true);

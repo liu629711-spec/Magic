@@ -344,3 +344,44 @@ function layoutTaskLaneOnly(tasks: readonly CeoFlowTask[]): CeoFlowLayout {
     },
   }
 }
+
+// ── 成员合并的引用收敛（CeoTeamGraph 每秒 tick 重排的根因）─────────────────
+
+export type RosterMerger = (
+  turnMembers: readonly CeoTeamMember[],
+  roster: readonly CeoTeamMember[],
+) => readonly CeoTeamMember[]
+
+/**
+ * 创建一个「roster 状态并回本 turn 成员序列」的合并器，并做引用收敛：
+ * 输入数组引用变了、但逐位成员对象引用都没变（内容等价）时，返回**上一次的数组引用**。
+ *
+ * 为什么必须收敛：CeoTeamGraph 在 live 期间因 useElapsedSeconds 每秒重渲染，
+ * 若每次都 map 出新数组，Canvas 的 memo 与内部 useMemo 每秒失效 → ReactFlow
+ * 每秒重排整图。逐位引用相等即可视为内容等价——selection/team 的合并函数
+ * 对未发生变化的成员都保留旧对象引用。
+ *
+ * 每个组件实例用 `createRosterMerger()` 持有自己的缓存：多个 ceo-team 节点
+ * （多轮 CEO 输出）并存时互不踢缓存。
+ */
+export function createRosterMerger(): RosterMerger {
+  let cache: {
+    turn: readonly CeoTeamMember[]
+    roster: readonly CeoTeamMember[]
+    merged: readonly CeoTeamMember[]
+  } | undefined
+  return (turnMembers, roster) => {
+    const cached = cache
+    if (cached !== undefined && cached.turn === turnMembers && cached.roster === roster) {
+      return cached.merged
+    }
+    const merged = turnMembers.map(member =>
+      roster.find(item => item.callId === member.callId) ?? member,
+    )
+    const equivalent = cached !== undefined
+      && cached.merged.length === merged.length
+      && cached.merged.every((member, index) => merged[index] === member)
+    cache = { turn: turnMembers, roster, merged: equivalent ? cached.merged : merged }
+    return cache.merged
+  }
+}

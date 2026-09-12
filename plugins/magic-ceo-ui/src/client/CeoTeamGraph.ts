@@ -19,7 +19,7 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import xyflowCss from '@xyflow/react/dist/style.css'
-import { ceoFlowMemberId, ceoTeamSinkStatus, layoutCeoTeamFlow, type CeoFlowEdgeKind, type CeoFlowLane, type CeoFlowTask } from '../flow.ts'
+import { ceoFlowMemberId, ceoTeamSinkStatus, createRosterMerger, layoutCeoTeamFlow, type CeoFlowEdgeKind, type CeoFlowLane, type CeoFlowTask } from '../flow.ts'
 import { parseCeoMemberReport } from '../team.ts'
 import { getEmptyTaskBoardSnapshot, selectCeoTask, type TaskBoardSnapshot } from './task-board-store.ts'
 import { toolDisplayName } from '../processView.ts'
@@ -1220,9 +1220,10 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
   )
   useEffect(() => { props.taskBoard?.reload() }, [props.taskBoard])
   const turnMembers = props.node.data.members
-  const members = turnMembers.map(member =>
-    roster.find(item => item.callId === member.callId) ?? member,
-  )
+  // 合并 roster 实时状态并做引用收敛：live 期间本组件每秒 tick，若无收敛，
+  // 这里每次渲染都产出新 members 数组 → Canvas memo 失效 → ReactFlow 每秒重排整图。
+  const mergeRoster = useMemo(createRosterMerger, [])
+  const members = mergeRoster(turnMembers, roster)
   const sinkStatus = ceoTeamSinkStatus(members)
   const live = sinkStatus === 'running' || sinkStatus === 'queued'
   const [expanded, setExpanded] = useState(true)
