@@ -249,16 +249,16 @@ test('tool boundary rejects non-path-safe ids with an actionable error', async (
   // 中文 run_id 会成为 storage-json 的落盘 key 而被官方拒绝（path-safe 约束），
   // 账本必须在工具边界就给出可读报错，而不是等落盘时抛天书异常。
   await assert.rejects(
-    () => registered['ledger_record_evidence']!.execute({ run_id: 'del_1_计算员' }),
+    () => Promise.resolve(registered['ledger_record_evidence']!.execute({ run_id: 'del_1_计算员' })),
     /path-safe/,
   )
   await assert.rejects(
-    () => registered['ledger_verify']!.execute({
+    () => Promise.resolve(registered['ledger_verify']!.execute({
       run_id: 'del_1_计算员',
       contract: { form: 'prose', required_sections: ['结论'] },
       landed_paths: [],
       verified_citation_ids: [],
-    }),
+    })),
     /path-safe/,
   )
   // ASCII id 正常落盘
