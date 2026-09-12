@@ -4,10 +4,12 @@ import { createElement as h, useEffect, useState, type ReactNode } from 'react'
 import {
   completePayload,
   statusDotColor,
+  taskMutationFailure,
   taskRowOf,
   taskRowsFromResult,
   type TaskBoardApi,
   type TaskBoardState,
+  type TaskMutationEnvelope,
   type TeamTaskDuck,
 } from './task-board-data.ts'
 import { line } from './theme.ts'
@@ -51,14 +53,14 @@ export function TaskBoardCard({
   }
   useEffect(() => { void reload() }, [sessionId, api, busy, attempt])
 
-  const run = async (operation: () => Promise<unknown>): Promise<void> => {
+  // 写操作是双层信封（载波 ok ≠ 业务成功，信封层级见 task-board-data.ts）：
+  // 曾只判外层 ok，内层 TeamTaskMutationResult 拒绝（如 CAS 冲突）被静默吞掉。
+  const run = async (operation: () => Promise<TaskMutationEnvelope | undefined>): Promise<void> => {
     setBusy(true)
     setError('')
     try {
-      const result = await operation() as { ok?: boolean; error?: { message?: string } } | undefined
-      if (result !== undefined && result !== null && result.ok === false) {
-        setError(result.error?.message ?? '操作失败')
-      }
+      const failure = taskMutationFailure(await operation())
+      if (failure !== undefined) setError(failure)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }

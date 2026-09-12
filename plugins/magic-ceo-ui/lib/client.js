@@ -12389,10 +12389,8 @@ function TaskBoardCard({
     setBusy(true);
     setError("");
     try {
-      const result = await operation();
-      if (result !== void 0 && result !== null && result.ok === false) {
-        setError(result.error?.message ?? "\u64CD\u4F5C\u5931\u8D25");
-      }
+      const failure = taskMutationFailure(await operation());
+      if (failure !== void 0) setError(failure);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
