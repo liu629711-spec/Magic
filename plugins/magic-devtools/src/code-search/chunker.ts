@@ -162,11 +162,11 @@ function chunkWithTreeSitter(
 ): RawChunk[] {
   let root
   try {
-    root = parser.parse(content).rootNode
+    root = parser.parse(content)?.rootNode ?? null
   } catch {
     return []
   }
-  if (root.hasError) return []
+  if (root === null || root.hasError) return []
 
   const symbolTypes = SYMBOL_NODE_TYPES[language] ?? []
   const chunks: RawChunk[] = []

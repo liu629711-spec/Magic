@@ -206,7 +206,7 @@ test('applyWorkingDirectory 注入安全目录旗标，已有旗标不动', () =
 
 interface RegisteredTool {
   name: string
-  execute: (args: unknown, exec?: unknown) => Promise<unknown> | unknown
+  execute: (args: unknown, exec?: unknown) => Promise<unknown>
 }
 
 function registerToHarness(): { tools: Map<string, RegisteredTool>; register(t: RegisteredTool): unknown } {

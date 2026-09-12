@@ -111,12 +111,13 @@ test('CEO session prompt states current mode and does not keep the agent default
 
   const textFn = sections[0]?.text
   assert.equal(typeof textFn, 'function')
-  const ceoText = textFn({ agent: { session: { id: 'session-ceo' } } })
+  const callText = textFn as (context?: unknown) => string
+  const ceoText = callText({ agent: { session: { id: 'session-ceo' } } })
   assert.match(ceoText, /Current work mode: CEO/)
   assert.match(ceoText, /already CEO/)
   assert.doesNotMatch(ceoText, /Default to agent mode/)
 
-  const agentText = textFn({ agent: { session: { id: 'session-other' } } })
+  const agentText = callText({ agent: { session: { id: 'session-other' } } })
   assert.match(agentText, /Current work mode: agent/)
   assert.match(agentText, /Default to agent mode/)
 })

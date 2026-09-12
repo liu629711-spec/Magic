@@ -21,7 +21,7 @@
   },
   "scripts": {
     "build": "node --test tests/engineering.test.ts",
-    "typecheck": "node --test tests/engineering.test.ts",
+    "typecheck": "tsc -p .",
     "test": "node --test tests/engineering.test.ts"
   },
   "peerDependencies": {

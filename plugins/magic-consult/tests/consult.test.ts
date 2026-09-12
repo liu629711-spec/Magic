@@ -37,10 +37,10 @@ test('fetchByName：按名取正文；缺失时 undefined', () => {
 test('consult 工具：取文、软缺失列出可选名、缓存复用', async () => {
   resetConsultCacheForTests()
   const registered: Record<string, { execute: (args: unknown, context?: unknown) => unknown }> = {}
-  const sections: Array<{ name: string; text: string | ((context?: unknown) => string) }> = []
+  const sections: Array<{ name: string; text: string | ((context?: { agent?: { session?: { id?: string } } }) => string) }> = []
   const ctx = {
     tools: { register: (tool: { name: string; execute: (args: unknown, context?: unknown) => unknown }) => { registered[tool.name] = tool } },
-    systemPrompt: { section: (section: { name: string; text: string | ((context?: unknown) => string) }) => { sections.push(section) } },
+    systemPrompt: { section: (section: { name: string; text: string | ((context?: { agent?: { session?: { id?: string } } }) => string) }) => { sections.push(section) } },
     magicMemory: data,
     magicWorkMode: { getMode: () => 'ceo' as const },
   }

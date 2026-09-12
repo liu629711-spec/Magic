@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "node scripts/build-client.mjs",
-    "typecheck": "node --test tests/work-mode.test.ts tests/client.test.ts",
+    "typecheck": "tsc -p .",
     "test": "node --test tests/work-mode.test.ts tests/client.test.ts"
   },
   "peerDependencies": {

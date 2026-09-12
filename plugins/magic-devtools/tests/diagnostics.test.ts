@@ -144,7 +144,7 @@ test('formatDiagnosticsBlock：errors 优先、按行排序、cap 12', () => {
 
 interface RegisteredTool {
   name: string
-  execute: (args: unknown, exec?: unknown) => Promise<unknown> | unknown
+  execute: (args: unknown, exec?: unknown) => Promise<unknown>
 }
 
 test('code_diagnostics 工具：缺 cwd / 空 paths / 越界路径都被拒', async () => {

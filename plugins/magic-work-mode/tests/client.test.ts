@@ -171,8 +171,8 @@ test('executeMode forwards a confirm error instead of applying the chip', async 
 test('folds a work-mode-changed notice onto a chat card', () => {
   const data = {
     sessionId: 'session-1',
-    from: 'ceo',
-    to: 'agent',
+    from: 'ceo' as const,
+    to: 'agent' as const,
     summary: 'Survey then build',
     members: [{ role: 'researcher', phase: 'running', task: 'Survey options' }],
   }

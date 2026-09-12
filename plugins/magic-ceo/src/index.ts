@@ -868,8 +868,8 @@ export function apply(ctx: {
    * 用于可选增强：账本未挂载时拿到 undefined，CEO 行为与接入前完全一致。
    */
   get?: (name: string) => unknown
-  /** 插件卸载钩子（契约内核 §3.4）。 */
-  effect?: (disposer: () => void | Promise<void>) => unknown
+  /** 插件卸载钩子（契约内核 §3.4）。Cordis effect(setup)：setup 立即执行，其返回值可为 disposer。 */
+  effect?: (setup: () => void | Promise<void> | (() => void)) => unknown
   on?: (event: string, listener: (...args: unknown[]) => unknown) => unknown
 }) {
   console.log('[magic-ceo] plugin loaded')
@@ -1094,6 +1094,9 @@ export function apply(ctx: {
           ...seeded?.output === undefined ? {} : { output: seeded.output },
         })
       }
+      // spawn/续派两条路结束后 childId 必已赋值；此处缺失属异常，宁可显式失败
+      // 也不能把 undefined 当 memberId 写进镜像与账本。
+      if (childId === undefined) throw new Error('ceo_delegate: member 子会话未启动')
       publish(live)
       attachRunProcessMirror({
         parent: parent.session,

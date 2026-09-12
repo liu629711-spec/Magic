@@ -44,7 +44,8 @@ interface LedgerToolsService {
 interface LedgerContext {
   tools: LedgerToolsService
   storageDomain?: StorageDomainPort
-  effect?: (disposer: () => void | Promise<void>) => void
+  // Cordis effect(setup)：setup 立即执行，其返回值（可为 disposer 函数）由宿主在卸载时调用。
+  effect?: (setup: () => void | Promise<void> | (() => void)) => void
   emit?: (event: string, payload: unknown) => void
   on?: (event: string, listener: (...args: unknown[]) => unknown) => unknown
   /** Cordis 服务注册（Magic 内部跨插件服务，契约内核 §2.1.1）。 */

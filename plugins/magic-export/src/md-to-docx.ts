@@ -482,23 +482,32 @@ function styledRun(text: string, blockCtx: InlineRenderCtx, code = false): TextR
   const bold = (blockCtx.bold ?? 0) > 0 || blockCtx.inHeading === true || blockCtx.boldExtra === true
   const italic = (blockCtx.italic ?? 0) > 0
   const linkUrl = blockCtx.linkUrl !== undefined && isSafeHttpUrl(blockCtx.linkUrl) ? blockCtx.linkUrl : undefined
-  const options: IRunOptions = { text, bold, italic }
+  // docx 的 IRunOptions 属性是只读且斜体键为 italics（曾误写 italic，斜体样式静默失效），
+  // 因此一次性构造完整 options，不做事后属性赋值。
+  let font: IRunOptions['font']
+  let size: number | undefined
+  let color: string | undefined
   if (code) {
-    options.font = { ascii: FONT_CODE, hAnsi: FONT_CODE, eastAsia: FONT_BODY_CJK }
-    options.size = hp(CODE_PT)
-    options.color = '374051'
+    font = { ascii: FONT_CODE, hAnsi: FONT_CODE, eastAsia: FONT_BODY_CJK }
+    size = hp(CODE_PT)
+    color = '374051'
   } else if (blockCtx.inHeading === true) {
-    options.font = { ascii: FONT_LATIN, hAnsi: FONT_LATIN, eastAsia: FONT_HEADING_CJK }
-    options.size = hp(blockCtx.headingPt ?? HEADING_PT[1])
+    font = { ascii: FONT_LATIN, hAnsi: FONT_LATIN, eastAsia: FONT_HEADING_CJK }
+    size = hp(blockCtx.headingPt ?? HEADING_PT[1])
   } else {
-    options.font = { ascii: FONT_LATIN, hAnsi: FONT_LATIN, eastAsia: FONT_BODY_CJK }
-    options.size = hp(BODY_PT)
+    font = { ascii: FONT_LATIN, hAnsi: FONT_LATIN, eastAsia: FONT_BODY_CJK }
+    size = hp(BODY_PT)
   }
-  if (linkUrl !== undefined) {
-    options.color = '0563C1'
-    options.underline = {}
-  }
-  return new TextRun(options)
+  if (linkUrl !== undefined) color = '0563C1'
+  return new TextRun({
+    text,
+    bold,
+    italics: italic,
+    font,
+    size,
+    ...(color !== undefined ? { color } : {}),
+    ...(linkUrl !== undefined ? { underline: {} } : {}),
+  })
 }
 
 function renderInlineChildren(children: Token[], blockCtx: InlineRenderCtx): (TextRun | ImageRun | ExternalHyperlink)[] {

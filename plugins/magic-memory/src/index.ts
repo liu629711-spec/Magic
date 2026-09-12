@@ -66,7 +66,8 @@ interface MagicContext {
   tools: ToolsService
   storageDomain?: { open: (spec: MagicDomainSpec) => Promise<unknown> }
   magicWorkMode?: MagicWorkModeService
-  effect?: (disposer: () => void | Promise<void>) => unknown
+  // Cordis effect(setup)：setup 立即执行，其返回值（可为 disposer 函数）由宿主在卸载时调用。
+  effect?: (setup: () => void | Promise<void> | (() => void)) => unknown
   on?: (event: string, listener: (...args: unknown[]) => unknown) => unknown
   emit?: (event: string, payload: unknown) => void
   provide?: (name: string, value: unknown) => unknown

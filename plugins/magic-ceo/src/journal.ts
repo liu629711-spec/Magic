@@ -522,7 +522,7 @@ export function ceoCheckpointsOf(session: JournalSession | undefined): CeoCheckp
       ...typeof data.runId === 'string' && data.runId.trim() !== '' ? { runId: data.runId.trim() } : {},
       ...typeof data.memberId === 'string' && data.memberId.trim() !== '' ? { memberId: data.memberId.trim() } : {},
       ...typeof data.question === 'string' && data.question.trim() !== '' ? { question: data.question.trim() } : {},
-      ...typeof data.note === 'string' && data.note.trim() !== '' ? { note: data.note.trim() } : {},
+      note: typeof data.note === 'string' && data.note.trim() !== '' ? data.note.trim() : '',
       ...typeof data.resolvedAt === 'number' ? { resolvedAt: data.resolvedAt } : {},
     })
   }

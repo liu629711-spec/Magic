@@ -11,7 +11,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { apply, resetCeoStateForTests } from '../src/index.ts'
-import { createMemoryBacking, createMemoryPort, openCeoStore } from '../src/store/index.ts'
+import { createMemoryBacking, createMemoryPort, openCeoStore, type StorageDomainPort } from '../src/store/index.ts'
 
 const SESSION = 'session-restart'
 
@@ -42,7 +42,7 @@ type ToolDef = {
 
 /** 最小宿主：只需要 storageDomain + tools + systemPrompt + subagents。 */
 function makeHost(
-  storageDomain: { open: (spec: unknown) => Promise<unknown> },
+  storageDomain: StorageDomainPort,
   tools: Map<string, ToolDef>,
 ) {
   return {

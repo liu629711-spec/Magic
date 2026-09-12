@@ -21,7 +21,7 @@
   },
   "scripts": {
     "build": "node --test tests/ceo.test.ts tests/plan.test.ts tests/journal.test.ts tests/process.test.ts tests/store.test.ts tests/ceo-store.test.ts",
-    "typecheck": "node --test tests/ceo.test.ts tests/plan.test.ts tests/journal.test.ts tests/process.test.ts tests/store.test.ts tests/ceo-store.test.ts",
+    "typecheck": "tsc -p .",
     "test": "node --test tests/ceo.test.ts tests/plan.test.ts tests/journal.test.ts tests/process.test.ts tests/store.test.ts tests/ceo-store.test.ts"
   },
   "peerDependencies": {

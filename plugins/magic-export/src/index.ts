@@ -45,7 +45,7 @@ interface ToolsService {
     description: string
     parameters: unknown
     output: { schema: Record<string, unknown>; render: (args: unknown, value: unknown) => Array<{ type: 'text'; text: string }> }
-    execute: (args: unknown, exec?: ToolExec) => Promise<unknown> | unknown
+    execute: (args: unknown, exec?: ToolExec) => Promise<unknown>
   }): unknown
 }
 

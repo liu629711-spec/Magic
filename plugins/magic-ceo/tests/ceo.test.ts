@@ -138,7 +138,7 @@ test('CEO session prompt hard-routes breadth research to ceo_delegate', () => {
   const { sections } = harness('ceo')
   const textFn = sections[0]?.text
   assert.equal(typeof textFn, 'function')
-  const text = textFn({ agent: { session: { id: 'session-1' } } })
+  const text = (textFn as (context?: unknown) => string)({ agent: { session: { id: 'session-1' } } })
   assert.match(text, /in CEO mode now/)
   assert.match(text, /first stream a useful analysis/)
   assert.match(text, /ceo_plan/)
@@ -154,7 +154,7 @@ test('agent session prompt still forbids ceo_delegate', () => {
   const { sections } = harness('agent')
   const textFn = sections[0]?.text
   assert.equal(typeof textFn, 'function')
-  const text = textFn({ agent: { session: { id: 'session-1' } } })
+  const text = (textFn as (context?: unknown) => string)({ agent: { session: { id: 'session-1' } } })
   assert.match(text, /in agent mode/)
   assert.match(text, /Do not call ceo_delegate/)
   assert.doesNotMatch(text, /in CEO mode now/)
@@ -231,8 +231,8 @@ test('starts independent tasks together and records the run graph', async () => 
   release.get('member-1')?.()
   release.get('member-2')?.()
   const result = await pending
-  assert.equal(result.runs.length, 2)
-  assert.equal(result.runs[0]?.phase, 'completed')
+  assert.equal(result.runs!.length, 2)
+  assert.equal(result.runs![0]?.phase, 'completed')
   assert.equal(listCeoMembers('session-1')[0]?.role, 'researcher')
   assert.equal(listCeoMembers('session-1')[0]?.task, 'Survey options')
 })
@@ -295,8 +295,8 @@ test('does not start a dependent task until the producer finishes', async () => 
   assert.match(started[1]?.prompt ?? '', /Upstream results/)
   release.get('member-2')?.()
   const result = await pending
-  assert.equal(result.runs[1]?.phase, 'completed')
-  assert.equal(listCeoMembers('session-1')[1]?.dependsOn[0], result.runs[0]?.runId)
+  assert.equal(result.runs![1]?.phase, 'completed')
+  assert.equal(listCeoMembers('session-1')[1]?.dependsOn[0], result.runs![0]?.runId)
 })
 
 test('appends an ignorable run journal while the graph is in flight', async () => {
@@ -370,8 +370,8 @@ test('restores the latest ceo_plan from session events after in-memory state is 
   release.get('member-1')?.()
   release.get('member-2')?.()
   const result = await pending
-  assert.equal(result.runs.length, 2)
-  assert.equal(result.runs[0]?.phase, 'completed')
+  assert.equal(result.runs!.length, 2)
+  assert.equal(result.runs![0]?.phase, 'completed')
 })
 
 test('treats declared completed plus a non-completed stop as unverified', async () => {
@@ -389,7 +389,7 @@ test('treats declared completed plus a non-completed stop as unverified', async 
   await Promise.resolve()
   release.get('member-1')?.('status: completed\ndone: surveyed two options', 'aborted')
   const result = await pending
-  assert.equal(result.runs[0]?.phase, 'unverified')
+  assert.equal(result.runs![0]?.phase, 'unverified')
   const event = session.events.find(item => item.type === CEO_MEMBER_RESULT)
   assert.equal((event?.data as { status?: string } | undefined)?.status, 'unverified')
 })
@@ -418,7 +418,8 @@ test('restamps in-flight journal nodes as unknown_after_restart after process re
   })
   const textFn = sections[0]?.text
   assert.equal(typeof textFn, 'function')
-  textFn({ agent: { session } })
+  const callText = textFn as (context?: unknown) => string
+  callText({ agent: { session } })
   const journals = session.events.filter(event => event.type === CEO_RUN_JOURNAL)
   const last = journals.at(-1)?.data as { runs: Array<{ phase: string }> }
   assert.equal(last.runs[0]?.phase, 'unknown_after_restart')
@@ -438,7 +439,8 @@ test('does not rewrite a live in-flight journal as unknown', async () => {
   await Promise.resolve()
   const textFn = sections[0]?.text
   assert.equal(typeof textFn, 'function')
-  textFn({ agent: { session } })
+  const callText = textFn as (context?: unknown) => string
+  callText({ agent: { session } })
   const live = session.events.filter(event => event.type === CEO_RUN_JOURNAL).at(-1)?.data as {
     runs: Array<{ phase: string }>
   }
@@ -466,8 +468,8 @@ test('treats unstructured completed output as unverified and skips dependents', 
   release.get('member-1')?.('I looked at a few sites and wrote some notes.')
   const result = await pending
   assert.equal(started.length, 1)
-  assert.equal(result.runs[0]?.phase, 'unverified')
-  assert.equal(result.runs[1]?.phase, 'skipped')
+  assert.equal(result.runs![0]?.phase, 'unverified')
+  assert.equal(result.runs![1]?.phase, 'skipped')
   const event = session.events.find(item => item.type === CEO_MEMBER_RESULT)
   assert.equal((event?.data as { status?: string } | undefined)?.status, 'unverified')
 })
@@ -487,7 +489,7 @@ test('records the final worker output without relying on send_message and blocks
     '{"status":"partial","done":"Drafted a report","risks_or_blockers":"无法联网核验核心数字，仅估计"}',
   )
   const result = await pending
-  assert.equal(result.runs[0]?.phase, 'failed')
+  assert.equal(result.runs![0]?.phase, 'failed')
   const event = session.events.find(item => item.type === CEO_MEMBER_RESULT)
   assert.equal(event?.ignorable, true)
   assert.match(String((event?.data as { output?: string } | undefined)?.output), /无法联网核验/)
@@ -553,8 +555,8 @@ test('yields when a member asks for a user decision and continues the same child
   const yielded = await pending
   assert.equal(started.length, 1)
   assert.equal(yielded.yielded, 'decision')
-  assert.equal(yielded.runs[0]?.phase, 'blocked')
-  assert.equal(yielded.runs[1]?.phase, 'queued')
+  assert.equal(yielded.runs![0]?.phase, 'blocked')
+  assert.equal(yielded.runs![1]?.phase, 'queued')
   assert.equal(listCeoMembers('session-1')[0]?.memberId, 'member-1')
 
   const continued = resume.execute({
@@ -575,9 +577,9 @@ test('yields when a member asks for a user decision and continues the same child
   }
   release.get('member-2')?.()
   const result = await continued
-  assert.equal(result.runs[0]?.phase, 'completed')
-  assert.equal(result.runs[1]?.phase, 'completed')
-  assert.equal(result.runs[0]?.memberId, 'member-1')
+  assert.equal(result.runs![0]?.phase, 'completed')
+  assert.equal(result.runs![1]?.phase, 'completed')
+  assert.equal(result.runs![0]?.memberId, 'member-1')
 })
 
 test('does not yield on an empty 用户决策', async () => {
@@ -599,7 +601,7 @@ test('does not yield on an empty 用户决策', async () => {
   const result = await pending
   assert.equal(started.length, 1)
   assert.equal(result.yielded, undefined)
-  assert.equal(result.runs[0]?.phase, 'completed')
+  assert.equal(result.runs![0]?.phase, 'completed')
 })
 
 test('yields a bind_after_deps node until ceo_replan binds it', async () => {
@@ -624,7 +626,7 @@ test('yields a bind_after_deps node until ceo_replan binds it', async () => {
   const yielded = await pending
   assert.equal(started.length, 1)
   assert.equal(yielded.yielded, 'bind')
-  assert.equal(yielded.runs[1]?.phase, 'queued')
+  assert.equal(yielded.runs![1]?.phase, 'queued')
 
   const bound = resume.execute({
     binds: [{ run_id: 'synth', task: 'Synthesize the surveyed options' }],
@@ -640,7 +642,7 @@ test('yields a bind_after_deps node until ceo_replan binds it', async () => {
   assert.match(started[1]?.prompt ?? '', /Synthesize the surveyed options/)
   release.get('member-2')?.()
   const result = await bound
-  assert.equal(result.runs[1]?.phase, 'completed')
+  assert.equal(result.runs![1]?.phase, 'completed')
 })
 
 test('ceo_replan add can depend on an existing graph node', async () => {
@@ -660,8 +662,8 @@ test('ceo_replan add can depend on an existing graph node', async () => {
   await Promise.resolve()
   release.get('member-1')?.()
   const first = await pending
-  assert.equal(first.runs.length, 1)
-  assert.equal(first.runs[0]?.phase, 'completed')
+  assert.equal(first.runs!.length, 1)
+  assert.equal(first.runs![0]?.phase, 'completed')
 
   const added = resume.execute({
     add: [{ role: 'implementer', task: 'Build it', id: 'build', depends_on: ['survey'] }],
@@ -678,9 +680,9 @@ test('ceo_replan add can depend on an existing graph node', async () => {
   assert.match(started[1]?.prompt ?? '', /Upstream results/)
   release.get('member-2')?.()
   const result = await added
-  assert.equal(result.runs.length, 2)
-  assert.equal(result.runs[1]?.phase, 'completed')
-  assert.equal(listCeoMembers('session-1')[1]?.dependsOn[0], first.runs[0]?.runId)
+  assert.equal(result.runs!.length, 2)
+  assert.equal(result.runs![1]?.phase, 'completed')
+  assert.equal(listCeoMembers('session-1')[1]?.dependsOn[0], first.runs![0]?.runId)
 })
 
 test('restored graph carries member output into the next worker', async () => {
@@ -756,7 +758,8 @@ test('keeps queued journal nodes after restart so they can be redispatched', () 
   })
   const textFn = sections[0]?.text
   assert.equal(typeof textFn, 'function')
-  textFn({ agent: { session } })
+  const callText = textFn as (context?: unknown) => string
+  callText({ agent: { session } })
   const last = session.events.filter(event => event.type === CEO_RUN_JOURNAL).at(-1)?.data as {
     runs: Array<{ rawId: string; phase: string }>
   }
@@ -816,10 +819,10 @@ test('official roster spawn is preferred and its member id becomes the child id'
     emitChild(id, { type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } })
   }
   const result = await pending
-  assert.equal(result.runs.length, 2)
+  assert.equal(result.runs!.length, 2)
   // 同一波次完成顺序不定，断言集合而非顺序
-  assert.deepEqual(result.runs.map(run => run.memberId).sort(), ['official-1', 'official-2'])
-  for (const run of result.runs) assert.equal(run.phase, 'completed')
+  assert.deepEqual(result.runs!.map(run => run.memberId).sort(), ['official-1', 'official-2'])
+  for (const run of result.runs!) assert.equal(run.phase, 'completed')
 })
 
 test('official spawn failure falls back to subagents and the graph still completes', async () => {
@@ -850,6 +853,6 @@ test('official spawn failure falls back to subagents and the graph still complet
   assert.equal(started.length, 1)
   release.get('member-1')?.()
   const result = await pending
-  assert.equal(result.runs.length, 1)
-  assert.equal(result.runs[0]?.phase, 'completed')
+  assert.equal(result.runs!.length, 1)
+  assert.equal(result.runs![0]?.phase, 'completed')
 })

@@ -100,8 +100,9 @@ export function apply(ctx: ConsultContext): Promise<void> {
       required: ['name'],
     },
     output: { schema: { type: 'string' }, render: textRender },
-    execute(args: unknown, context?: { agent?: { session?: { id?: string } } }) {
-      const sessionId = typeof context?.agent?.session?.id === 'string' ? context.agent.session.id : undefined
+    execute(args: unknown, context?: unknown) {
+      const session = context as { agent?: { session?: { id?: string } } } | undefined
+      const sessionId = typeof session?.agent?.session?.id === 'string' ? session.agent.session.id : undefined
       const catalog = catalogFor(sessionId)
       const raw = typeof (args as { name?: unknown })?.name === 'string' ? String((args as { name?: unknown }).name).trim() : ''
 

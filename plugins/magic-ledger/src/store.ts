@@ -126,7 +126,7 @@ interface DomainState {
   closed: boolean
 }
 
-class MemoryTable<T> implements MagicTableLike<T> {
+class MemoryTable<T> implements MagicTable<T> {
   private readonly records: Map<string, T>
   private readonly state: DomainState
   /** 单条写链：mirror DSH 的 per-domain write chain（storage-domain/src/domain.ts:148-153）。 */
@@ -194,7 +194,7 @@ class MemoryTable<T> implements MagicTableLike<T> {
   }
 }
 
-class MemoryDomainImpl implements MagicDomainLike {
+class MemoryDomainImpl implements MagicDomain {
   readonly name: string
   private readonly tables = new Map<string, MemoryTable<unknown>>()
   private readonly state: DomainState = { closed: false }

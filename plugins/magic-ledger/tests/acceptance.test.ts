@@ -179,13 +179,13 @@ test('apply() opens the domain, registers tools, and verifies end-to-end via mem
   assert.equal(name, 'magic-ledger')
   assert.deepEqual(inject, ['tools', 'storageDomain'])
 
-  const registered: Record<string, { execute: (args: unknown) => Promise<unknown> }> = {}
+  const registered: Record<string, { execute: (args: unknown) => unknown }> = {}
   const emitted: Array<{ event: string; payload: unknown }> = []
   const port = createMemoryPort()
 
   const ctx = {
     tools: {
-      register: (tool: { name: string; execute: (args: unknown) => Promise<unknown> }) => {
+      register: (tool: { name: string; execute: (args: unknown) => unknown }) => {
         registered[tool.name] = tool
       },
     },
@@ -233,10 +233,10 @@ test('apply() opens the domain, registers tools, and verifies end-to-end via mem
 })
 
 test('tool boundary rejects non-path-safe ids with an actionable error', async () => {
-  const registered: Record<string, { execute: (args: unknown) => Promise<unknown> }> = {}
+  const registered: Record<string, { execute: (args: unknown) => unknown }> = {}
   const ctx = {
     tools: {
-      register: (tool: { name: string; execute: (args: unknown) => Promise<unknown> }) => {
+      register: (tool: { name: string; execute: (args: unknown) => unknown }) => {
         registered[tool.name] = tool
       },
     },

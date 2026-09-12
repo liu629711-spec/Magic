@@ -12,7 +12,7 @@ interface RegisteredTool {
   description: string
   parameters: unknown
   output: { schema: Record<string, unknown>; render: (args: unknown, value: unknown) => Array<{ type: 'text'; text: string }> }
-  execute: (args: unknown, exec?: unknown) => Promise<unknown> | unknown
+  execute: (args: unknown, exec?: unknown) => Promise<unknown>
 }
 
 function tempWorkspace(): string {
