@@ -25,6 +25,8 @@
 | [DSH 契约面与 AgentCore 能力映射](02-实现/01-DSH契约面与AgentCore能力映射.md) | 能用哪些 DSH 接口、AgentCore 能力怎么迁 |
 | [V1 并行开发计划](02-实现/02-V1并行开发计划.md) | 任务怎么拆过、哪些已完成、还剩什么 |
 | [插件契约内核](02-实现/03-插件契约内核.md) | 插件怎么写：ctx 契约、存储端口、跨插件服务 |
+| [开发者工具集复刻规格](02-实现/06-开发者工具集复刻规格.md) | devtools 六工具的蓝本行为与复刻分期 |
+| [体验对标调研](02-实现/07-体验对标调研.md) | 10 维度 × 成熟产品体验对标 + 差距路线（P0/P1/P2） |
 | [官方 Agent Teams 集成方案](02-实现/04-官方agent-team集成方案.md) | 形态 A'、为什么不挂官方工具、挂载方式 |
 | [CEO 派活改道映射](02-实现/05-CEO派活改道映射.md) | 派活改道的逐动作映射、硬缺口、动工门禁 |
 
@@ -56,7 +58,10 @@
 | `plugins/magic-ledger` | 交付契约、物证、验收 | `ledger_*` |
 | `plugins/magic-memory` | 记忆（作用域隔离） | `magic_memory_*` |
 | `plugins/magic-ceo` | CEO 编排；半改道：官方名册优先 + subagents 降级回退 | `ceo_plan` / `ceo_delegate` / `ceo_replan` |
-| `plugins/magic-ceo-ui` | CEO 团队图 + 成员工作区（官方右侧栏） | 会话内画布；点成员在右侧栏看工作区 |
+| `plugins/magic-ceo-ui` | CEO 团队图 + 成员工作区（官方右侧栏）+ 任务板 | 会话内画布；点成员在右侧栏看工作区与任务板 |
+| `plugins/magic-consult` | 统一按需检索（记忆主题 + 按需规则，「按需目录」+ consult 工具） | 系统提示词「按需目录」；`consult` 工具 |
+| `plugins/magic-devtools` | 开发者工具集（归档打包/解包、白名单 git_ops；二期含 package_install/code_search/code_diagnostics） | 成员与 CEO 的执行工具 |
+| `plugins/magic-export` | 交付物导出（md → docx/pdf） | 成员与 CEO 的执行工具 |
 
 **有意不挂**
 

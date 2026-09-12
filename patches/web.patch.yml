@@ -79,6 +79,33 @@
       name: ../reference-project/deepseek-harness/packages/experimental/client-ui-agent-team/lib/index.js
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ── 会话历史检索（第一梯队 #4：启用 DSH 原生能力，不新建插件）───────────────
+#
+# AgentCore 的 search_conversations / read_conversation 在 DSH 有原生对应物：
+# packages/session-query/tool-session-query 的五个模型可见工具
+# （session_search / session_event_search / session_trace /
+# session_event_trace / session_event_read），workspace 授权范围内检索。
+#
+# base profile 把 session-query-sqlite 挂成 :memory: + openAt: never——全文检索
+# 默认关闭（base/cordis.patch.yml:121-133 注释明示 opt-in，并用后续 patch 层
+# 覆盖 openAt + 持久 path 启用）。这里照该指引做两件事：
+#
+# 1) id 定向覆盖 session-query-sqlite 配置：索引落到 DSH home 下的持久文件，
+#    首次搜索时才打开（Node 22 启动保持安静）；
+# 2) 路径挂载 tool-session-query（它不在 web bundle 依赖闭包内，按 experimental
+#    同款机制；inject 的 sessionQuery / sessionProjections 由 base profile 的
+#    session-query-sqlite / session-projection 提供，:129/:138 已挂）。
+
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-query.sqlite')
+    openAt: first-search
+
+- insert:
+    - id: tool-session-query
+      name: ../reference-project/deepseek-harness/packages/session-query/tool-session-query/src/index.ts
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ── Magic 产品插件层 ────────────────────────────────────────────────────────
 # 顺序说明：ledger / memory 先于 ceo 加载，让「服务」在 CEO 用到之前就已就绪。
 # 但 CEO 侧用运行时 `ctx.get(...)` 读取，因此该顺序只是习惯，不是正确性前提。
@@ -90,6 +117,12 @@
       name: ../plugins/magic-ledger/src/index.ts
     - id: magic-memory
       name: ../plugins/magic-memory/src/index.ts
+    - id: magic-consult
+      name: ../plugins/magic-consult/src/index.ts
+    - id: magic-devtools
+      name: ../plugins/magic-devtools/src/index.ts
+    - id: magic-export
+      name: ../plugins/magic-export/src/index.ts
     - id: magic-ceo
       name: ../plugins/magic-ceo/src/index.ts
     - id: magic-ceo-ui

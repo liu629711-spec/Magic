@@ -2,7 +2,13 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { CEO_MEMBER_TAB_ID, CEO_MEMBER_TAB_KIND, inject, registerCeoUi, zh } from '../src/client/register.ts'
 
-test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar member workspace', () => {
+const fakeTaskBoard = {
+  view: async () => ({ ok: true as const, data: { tasks: [] } }),
+  createTask: async () => ({ ok: true as const, data: {} }),
+  updateTask: async () => ({ ok: true as const, data: {} }),
+}
+
+test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar member workspace', async () => {
   const sections: string[] = []
   const slots: Array<{ name: string; key?: string; priority?: number; spec: Record<string, unknown> }> = []
   const definitions: Array<{ kind?: string; target?: string }> = []
@@ -79,6 +85,7 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
         openedTabs.push(kind)
       },
     },
+    reflect: { get: (name: string) => (name === 'remote' ? { agentTeams: fakeTaskBoard } : undefined) },
     slots: {
       inject: (_name, factory) => factory(),
       register: (spec) => {
@@ -113,7 +120,13 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
 
   // The workspace body gets its session id and intervention sender from the seat.
   const workspaceSpec = slots[3]!.spec as { inject: (sessionId: string) => Record<string, unknown> }
-  const workspaceInject = workspaceSpec.inject('session-1')
+  const workspaceInject = workspaceSpec.inject('session-1') as Record<string, unknown>
   assert.equal(workspaceInject.sessionId, 'session-1')
   assert.equal(typeof workspaceInject.sendIntervention, 'function')
+  // 任务板通道随座位注入：惰性读 remote 的包装，调用穿透到 fake
+  assert.notEqual(workspaceInject.taskBoard, undefined)
+  // view 返回穿透 fake 的 Promise（reflect 桩提供 remote，不会拒绝）
+  const viewPromise = (workspaceInject.taskBoard as typeof fakeTaskBoard).view('session-1')
+  assert.equal(viewPromise instanceof Promise, true)
+  assert.deepEqual(await viewPromise, { ok: true, data: { tasks: [] } })
 })

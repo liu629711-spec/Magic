@@ -39,6 +39,7 @@ export function CeoDecisionDrawer({ members, sendDecision, t }: CeoDecisionDrawe
   const pending = pendingDecisions(members)
   const [index, setIndex] = useState(0)
   const [minimized, setMinimized] = useState(false)
+  const [expandedQuestion, setExpandedQuestion] = useState(false)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | undefined>(undefined)
@@ -72,8 +73,9 @@ export function CeoDecisionDrawer({ members, sendDecision, t }: CeoDecisionDrawe
     'data-magic-ceo-decision-drawer': current.callId,
     style: {
       margin: '0 0 10px',
-      border: `1px solid ${line.subtle}`,
-      borderRadius: 12,
+      border: `0.5px solid ${line.subtle}`,
+      borderLeft: `2px solid var(--dsw-alias-state-warning, #d97706)`,
+      borderRadius: 10,
       background: surface.layer2,
       overflow: 'hidden',
     },
@@ -87,19 +89,29 @@ export function CeoDecisionDrawer({ members, sendDecision, t }: CeoDecisionDrawe
       },
     },
       h('div', { style: { minWidth: 0, flex: 1 } },
-        h('div', {
-          style: { fontSize: 11, fontWeight: 510, color: ink.warn, lineHeight: '16px' },
-        }, t('drawer.caption')),
-        h('h2', {
-          style: {
-            ...wrap,
-            margin: '4px 0 0',
-            fontSize: 14,
-            fontWeight: 600,
-            lineHeight: '20px',
-            color: ink.primary,
-          },
-        }, question === '' ? t('drawer.fallbackQuestion', { seat }) : question),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+          h('span', {
+            style: {
+              fontSize: 11, fontWeight: 510, color: ink.warn, lineHeight: '16px',
+              padding: '0 6px', borderRadius: 5,
+              background: 'color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 12%, transparent)',
+            },
+          }, t('drawer.caption')),
+          h('span', { style: { fontSize: 11, color: ink.secondary, lineHeight: '16px' } }, seat),
+        ),
+        question === ''
+          ? null
+          : h('div', {
+            onClick: () => { setExpandedQuestion(value => !value) },
+            style: {
+              ...wrap, margin: '4px 0 0', fontSize: 13, fontWeight: 510, lineHeight: '19px',
+              color: ink.primary,
+              cursor: 'pointer',
+              display: expandedQuestion ? undefined : '-webkit-box',
+              overflow: 'hidden',
+              ...expandedQuestion ? {} : { WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
+            },
+          }, question),
       ),
       h('div', { style: { display: 'flex', gap: 2, flex: '0 0 auto' } },
         pending.length > 1
@@ -131,52 +143,46 @@ export function CeoDecisionDrawer({ members, sendDecision, t }: CeoDecisionDrawe
     ),
     minimized
       ? null
-      : h('div', { style: { padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 } },
-        h('div', {
-          style: { fontSize: 12, lineHeight: '18px', color: ink.tertiary },
-        }, t('drawer.context', { seat })),
-        current.task.trim() === ''
+      : h('div', { style: { padding: '0 12px 10px', display: 'flex', flexDirection: 'column', gap: 8 } },
+        expandedQuestion && current.task.trim() === ''
           ? null
           : h('div', {
             style: {
               ...wrap,
               fontSize: 12,
               lineHeight: '18px',
-              color: ink.secondary,
-              display: '-webkit-box',
+              color: ink.tertiary,
+              display: expandedQuestion ? undefined : '-webkit-box',
               overflow: 'hidden',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
+              ...expandedQuestion ? {} : { WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' },
             },
-          }, current.task),
-        h('textarea', {
-          value: draft,
-          rows: 3,
-          placeholder: t('drawer.placeholder'),
-          disabled: sending,
-          onChange: (event: { target: { value: string } }) => { setDraft(event.target.value) },
-          style: {
-            width: '100%',
-            resize: 'vertical',
-            boxSizing: 'border-box',
-            padding: '8px 10px',
-            borderRadius: 8,
-            border: `0.5px solid ${line.subtle}`,
-            background: surface.layer3,
-            color: ink.primary,
-            fontSize: 13,
-            lineHeight: '20px',
-          },
-        }),
-        sendError !== undefined
-          ? h('div', { style: { fontSize: 12, color: ink.danger } }, sendError)
-          : null,
-        h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
+          }, current.task.trim() === '' ? t('drawer.context', { seat }) : current.task),
+        h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
+          h('input', {
+            value: draft,
+            placeholder: t('drawer.placeholder'),
+            disabled: sending,
+            onChange: (event: { target: { value: string } }) => { setDraft(event.target.value) },
+            onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') submit() },
+            style: {
+              flex: 1,
+              minWidth: 0,
+              boxSizing: 'border-box',
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: `0.5px solid ${line.subtle}`,
+              background: surface.layer3,
+              color: ink.primary,
+              fontSize: 13,
+              lineHeight: '20px',
+            },
+          }),
           h('button', {
             type: 'button',
             disabled: !canSend,
             onClick: submit,
             style: {
+              flex: '0 0 auto',
               padding: '6px 12px',
               borderRadius: 8,
               border: 0,
@@ -190,6 +196,9 @@ export function CeoDecisionDrawer({ members, sendDecision, t }: CeoDecisionDrawe
             },
           }, sending ? t('decision.sending') : t('decision.send')),
         ),
+        sendError !== undefined
+          ? h('div', { style: { fontSize: 12, color: ink.danger } }, sendError)
+          : null,
       ),
   )
 }

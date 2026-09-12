@@ -14,6 +14,7 @@ import {
 } from './store.ts'
 import { MemoryStore } from './memory.ts'
 import { renderMemorySection, toSearchResult } from './inject.ts'
+import { consolidateTopic, listTopicNotes, maintain } from './topics.ts'
 import type { MemoryAudience, MemoryLayer, MemoryRecord } from './record.ts'
 
 export const name = 'magic-memory'
@@ -68,6 +69,7 @@ interface MagicContext {
   effect?: (disposer: () => void | Promise<void>) => unknown
   on?: (event: string, listener: (...args: unknown[]) => unknown) => unknown
   emit?: (event: string, payload: unknown) => void
+  provide?: (name: string, value: unknown) => unknown
 }
 
 /** 当前会话的受众：CEO 模式看到全部，其余只看到 member 可见记忆。 */
@@ -95,6 +97,22 @@ export function apply(ctx: MagicContext): Promise<void> {
           : undefined
         const audience = audienceOf(ctx, sessionId)
         return renderMemorySection(store.list(audience), { audience }).text
+      },
+    })
+
+    // 常驻规则注入（对齐 AgentCore rules_injection）：rule 层且带 `always` 标签的
+    // 记录无条件进入系统提示词——这是「硬规则」；不带 always 的规则走 consult 按需目录。
+    ctx.systemPrompt.section({
+      name: 'magic-memory-rules',
+      order: 210,
+      text: (context?: PromptAssembleContext) => {
+        const sessionId = typeof context?.agent?.session?.id === 'string'
+          ? context.agent.session.id
+          : undefined
+        const audience = audienceOf(ctx, sessionId)
+        const rules = store.search({ audience, layer: 'rule', tags: ['always'] })
+        if (rules.length === 0) return ''
+        return ['<必须遵守的规则>', ...rules.map((rule) => `- ${rule.content}`), '</必须遵守的规则>'].join('\n')
       },
     })
 
@@ -184,6 +202,68 @@ export function apply(ctx: MagicContext): Promise<void> {
         const record = await store.add({ layer, audience, content, ...tags ? { tags } : {}, ...source ? { source } : {} })
         ctx.emit?.('magic:memory:recorded', record)
         return record
+      },
+    })
+
+    // 巩固工具：把同一主题下的零散记录合并为主题笔记（consult 目录的记忆主题来源）。
+    ctx.tools.register({
+      name: 'memory_consolidate',
+      description:
+        'Consolidate scattered episodic/semantic records tagged `topic:<name>` into one semantic '
+        + 'topic note (idempotent; sources are kept and tagged `consolidated`). Topic notes are '
+        + 'what the consult directory lists as memory topics.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          audience: { type: 'string', enum: ['ceo', 'member'] },
+          topic: { type: 'string', description: 'Topic name (without the `topic:` prefix).' },
+        },
+        required: ['audience', 'topic'],
+      },
+      output: { schema: { type: 'object', properties: {} }, render: textRender },
+      async execute(args: unknown) {
+        const raw = (args ?? {}) as Record<string, unknown>
+        const audience = raw.audience === 'ceo' ? 'ceo' : 'member'
+        const topic = typeof raw.topic === 'string' ? raw.topic.trim() : ''
+        const result = await consolidateTopic(store, audience, topic)
+        ctx.emit?.('magic:memory:consolidated', { topic, noteId: result.note.id, sources: result.sourceIds.length })
+        return { topic: result.topic, noteId: result.note.id, merged: result.sourceIds.length, updated: result.updated }
+      },
+    })
+
+    // 维护工具：清理过期争议记录 + 分层/受众统计。
+    ctx.tools.register({
+      name: 'memory_maintain',
+      description:
+        'Memory housekeeping: purge disputed records older than maxAgeDays (default 30) and '
+        + 'return counts by layer and audience.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          audience: { type: 'string', enum: ['ceo', 'member'] },
+          maxAgeDays: { type: 'number', description: 'Default 30.' },
+        },
+        required: ['audience'],
+      },
+      output: { schema: { type: 'object', properties: {} }, render: textRender },
+      async execute(args: unknown) {
+        const raw = (args ?? {}) as Record<string, unknown>
+        const audience = raw.audience === 'ceo' ? 'ceo' : 'member'
+        const maxAgeDays = typeof raw.maxAgeDays === 'number' && raw.maxAgeDays > 0 ? raw.maxAgeDays : 30
+        return await maintain(store, audience, maxAgeDays)
+      },
+    })
+
+    // 服务面：magic-consult（目录 + 按名取文的数据源）从这里读。
+    ctx.provide?.('magicMemory', {
+      store,
+      audienceOf: () => audienceOf(ctx, undefined),
+      topics: (audience: MemoryAudience) => listTopicNotes(store, audience),
+      rules: (audience: MemoryAudience, onDemandOnly: boolean) => {
+        const rules = store.search({ audience, layer: 'rule' })
+        return onDemandOnly ? rules.filter((rule) => !rule.tags.includes('always')) : rules
       },
     })
 

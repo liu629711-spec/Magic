@@ -116,13 +116,19 @@ AgentCore 是自带执行引擎的完整独立产品，**不是 Magic 的生产�
 
 | 能力域 | AgentCore 源码证据 | DSH 承载机制 | Magic 落点 | 现状（0.1.5 对齐后） |
 |---|---|---|---|---|
-| 编排与调度 | `runtime/delegate/`、`runtime/coordination/`、`runtime/runs/` | `ctx.subagents`；可选 `ctx.agentTeams` | `plugins/magic-ceo`（`wave.ts` / `index.ts`） | 已有波次调度；派活未改道官方 |
+| 编排与调度 | `runtime/delegate/`、`runtime/coordination/`、`runtime/runs/` | `ctx.subagents`；`ctx.agentTeams` | `plugins/magic-ceo`（`wave.ts` / `index.ts`） | 已有波次调度；**半改道已实施（2026-09-11，官方名册优先+降级回退）** |
 | 交付契约与验收账本 | `tools/builtin/delegate/schema.py`、`runtime/evidence_ledger.py`、`runtime/runs/file_acceptance.py` | `ctx.tools` + `ctx.storageDomain` | `plugins/magic-ledger` | **已挂载**；CEO 用 `ctx.get('magicLedger')` |
 | 状态持久化 | `runtime/journal/`、`runtime/leases/` | `ctx.storageDomain` | `magic-ceo` 的 `store/` | **已接线** `magic_ceo` 域 |
-| 记忆 | `memory/` | `ctx.systemPrompt.section` + 工具 + storage | `plugins/magic-memory` | **已挂载**（首切片） |
-| 统一检索（consult） | `tools/builtin/consult.py` | skill 注册 + `inject()` | `magic-consult` | **未建** |
+| 记忆 | `memory/`（28 模块） | `ctx.systemPrompt.section` + 工具 + storage | `plugins/magic-memory` | 深化已落：主题巩固（consolidate）、作用域链（scope_chain）、常驻规则注入（rules_injection）、维护清扫（maintenance）；仍后置：episodic/semantic 双库分离、followups/explore_profile |
+| 统一检索（consult） | `tools/builtin/consult.py`（三合一；memory/rule/skill 分片已废弃） | systemPrompt 按需目录 + 工具 | `plugins/magic-consult`（目录源：记忆主题 + 按需规则；技能 DSH 常驻不重复） | **已建**（2026-09-11，4 测试） |
+| 会话历史检索 | `tools/builtin/search_conversations.py`、`read_conversation.py` | **DSH 原生** `tool-session-query` 五工具（session_search / session_event_search / session_trace / session_event_trace / session_event_read） | patch 启用（`patches/web.patch.yml`：sqlite 持久索引 + first-search + 路径挂载工具包） | **已启用并真机验证（2026-09-11）** |
+| 交付物导出 | `tools/builtin/md_to_docx.py`、`md_to_pdf.py`、`docs_export/layout.py` | `plugins/magic-export`（`md_to_docx` / `md_to_pdf` 工具，样式/manifest 逐项对齐蓝本；PDF CJK 字形缺字体分支按蓝本降级） | **已建**（2026-09-11，16 测试） |
+| 成员开发工具集 | `git_ops/`（2857 行）、`archive_create/extract`、`package_install`、`code_search`+`workspace/indexing`、`code_diagnostics` | `plugins/magic-devtools`：`archive_create` / `archive_extract` / `git_ops`（白名单+硬禁+保护分支） / `package_install`（registry 钉源+参数黑名单）/ `code_search`（web-tree-sitter 符号抽取 + BM25）/ `code_diagnostics`（tsc 路线，DSH LSP 无诊断口） | **已建**（2026-09-11，50 测试；规格见 06 文档） |
+| 任务板产品化 | 官方任务板（agent-team/src/index.ts Remote + client-ui-agent-team TeamAction） | `remote.agentTeams`（ui-agent-team 挂载；客户端经 reflect 免注入读取） | magic-ceo-ui 工作区「任务板」区块（列表/新建/CAS 完成） | **已建**（2026-09-11） |
 
-### 4.3 后续（不在当前产品范围）
+### 4.3 后续（2026-09-11 用户裁定为二期：首版第一梯队验收通过后启动）
+
+> 第一梯队（V1 达标）：统一检索、记忆深化、任务板产品化、会话历史检索（已启用）、交付物导出、成员开发工具集。
 
 | 能力域 | 备注 |
 |---|---|

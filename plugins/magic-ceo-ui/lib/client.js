@@ -57,7 +57,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
             "The result of getSnapshot should be cached to avoid an infinite loop"
           ), didWarnUncachedGetSnapshot = true);
         }
-        cachedValue = useState7({
+        cachedValue = useState8({
           inst: { value, getSnapshot }
         });
         var inst = cachedValue[0].inst, forceUpdate = cachedValue[1];
@@ -69,7 +69,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
           },
           [subscribe, value, getSnapshot]
         );
-        useEffect5(
+        useEffect6(
           function() {
             checkIfSnapshotChanged(inst) && forceUpdate({ inst });
             return subscribe(function() {
@@ -95,7 +95,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
         return getSnapshot();
       }
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var React = require("react"), objectIs = "function" === typeof Object.is ? Object.is : is, useState7 = React.useState, useEffect5 = React.useEffect, useLayoutEffect4 = React.useLayoutEffect, useDebugValue2 = React.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
+      var React = require("react"), objectIs = "function" === typeof Object.is ? Object.is : is, useState8 = React.useState, useEffect6 = React.useEffect, useLayoutEffect4 = React.useLayoutEffect, useDebugValue2 = React.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
       exports.useSyncExternalStore = void 0 !== React.useSyncExternalStore ? React.useSyncExternalStore : shim;
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
     })();
@@ -123,7 +123,7 @@ var require_with_selector_development = __commonJS({
         return x === y && (0 !== x || 1 / x === 1 / y) || x !== x && y !== y;
       }
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var React = require("react"), shim = require_shim(), objectIs = "function" === typeof Object.is ? Object.is : is, useSyncExternalStore4 = shim.useSyncExternalStore, useRef6 = React.useRef, useEffect5 = React.useEffect, useMemo3 = React.useMemo, useDebugValue2 = React.useDebugValue;
+      var React = require("react"), shim = require_shim(), objectIs = "function" === typeof Object.is ? Object.is : is, useSyncExternalStore4 = shim.useSyncExternalStore, useRef6 = React.useRef, useEffect6 = React.useEffect, useMemo3 = React.useMemo, useDebugValue2 = React.useDebugValue;
       exports.useSyncExternalStoreWithSelector = function(subscribe, getSnapshot, getServerSnapshot, selector, isEqual) {
         var instRef = useRef6(null);
         if (null === instRef.current) {
@@ -166,7 +166,7 @@ var require_with_selector_development = __commonJS({
           [getSnapshot, getServerSnapshot, selector, isEqual]
         );
         var value = useSyncExternalStore4(subscribe, instRef[0], instRef[1]);
-        useEffect5(
+        useEffect6(
           function() {
             inst.hasValue = true;
             inst.value = value;
@@ -1248,6 +1248,7 @@ function CeoDecisionDrawer({ members, sendDecision, t }) {
   const pending = pendingDecisions(members);
   const [index2, setIndex] = (0, import_react.useState)(0);
   const [minimized, setMinimized] = (0, import_react.useState)(false);
+  const [expandedQuestion, setExpandedQuestion] = (0, import_react.useState)(false);
   const [draft, setDraft] = (0, import_react.useState)("");
   const [sending, setSending] = (0, import_react.useState)(false);
   const [sendError, setSendError] = (0, import_react.useState)(void 0);
@@ -1281,8 +1282,9 @@ function CeoDecisionDrawer({ members, sendDecision, t }) {
       "data-magic-ceo-decision-drawer": current.callId,
       style: {
         margin: "0 0 10px",
-        border: `1px solid ${line.subtle}`,
-        borderRadius: 12,
+        border: `0.5px solid ${line.subtle}`,
+        borderLeft: `2px solid var(--dsw-alias-state-warning, #d97706)`,
+        borderRadius: 10,
         background: surface.layer2,
         overflow: "hidden"
       }
@@ -1300,19 +1302,39 @@ function CeoDecisionDrawer({ members, sendDecision, t }) {
       (0, import_react.createElement)(
         "div",
         { style: { minWidth: 0, flex: 1 } },
-        (0, import_react.createElement)("div", {
-          style: { fontSize: 11, fontWeight: 510, color: ink.warn, lineHeight: "16px" }
-        }, t("drawer.caption")),
-        (0, import_react.createElement)("h2", {
+        (0, import_react.createElement)(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 6 } },
+          (0, import_react.createElement)("span", {
+            style: {
+              fontSize: 11,
+              fontWeight: 510,
+              color: ink.warn,
+              lineHeight: "16px",
+              padding: "0 6px",
+              borderRadius: 5,
+              background: "color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 12%, transparent)"
+            }
+          }, t("drawer.caption")),
+          (0, import_react.createElement)("span", { style: { fontSize: 11, color: ink.secondary, lineHeight: "16px" } }, seat)
+        ),
+        question === "" ? null : (0, import_react.createElement)("div", {
+          onClick: () => {
+            setExpandedQuestion((value) => !value);
+          },
           style: {
             ...wrap,
             margin: "4px 0 0",
-            fontSize: 14,
-            fontWeight: 600,
-            lineHeight: "20px",
-            color: ink.primary
+            fontSize: 13,
+            fontWeight: 510,
+            lineHeight: "19px",
+            color: ink.primary,
+            cursor: "pointer",
+            display: expandedQuestion ? void 0 : "-webkit-box",
+            overflow: "hidden",
+            ...expandedQuestion ? {} : { WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }
           }
-        }, question === "" ? t("drawer.fallbackQuestion", { seat }) : question)
+        }, question)
       ),
       (0, import_react.createElement)(
         "div",
@@ -1342,52 +1364,50 @@ function CeoDecisionDrawer({ members, sendDecision, t }) {
     ),
     minimized ? null : (0, import_react.createElement)(
       "div",
-      { style: { padding: "0 12px 12px", display: "flex", flexDirection: "column", gap: 10 } },
-      (0, import_react.createElement)("div", {
-        style: { fontSize: 12, lineHeight: "18px", color: ink.tertiary }
-      }, t("drawer.context", { seat })),
-      current.task.trim() === "" ? null : (0, import_react.createElement)("div", {
+      { style: { padding: "0 12px 10px", display: "flex", flexDirection: "column", gap: 8 } },
+      expandedQuestion && current.task.trim() === "" ? null : (0, import_react.createElement)("div", {
         style: {
           ...wrap,
           fontSize: 12,
           lineHeight: "18px",
-          color: ink.secondary,
-          display: "-webkit-box",
+          color: ink.tertiary,
+          display: expandedQuestion ? void 0 : "-webkit-box",
           overflow: "hidden",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical"
+          ...expandedQuestion ? {} : { WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }
         }
-      }, current.task),
-      (0, import_react.createElement)("textarea", {
-        value: draft,
-        rows: 3,
-        placeholder: t("drawer.placeholder"),
-        disabled: sending,
-        onChange: (event) => {
-          setDraft(event.target.value);
-        },
-        style: {
-          width: "100%",
-          resize: "vertical",
-          boxSizing: "border-box",
-          padding: "8px 10px",
-          borderRadius: 8,
-          border: `0.5px solid ${line.subtle}`,
-          background: surface.layer3,
-          color: ink.primary,
-          fontSize: 13,
-          lineHeight: "20px"
-        }
-      }),
-      sendError !== void 0 ? (0, import_react.createElement)("div", { style: { fontSize: 12, color: ink.danger } }, sendError) : null,
+      }, current.task.trim() === "" ? t("drawer.context", { seat }) : current.task),
       (0, import_react.createElement)(
         "div",
-        { style: { display: "flex", justifyContent: "flex-end" } },
+        { style: { display: "flex", gap: 6, alignItems: "center" } },
+        (0, import_react.createElement)("input", {
+          value: draft,
+          placeholder: t("drawer.placeholder"),
+          disabled: sending,
+          onChange: (event) => {
+            setDraft(event.target.value);
+          },
+          onKeyDown: (event) => {
+            if (event.key === "Enter") submit();
+          },
+          style: {
+            flex: 1,
+            minWidth: 0,
+            boxSizing: "border-box",
+            padding: "6px 10px",
+            borderRadius: 8,
+            border: `0.5px solid ${line.subtle}`,
+            background: surface.layer3,
+            color: ink.primary,
+            fontSize: 13,
+            lineHeight: "20px"
+          }
+        }),
         (0, import_react.createElement)("button", {
           type: "button",
           disabled: !canSend,
           onClick: submit,
           style: {
+            flex: "0 0 auto",
             padding: "6px 12px",
             borderRadius: 8,
             border: 0,
@@ -1398,7 +1418,8 @@ function CeoDecisionDrawer({ members, sendDecision, t }) {
             fontWeight: 510
           }
         }, sending ? t("decision.sending") : t("decision.send"))
-      )
+      ),
+      sendError !== void 0 ? (0, import_react.createElement)("div", { style: { fontSize: 12, color: ink.danger } }, sendError) : null
     )
   );
 }
@@ -2879,11 +2900,11 @@ function hex(value) {
   value = clampi(value);
   return (value < 16 ? "0" : "") + value.toString(16);
 }
-function hsla(h7, s, l, a) {
-  if (a <= 0) h7 = s = l = NaN;
-  else if (l <= 0 || l >= 1) h7 = s = NaN;
-  else if (s <= 0) h7 = NaN;
-  return new Hsl(h7, s, l, a);
+function hsla(h8, s, l, a) {
+  if (a <= 0) h8 = s = l = NaN;
+  else if (l <= 0 || l >= 1) h8 = s = NaN;
+  else if (s <= 0) h8 = NaN;
+  return new Hsl(h8, s, l, a);
 }
 function hslConvert(o) {
   if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
@@ -2891,23 +2912,23 @@ function hslConvert(o) {
   if (!o) return new Hsl();
   if (o instanceof Hsl) return o;
   o = o.rgb();
-  var r = o.r / 255, g = o.g / 255, b = o.b / 255, min = Math.min(r, g, b), max = Math.max(r, g, b), h7 = NaN, s = max - min, l = (max + min) / 2;
+  var r = o.r / 255, g = o.g / 255, b = o.b / 255, min = Math.min(r, g, b), max = Math.max(r, g, b), h8 = NaN, s = max - min, l = (max + min) / 2;
   if (s) {
-    if (r === max) h7 = (g - b) / s + (g < b) * 6;
-    else if (g === max) h7 = (b - r) / s + 2;
-    else h7 = (r - g) / s + 4;
+    if (r === max) h8 = (g - b) / s + (g < b) * 6;
+    else if (g === max) h8 = (b - r) / s + 2;
+    else h8 = (r - g) / s + 4;
     s /= l < 0.5 ? max + min : 2 - max - min;
-    h7 *= 60;
+    h8 *= 60;
   } else {
-    s = l > 0 && l < 1 ? 0 : h7;
+    s = l > 0 && l < 1 ? 0 : h8;
   }
-  return new Hsl(h7, s, l, o.opacity);
+  return new Hsl(h8, s, l, o.opacity);
 }
-function hsl(h7, s, l, opacity) {
-  return arguments.length === 1 ? hslConvert(h7) : new Hsl(h7, s, l, opacity == null ? 1 : opacity);
+function hsl(h8, s, l, opacity) {
+  return arguments.length === 1 ? hslConvert(h8) : new Hsl(h8, s, l, opacity == null ? 1 : opacity);
 }
-function Hsl(h7, s, l, opacity) {
-  this.h = +h7;
+function Hsl(h8, s, l, opacity) {
+  this.h = +h8;
   this.s = +s;
   this.l = +l;
   this.opacity = +opacity;
@@ -2922,11 +2943,11 @@ define_default(Hsl, hsl, extend(Color, {
     return new Hsl(this.h, this.s, this.l * k, this.opacity);
   },
   rgb() {
-    var h7 = this.h % 360 + (this.h < 0) * 360, s = isNaN(h7) || isNaN(this.s) ? 0 : this.s, l = this.l, m2 = l + (l < 0.5 ? l : 1 - l) * s, m1 = 2 * l - m2;
+    var h8 = this.h % 360 + (this.h < 0) * 360, s = isNaN(h8) || isNaN(this.s) ? 0 : this.s, l = this.l, m2 = l + (l < 0.5 ? l : 1 - l) * s, m1 = 2 * l - m2;
     return new Rgb(
-      hsl2rgb(h7 >= 240 ? h7 - 240 : h7 + 120, m1, m2),
-      hsl2rgb(h7, m1, m2),
-      hsl2rgb(h7 < 120 ? h7 + 240 : h7 - 120, m1, m2),
+      hsl2rgb(h8 >= 240 ? h8 - 240 : h8 + 120, m1, m2),
+      hsl2rgb(h8, m1, m2),
+      hsl2rgb(h8 < 120 ? h8 + 240 : h8 - 120, m1, m2),
       this.opacity
     );
   },
@@ -2948,8 +2969,8 @@ function clamph(value) {
 function clampt(value) {
   return Math.max(0, Math.min(1, value || 0));
 }
-function hsl2rgb(h7, m1, m2) {
-  return (h7 < 60 ? m1 + (m2 - m1) * h7 / 60 : h7 < 180 ? m2 : h7 < 240 ? m1 + (m2 - m1) * (240 - h7) / 60 : m1) * 255;
+function hsl2rgb(h8, m1, m2) {
+  return (h8 < 60 ? m1 + (m2 - m1) * h8 / 60 : h8 < 180 ? m2 : h8 < 240 ? m1 + (m2 - m1) * (240 - h8) / 60 : m1) * 255;
 }
 
 // ../../node_modules/.pnpm/d3-interpolate@3.0.1/node_modules/d3-interpolate/src/basis.js
@@ -6170,7 +6191,7 @@ function getHandle(nodeId, handleType, handleId, nodeLookup, connectionMode, wit
     return null;
   }
   const handles2 = connectionMode === "strict" ? node.internals.handleBounds?.[handleType] : [...node.internals.handleBounds?.source ?? [], ...node.internals.handleBounds?.target ?? []];
-  const handle = (handleId ? handles2?.find((h7) => h7.id === handleId) : handles2?.[0]) ?? null;
+  const handle = (handleId ? handles2?.find((h8) => h8.id === handleId) : handles2?.[0]) ?? null;
   return handle && withAbsolutePosition ? { ...handle, ...getHandlePosition(node, handle, handle.position, true) } : handle;
 }
 function getHandleType(edgeUpdaterType, handleDomNode) {
@@ -11066,6 +11087,13 @@ ${style_default3}
 .magic-ceo-canvas .react-flow__attribution { display: none; }
 .magic-ceo-node-face {
   animation: magic-ceo-node-enter 0.28s ease-out both;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+/* \u6574\u5361\u53EF\u70B9\uFF1A\u5149\u6807 + hover \u5149\u5708\uFF08\u70B9\u51FB\u4EFB\u610F\u8282\u70B9\u6253\u5F00\u6210\u5458\u5DE5\u4F5C\u533A\uFF09\u3002 */
+.magic-ceo-canvas .react-flow__node { cursor: pointer; }
+.magic-ceo-canvas .react-flow__node:hover { z-index: 1; }
+.magic-ceo-canvas .react-flow__node:hover .magic-ceo-node-face {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 20%, transparent);
 }
 @keyframes magic-ceo-node-enter {
   from { opacity: 0; transform: scale(0.92); }
@@ -11341,7 +11369,7 @@ function GoalNode({ data }) {
     {
       "data-magic-ceo-node": "goal",
       className: `magic-ceo-node-face ${graphNodeDimClass(dimmed)}`,
-      style: { ...cardStyle(false, false, void 0, true), cursor: "default", ...faceStyle(data.enterIndex) }
+      style: { ...cardStyle(false, false, void 0, true), ...faceStyle(data.enterIndex) }
     },
     (0, import_react5.createElement)(
       "div",
@@ -11974,13 +12002,157 @@ function CeoTeamGraph(props) {
 }
 
 // src/client/CeoWorkspace.ts
-var import_react9 = require("react");
+var import_react10 = require("react");
+
+// src/client/TaskBoard.ts
+var import_react7 = require("react");
+
+// src/client/task-board-data.ts
+function taskRowsFromResult(result) {
+  if (result === void 0) return { kind: "loading", tasks: [] };
+  if (result.ok !== true) {
+    return { kind: "unavailable", tasks: [], message: result.error?.message };
+  }
+  const tasks = (result.data.tasks ?? []).filter((task) => task.status !== "deleted");
+  return { kind: tasks.length === 0 ? "empty" : "ready", tasks };
+}
+function statusDotColor(status) {
+  if (status === "completed") return "var(--dsw-alias-state-success, #16a34a)";
+  if (status === "in_progress") return "var(--dsw-alias-state-business-primary, #3b82f6)";
+  return "var(--dsw-alias-border-l3, #6b6b7a)";
+}
+function taskRowOf(task) {
+  const blockedBy = task.blockedBy ?? [];
+  return {
+    title: task.subject,
+    statusText: task.status,
+    blockedByText: blockedBy.length === 0 ? "" : `\u963B\u585E\u4E8E\uFF1A${blockedBy.join("\u3001")}`,
+    completable: task.status !== "completed"
+  };
+}
+function completePayload(task) {
+  return { taskId: task.id, expectedRevision: task.revision, action: "complete" };
+}
+
+// src/client/TaskBoard.ts
+function TaskBoardCard({
+  sessionId,
+  api,
+  t
+}) {
+  const [state, setState] = (0, import_react7.useState)({ kind: "loading", tasks: [] });
+  const [draft, setDraft] = (0, import_react7.useState)("");
+  const [busy, setBusy] = (0, import_react7.useState)(false);
+  const [error, setError] = (0, import_react7.useState)("");
+  (0, import_react7.useEffect)(() => {
+    const reload = async () => {
+      if (api === void 0 || sessionId === void 0) {
+        setState({ kind: "unavailable", tasks: [] });
+        return;
+      }
+      try {
+        setState(taskRowsFromResult(await api.view(sessionId)));
+      } catch {
+        setState({ kind: "unavailable", tasks: [] });
+      }
+    };
+    void reload();
+  }, [sessionId, api, busy]);
+  const run = async (operation) => {
+    setBusy(true);
+    setError("");
+    try {
+      await operation();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+    try {
+      if (api !== void 0 && sessionId !== void 0) setState(taskRowsFromResult(await api.view(sessionId)));
+    } catch {
+    }
+    setBusy(false);
+  };
+  if (api === void 0 || sessionId === void 0) {
+    return (0, import_react7.createElement)(
+      "div",
+      { "data-magic-ceo-taskboard": true, style: { padding: "10px 12px", color: "rgba(160,160,175,1)", fontSize: 12 } },
+      t("tasks.unavailable")
+    );
+  }
+  const sorted = [...state.tasks].sort((a, b) => (a.status === "completed" ? 1 : 0) - (b.status === "completed" ? 1 : 0));
+  const rows = sorted.map(taskRowOf);
+  return (0, import_react7.createElement)(
+    "div",
+    { "data-magic-ceo-taskboard": true, style: { display: "flex", flexDirection: "column", gap: 8, padding: "8px 10px" } },
+    state.kind === "loading" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.7 } }, t("tasks.loading")) : state.kind === "unavailable" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, color: "rgba(220,120,120,1)" } }, t("tasks.unavailable")) : state.kind === "empty" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.7 } }, t("tasks.empty")) : (0, import_react7.createElement)(
+      "div",
+      {
+        style: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflowY: "auto" }
+      },
+      rows.map((row, index2) => {
+        const task = sorted[index2];
+        const done = row.statusText === "completed";
+        return (0, import_react7.createElement)(
+          "div",
+          {
+            key: task?.id ?? String(index2),
+            style: { display: "flex", flexDirection: "column", gap: 2, padding: "5px 8px", borderRadius: 8, background: done ? "transparent" : "rgba(255,255,255,0.04)", opacity: done ? 0.55 : 1 }
+          },
+          (0, import_react7.createElement)(
+            "div",
+            { style: { display: "flex", alignItems: "center", gap: 8 } },
+            (0, import_react7.createElement)("span", {
+              "aria-hidden": true,
+              title: t(`tasks.status.${row.statusText}`),
+              style: { flex: "0 0 auto", width: 7, height: 7, borderRadius: 99, background: statusDotColor(row.statusText) }
+            }),
+            (0, import_react7.createElement)("span", { style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? "line-through" : void 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.title),
+            row.completable ? (0, import_react7.createElement)("button", {
+              type: "button",
+              disabled: busy,
+              title: t("tasks.complete"),
+              onClick: () => {
+                if (task !== void 0) void run(() => api.updateTask(sessionId, completePayload(task)));
+              },
+              style: { marginLeft: "auto", flex: "0 0 auto", border: `0.5px solid ${line.subtle}`, borderRadius: 6, padding: "1px 8px", cursor: busy ? "default" : "pointer", fontSize: 11, background: "transparent", color: "inherit", opacity: busy ? 0.5 : 1 }
+            }, t("tasks.complete")) : null
+          ),
+          row.blockedByByText === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.65, paddingLeft: 15 } }, row.blockedByByText)
+        );
+      })
+    ),
+    (0, import_react7.createElement)(
+      "div",
+      { style: { display: "flex", gap: 6 } },
+      (0, import_react7.createElement)("input", {
+        value: draft,
+        placeholder: t("tasks.subject"),
+        onChange: (event) => {
+          setDraft(event.target.value);
+        },
+        style: { flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "inherit" }
+      }),
+      (0, import_react7.createElement)("button", {
+        type: "button",
+        disabled: busy || draft.trim() === "",
+        onClick: () => {
+          const subject = draft.trim();
+          if (subject === "") return;
+          void run(() => api.createTask(sessionId, { subject, description: "", blockedBy: [], writeScopes: [] }));
+          setDraft("");
+        },
+        style: { border: 0, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }
+      }, t("tasks.create"))
+    ),
+    error === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, color: "rgba(220,120,120,1)" } }, error)
+  );
+}
 
 // src/client/CeoMemberInspector.ts
-var import_react8 = require("react");
+var import_react9 = require("react");
 
 // src/client/CeoProcessTimeline.ts
-var import_react7 = require("react");
+var import_react8 = require("react");
 var MUTED = ink.tertiary;
 var PRIMARY = ink.primary;
 var DANGER = ink.danger;
@@ -11998,7 +12170,7 @@ function ensurePulseCss() {
   document.head.appendChild(style2);
 }
 function svgIcon(paths) {
-  return (0, import_react7.createElement)("svg", {
+  return (0, import_react8.createElement)("svg", {
     "aria-hidden": true,
     width: 14,
     height: 14,
@@ -12018,53 +12190,53 @@ function svgIcon(paths) {
 function ToolGlyph({ kind }) {
   if (kind === "search") {
     return svgIcon([
-      (0, import_react7.createElement)("circle", { key: "c", cx: 11, cy: 11, r: 7 }),
-      (0, import_react7.createElement)("path", { key: "p", d: "M21 21l-4.35-4.35" })
+      (0, import_react8.createElement)("circle", { key: "c", cx: 11, cy: 11, r: 7 }),
+      (0, import_react8.createElement)("path", { key: "p", d: "M21 21l-4.35-4.35" })
     ]);
   }
   if (kind === "globe") {
     return svgIcon([
-      (0, import_react7.createElement)("circle", { key: "c", cx: 12, cy: 12, r: 10 }),
-      (0, import_react7.createElement)("path", { key: "m", d: "M2 12h20" }),
-      (0, import_react7.createElement)("path", { key: "e", d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" })
+      (0, import_react8.createElement)("circle", { key: "c", cx: 12, cy: 12, r: 10 }),
+      (0, import_react8.createElement)("path", { key: "m", d: "M2 12h20" }),
+      (0, import_react8.createElement)("path", { key: "e", d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" })
     ]);
   }
   if (kind === "file") {
     return svgIcon([
-      (0, import_react7.createElement)("path", { key: "p", d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" }),
-      (0, import_react7.createElement)("path", { key: "f", d: "M14 2v6h6" })
+      (0, import_react8.createElement)("path", { key: "p", d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" }),
+      (0, import_react8.createElement)("path", { key: "f", d: "M14 2v6h6" })
     ]);
   }
   if (kind === "edit") {
     return svgIcon([
-      (0, import_react7.createElement)("path", { key: "p", d: "M12 20h9" }),
-      (0, import_react7.createElement)("path", { key: "e", d: "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" })
+      (0, import_react8.createElement)("path", { key: "p", d: "M12 20h9" }),
+      (0, import_react8.createElement)("path", { key: "e", d: "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" })
     ]);
   }
   if (kind === "folder") {
     return svgIcon([
-      (0, import_react7.createElement)("path", { key: "p", d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" })
+      (0, import_react8.createElement)("path", { key: "p", d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" })
     ]);
   }
   if (kind === "terminal") {
     return svgIcon([
-      (0, import_react7.createElement)("path", { key: "b", d: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" }),
-      (0, import_react7.createElement)("path", { key: "c", d: "m7 10 3 2-3 2" }),
-      (0, import_react7.createElement)("path", { key: "l", d: "M13 14h4" })
+      (0, import_react8.createElement)("path", { key: "b", d: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" }),
+      (0, import_react8.createElement)("path", { key: "c", d: "m7 10 3 2-3 2" }),
+      (0, import_react8.createElement)("path", { key: "l", d: "M13 14h4" })
     ]);
   }
   if (kind === "code") {
     return svgIcon([
-      (0, import_react7.createElement)("path", { key: "l", d: "m16 18 6-6-6-6" }),
-      (0, import_react7.createElement)("path", { key: "r", d: "m8 6-6 6 6 6" })
+      (0, import_react8.createElement)("path", { key: "l", d: "m16 18 6-6-6-6" }),
+      (0, import_react8.createElement)("path", { key: "r", d: "m8 6-6 6 6 6" })
     ]);
   }
   return svgIcon([
-    (0, import_react7.createElement)("path", { key: "p", d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" })
+    (0, import_react8.createElement)("path", { key: "p", d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" })
   ]);
 }
 function Chevron({ open }) {
-  return (0, import_react7.createElement)("svg", {
+  return (0, import_react8.createElement)("svg", {
     "aria-hidden": true,
     width: 14,
     height: 14,
@@ -12075,10 +12247,10 @@ function Chevron({ open }) {
     strokeLinecap: "round",
     strokeLinejoin: "round",
     style: { flex: "0 0 auto", color: MUTED }
-  }, open ? (0, import_react7.createElement)("path", { d: "m6 9 6 6 6-6" }) : (0, import_react7.createElement)("path", { d: "m9 6 6 6-6 6" }));
+  }, open ? (0, import_react8.createElement)("path", { d: "m6 9 6 6 6-6" }) : (0, import_react8.createElement)("path", { d: "m9 6 6 6-6 6" }));
 }
 function ErrorMark() {
-  return (0, import_react7.createElement)(
+  return (0, import_react8.createElement)(
     "svg",
     {
       "aria-hidden": true,
@@ -12092,15 +12264,15 @@ function ErrorMark() {
       strokeLinejoin: "round",
       style: { flex: "0 0 auto", marginLeft: 4, color: DANGER }
     },
-    (0, import_react7.createElement)("path", { d: "M18 6L6 18" }),
-    (0, import_react7.createElement)("path", { d: "M6 6l12 12" })
+    (0, import_react8.createElement)("path", { d: "M18 6L6 18" }),
+    (0, import_react8.createElement)("path", { d: "M6 6l12 12" })
   );
 }
 function ThinkingDots() {
-  return (0, import_react7.createElement)("span", {
+  return (0, import_react8.createElement)("span", {
     "aria-hidden": true,
     style: { display: "inline-flex", gap: 4, alignItems: "center" }
-  }, [0, 150, 300].map((delay) => (0, import_react7.createElement)("span", {
+  }, [0, 150, 300].map((delay) => (0, import_react8.createElement)("span", {
     key: String(delay),
     style: {
       width: 6,
@@ -12113,7 +12285,7 @@ function ThinkingDots() {
   })));
 }
 function RunningDot() {
-  return (0, import_react7.createElement)("span", {
+  return (0, import_react8.createElement)("span", {
     "aria-hidden": true,
     style: {
       display: "inline-block",
@@ -12128,11 +12300,11 @@ function RunningDot() {
   });
 }
 function useRunningElapsed(running) {
-  const started = (0, import_react7.useRef)(null);
-  const [, force] = (0, import_react7.useState)(0);
+  const started = (0, import_react8.useRef)(null);
+  const [, force] = (0, import_react8.useState)(0);
   if (running && started.current === null) started.current = Date.now();
   if (!running) started.current = null;
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     if (!running) return void 0;
     const id2 = setInterval(() => {
       force((n) => n + 1);
@@ -12145,16 +12317,16 @@ function useRunningElapsed(running) {
   return Math.max(0, Math.floor((Date.now() - started.current) / 1e3));
 }
 function WebSearchSkeleton() {
-  return (0, import_react7.createElement)("div", {
+  return (0, import_react8.createElement)("div", {
     "aria-hidden": true,
     style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4, paddingLeft: 22 }
-  }, [0, 1, 2].map((index2) => (0, import_react7.createElement)(
+  }, [0, 1, 2].map((index2) => (0, import_react8.createElement)(
     "div",
     {
       key: String(index2),
       style: { display: "flex", alignItems: "flex-start", gap: 8, padding: "4px 8px" }
     },
-    (0, import_react7.createElement)("div", {
+    (0, import_react8.createElement)("div", {
       style: {
         width: 16,
         height: 16,
@@ -12165,10 +12337,10 @@ function WebSearchSkeleton() {
         flex: "0 0 auto"
       }
     }),
-    (0, import_react7.createElement)(
+    (0, import_react8.createElement)(
       "div",
       { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 } },
-      (0, import_react7.createElement)("div", {
+      (0, import_react8.createElement)("div", {
         style: {
           height: 12,
           width: "50%",
@@ -12177,7 +12349,7 @@ function WebSearchSkeleton() {
           animation: "magic-ceo-shimmer 1.4s ease-in-out infinite"
         }
       }),
-      (0, import_react7.createElement)("div", {
+      (0, import_react8.createElement)("div", {
         style: {
           height: 12,
           width: "80%",
@@ -12193,11 +12365,11 @@ function SearchHitCard({
   hit,
   index: index2
 }) {
-  const [hover, setHover] = (0, import_react7.useState)(false);
+  const [hover, setHover] = (0, import_react8.useState)(false);
   const href = hit.url === void 0 ? void 0 : safeHref(hit.url);
   const title = cleanSourceTitle(hit.title) || hit.site || hit.url || hit.title;
   const body = [
-    (0, import_react7.createElement)("span", {
+    (0, import_react8.createElement)("span", {
       key: "n",
       style: {
         flex: "0 0 auto",
@@ -12210,11 +12382,11 @@ function SearchHitCard({
         fontVariantNumeric: "tabular-nums"
       }
     }, String(index2 + 1)),
-    (0, import_react7.createElement)(SiteMark, { key: "m", site: hit.site, title }),
-    (0, import_react7.createElement)(
+    (0, import_react8.createElement)(SiteMark, { key: "m", site: hit.site, title }),
+    (0, import_react8.createElement)(
       "span",
       { key: "t", style: { ...wrap, minWidth: 0, flex: 1 } },
-      (0, import_react7.createElement)("span", {
+      (0, import_react8.createElement)("span", {
         style: {
           display: "block",
           overflow: "hidden",
@@ -12226,7 +12398,7 @@ function SearchHitCard({
           color: PRIMARY
         }
       }, title),
-      hit.snippet !== void 0 ? (0, import_react7.createElement)("span", {
+      hit.snippet !== void 0 ? (0, import_react8.createElement)("span", {
         style: {
           ...wrap,
           display: "-webkit-box",
@@ -12253,9 +12425,9 @@ function SearchHitCard({
     textDecoration: "none"
   };
   if (href === void 0) {
-    return (0, import_react7.createElement)("div", { style: style2 }, ...body);
+    return (0, import_react8.createElement)("div", { style: style2 }, ...body);
   }
-  return (0, import_react7.createElement)("a", {
+  return (0, import_react8.createElement)("a", {
     href,
     target: "_blank",
     rel: "noreferrer",
@@ -12278,11 +12450,11 @@ function safeHref(url) {
 }
 function sourceHeader(title, site, href) {
   const inner = [
-    (0, import_react7.createElement)(SiteMark, { key: "m", site, title }),
-    (0, import_react7.createElement)(
+    (0, import_react8.createElement)(SiteMark, { key: "m", site, title }),
+    (0, import_react8.createElement)(
       "span",
       { key: "t", style: { ...wrap, minWidth: 0, flex: 1 } },
-      (0, import_react7.createElement)("span", {
+      (0, import_react8.createElement)("span", {
         style: {
           display: "block",
           overflow: "hidden",
@@ -12294,7 +12466,7 @@ function sourceHeader(title, site, href) {
           color: PRIMARY
         }
       }, title),
-      site !== void 0 ? (0, import_react7.createElement)("span", {
+      site !== void 0 ? (0, import_react8.createElement)("span", {
         style: {
           display: "block",
           overflow: "hidden",
@@ -12318,8 +12490,8 @@ function sourceHeader(title, site, href) {
     textDecoration: "none",
     borderBottom: `0.5px solid ${line.subtle}`
   };
-  if (href === void 0) return (0, import_react7.createElement)("div", { style: style2 }, ...inner);
-  return (0, import_react7.createElement)("a", { href, target: "_blank", rel: "noreferrer", style: style2 }, ...inner);
+  if (href === void 0) return (0, import_react8.createElement)("div", { style: style2 }, ...inner);
+  return (0, import_react8.createElement)("a", { href, target: "_blank", rel: "noreferrer", style: style2 }, ...inner);
 }
 function FetchPageCard({
   page,
@@ -12329,7 +12501,7 @@ function FetchPageCard({
   const href = page.url === "" ? void 0 : safeHref(page.url);
   const hits = page.hits ?? [];
   const body = page.preview.replace(/\n+$/, "");
-  return (0, import_react7.createElement)(
+  return (0, import_react8.createElement)(
     "div",
     {
       "data-magic-ceo-fetch-page": true,
@@ -12344,7 +12516,7 @@ function FetchPageCard({
       }
     },
     sourceHeader(title, page.site, href),
-    hits.length > 0 ? (0, import_react7.createElement)("div", {
+    hits.length > 0 ? (0, import_react8.createElement)("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -12353,11 +12525,11 @@ function FetchPageCard({
         overflowY: "auto",
         padding: "4px 4px 8px"
       }
-    }, hits.map((hit, index2) => (0, import_react7.createElement)(SearchHitCard, {
+    }, hits.map((hit, index2) => (0, import_react8.createElement)(SearchHitCard, {
       key: `${hit.url ?? hit.title}-${String(index2)}`,
       hit,
       index: index2
-    }))) : (0, import_react7.createElement)("div", {
+    }))) : (0, import_react8.createElement)("div", {
       style: {
         ...wrap,
         maxHeight: 288,
@@ -12368,7 +12540,7 @@ function FetchPageCard({
         color: ink.secondary,
         background: "color-mix(in srgb, var(--dsw-alias-bg-layer-1, #1c1c24) 70%, transparent)"
       }
-    }, body === "" ? (0, import_react7.createElement)("span", { style: { color: MUTED } }, t("process.fetch.empty")) : (0, import_react7.createElement)("pre", {
+    }, body === "" ? (0, import_react8.createElement)("span", { style: { color: MUTED } }, t("process.fetch.empty")) : (0, import_react8.createElement)("pre", {
       style: {
         margin: 0,
         fontFamily: "inherit",
@@ -12387,19 +12559,19 @@ function FetchSourceCollection({
   t
 }) {
   const running = steps.some((step) => step.status === "running");
-  const [open, setOpen] = (0, import_react7.useState)(running);
+  const [open, setOpen] = (0, import_react8.useState)(running);
   const errors = steps.filter((step) => step.status === "error").length;
   const elapsed = useRunningElapsed(running);
   const pages = steps.map((step) => parseFetchPage(step.result, step.args));
   const title = t("process.fetch.collection", { count: steps.length });
   const runningHint = running ? [t("process.tool.running"), elapsed >= 1 ? `${String(elapsed)}s` : null].filter((item) => item !== null && item !== "").join(" \xB7 ") : "";
-  return (0, import_react7.createElement)(
+  return (0, import_react8.createElement)(
     "div",
     {
       "data-magic-ceo-fetch-collection": true,
       style: { ...wrap, display: "flex", flexDirection: "column", gap: 2 }
     },
-    (0, import_react7.createElement)(
+    (0, import_react8.createElement)(
       "button",
       {
         type: "button",
@@ -12423,11 +12595,11 @@ function FetchSourceCollection({
           textAlign: "left"
         }
       },
-      (0, import_react7.createElement)(ToolGlyph, { kind: "globe" }),
-      (0, import_react7.createElement)(
+      (0, import_react8.createElement)(ToolGlyph, { kind: "globe" }),
+      (0, import_react8.createElement)(
         "span",
         { style: { minWidth: 0, flex: 1, overflow: "hidden" } },
-        (0, import_react7.createElement)(
+        (0, import_react8.createElement)(
           "span",
           {
             style: {
@@ -12437,7 +12609,7 @@ function FetchSourceCollection({
               overflow: "hidden"
             }
           },
-          (0, import_react7.createElement)("span", {
+          (0, import_react8.createElement)("span", {
             style: {
               flex: 1,
               minWidth: 0,
@@ -12446,11 +12618,11 @@ function FetchSourceCollection({
               whiteSpace: "nowrap"
             }
           }, title),
-          errors > 0 ? (0, import_react7.createElement)("span", { style: { marginLeft: 6, color: DANGER } }, `${String(errors)} failed`) : null,
-          running ? (0, import_react7.createElement)(RunningDot) : null,
-          (0, import_react7.createElement)(Chevron, { open })
+          errors > 0 ? (0, import_react8.createElement)("span", { style: { marginLeft: 6, color: DANGER } }, `${String(errors)} failed`) : null,
+          running ? (0, import_react8.createElement)(RunningDot) : null,
+          (0, import_react8.createElement)(Chevron, { open })
         ),
-        runningHint !== "" ? (0, import_react7.createElement)("span", {
+        runningHint !== "" ? (0, import_react8.createElement)("span", {
           style: {
             display: "block",
             overflow: "hidden",
@@ -12463,7 +12635,7 @@ function FetchSourceCollection({
         }, runningHint) : null
       )
     ),
-    open ? (0, import_react7.createElement)("div", {
+    open ? (0, import_react8.createElement)("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -12472,7 +12644,7 @@ function FetchSourceCollection({
         overflowY: "auto",
         padding: "0 4px 4px 8px"
       }
-    }, pages.map((page, index2) => (0, import_react7.createElement)(SearchHitCard, {
+    }, pages.map((page, index2) => (0, import_react8.createElement)(SearchHitCard, {
       key: `${page.url}-${String(index2)}`,
       hit: {
         title: cleanSourceTitle(page.title) || page.site || page.url,
@@ -12487,9 +12659,9 @@ function FetchSourceCollection({
 function SiteMark({ site, title }) {
   const domain = site?.trim();
   const letter = (domain || title || "?").charAt(0).toUpperCase() || "?";
-  const [failedDomain, setFailedDomain] = (0, import_react7.useState)(null);
+  const [failedDomain, setFailedDomain] = (0, import_react8.useState)(null);
   const showImg = domain !== void 0 && domain !== "" && failedDomain !== domain;
-  return (0, import_react7.createElement)("span", {
+  return (0, import_react8.createElement)("span", {
     "aria-hidden": true,
     style: {
       display: "inline-flex",
@@ -12506,7 +12678,7 @@ function SiteMark({ site, title }) {
       fontSize: 10,
       fontWeight: 510
     }
-  }, showImg && domain !== void 0 ? (0, import_react7.createElement)("img", {
+  }, showImg && domain !== void 0 ? (0, import_react8.createElement)("img", {
     src: faviconUrl(domain),
     alt: "",
     width: 16,
@@ -12523,7 +12695,7 @@ function ToolStep({
 }) {
   const isSearch = step.name === "web_search";
   const isFetch = step.name === "web_fetch";
-  const [open, setOpen] = (0, import_react7.useState)(isSearch || isFetch);
+  const [open, setOpen] = (0, import_react8.useState)(isSearch || isFetch);
   const running = step.status === "running";
   const elapsed = useRunningElapsed(running);
   const label = toolDisplayName(step.name);
@@ -12537,14 +12709,14 @@ function ToolStep({
   const hasBody = isSearch ? step.status !== "running" && (query !== "" || hits.length > 0 || step.result !== void 0 && step.result.trim() !== "") : isFetch ? page !== void 0 && (page.url !== "" || page.preview !== "") : step.result !== void 0 && step.result.trim() !== "" && looksLikeStructuredDump(step.result) === false;
   const meta = running || failed ? void 0 : search?.empty === true ? t("process.search.none") : search !== void 0 && search.count > 0 ? t("process.search.results", { count: search.count }) : page?.statusCode !== void 0 ? `${t("process.fetch.http")} ${String(page.statusCode)}` : void 0;
   const runningHint = running ? [isSearch ? t("process.search.searching") : t("process.tool.running"), elapsed >= 1 ? `${String(elapsed)}s` : null].filter((item) => item !== null && item !== "").join(" \xB7 ") : "";
-  return (0, import_react7.createElement)(
+  return (0, import_react8.createElement)(
     "div",
     {
       "data-magic-ceo-process-tool": step.toolCallId,
       "data-status": step.status,
       style: { ...wrap, display: "flex", flexDirection: "column", gap: 2 }
     },
-    (0, import_react7.createElement)(
+    (0, import_react8.createElement)(
       "button",
       {
         type: "button",
@@ -12569,11 +12741,11 @@ function ToolStep({
           textAlign: "left"
         }
       },
-      (0, import_react7.createElement)(ToolGlyph, { kind: toolIconKind(step.name) }),
-      (0, import_react7.createElement)(
+      (0, import_react8.createElement)(ToolGlyph, { kind: toolIconKind(step.name) }),
+      (0, import_react8.createElement)(
         "span",
         { style: { minWidth: 0, flex: 1, overflow: "hidden" } },
-        (0, import_react7.createElement)(
+        (0, import_react8.createElement)(
           "span",
           {
             style: {
@@ -12583,7 +12755,7 @@ function ToolStep({
               overflow: "hidden"
             }
           },
-          (0, import_react7.createElement)(
+          (0, import_react8.createElement)(
             "span",
             {
               style: {
@@ -12594,10 +12766,10 @@ function ToolStep({
                 whiteSpace: "nowrap"
               }
             },
-            (0, import_react7.createElement)("span", null, label),
-            detail !== "" ? (0, import_react7.createElement)("span", { style: { marginLeft: 6, color: MUTED } }, detail) : null
+            (0, import_react8.createElement)("span", null, label),
+            detail !== "" ? (0, import_react8.createElement)("span", { style: { marginLeft: 6, color: MUTED } }, detail) : null
           ),
-          meta !== void 0 ? (0, import_react7.createElement)("span", {
+          meta !== void 0 ? (0, import_react8.createElement)("span", {
             style: {
               flex: "0 0 auto",
               maxWidth: "40%",
@@ -12609,11 +12781,11 @@ function ToolStep({
               opacity: 0.85
             }
           }, `\xB7 ${meta}`) : null,
-          running ? (0, import_react7.createElement)(RunningDot) : null,
-          failed ? (0, import_react7.createElement)(ErrorMark) : null,
-          hasBody ? (0, import_react7.createElement)(Chevron, { open }) : null
+          running ? (0, import_react8.createElement)(RunningDot) : null,
+          failed ? (0, import_react8.createElement)(ErrorMark) : null,
+          hasBody ? (0, import_react8.createElement)(Chevron, { open }) : null
         ),
-        runningHint !== "" ? (0, import_react7.createElement)("span", {
+        runningHint !== "" ? (0, import_react8.createElement)("span", {
           style: {
             display: "block",
             overflow: "hidden",
@@ -12626,7 +12798,7 @@ function ToolStep({
         }, runningHint) : null
       )
     ),
-    !open && failurePeek !== void 0 ? (0, import_react7.createElement)("span", {
+    !open && failurePeek !== void 0 ? (0, import_react8.createElement)("span", {
       style: {
         ...wrap,
         display: "block",
@@ -12639,8 +12811,8 @@ function ToolStep({
         whiteSpace: "nowrap"
       }
     }, failurePeek) : null,
-    running && isSearch ? (0, import_react7.createElement)(WebSearchSkeleton) : null,
-    open && isSearch && query !== "" ? (0, import_react7.createElement)("div", {
+    running && isSearch ? (0, import_react8.createElement)(WebSearchSkeleton) : null,
+    open && isSearch && query !== "" ? (0, import_react8.createElement)("div", {
       style: {
         ...wrap,
         padding: "4px 4px 6px 22px",
@@ -12649,7 +12821,7 @@ function ToolStep({
         color: MUTED
       }
     }, `${t("process.search.query")}${query}`) : null,
-    open && isSearch && hits.length > 0 ? (0, import_react7.createElement)("div", {
+    open && isSearch && hits.length > 0 ? (0, import_react8.createElement)("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -12660,11 +12832,11 @@ function ToolStep({
         overflowY: "auto",
         padding: "0 4px 4px 8px"
       }
-    }, hits.map((hit, index2) => (0, import_react7.createElement)(SearchHitCard, {
+    }, hits.map((hit, index2) => (0, import_react8.createElement)(SearchHitCard, {
       key: `${hit.url ?? hit.title}-${String(index2)}`,
       hit,
       index: index2
-    }))) : open && isFetch && page !== void 0 ? (0, import_react7.createElement)(FetchPageCard, { page, t }) : open && step.result && isSearch === false && isFetch === false && looksLikeStructuredDump(step.result) === false ? (0, import_react7.createElement)("div", {
+    }))) : open && isFetch && page !== void 0 ? (0, import_react8.createElement)(FetchPageCard, { page, t }) : open && step.result && isSearch === false && isFetch === false && looksLikeStructuredDump(step.result) === false ? (0, import_react8.createElement)("div", {
       style: {
         ...wrap,
         maxHeight: 288,
@@ -12683,17 +12855,17 @@ function ReasoningBlock({
   streaming,
   t
 }) {
-  const [userOpen, setUserOpen] = (0, import_react7.useState)(void 0);
+  const [userOpen, setUserOpen] = (0, import_react8.useState)(void 0);
   const open = userOpen ?? streaming;
   const body = texts.join("\n\n");
-  return (0, import_react7.createElement)(
+  return (0, import_react8.createElement)(
     "div",
     {
       "data-magic-ceo-process-thought": true,
       "data-open": open ? "true" : void 0,
       style: { ...wrap, display: "flex", flexDirection: "column", gap: 6 }
     },
-    (0, import_react7.createElement)(
+    (0, import_react8.createElement)(
       "button",
       {
         type: "button",
@@ -12715,11 +12887,11 @@ function ReasoningBlock({
           fontWeight: 400
         }
       },
-      streaming ? (0, import_react7.createElement)(ThinkingDots) : null,
+      streaming ? (0, import_react8.createElement)(ThinkingDots) : null,
       t(streaming ? "process.thinking" : "process.thought.show"),
-      streaming ? null : (0, import_react7.createElement)(Chevron, { open })
+      streaming ? null : (0, import_react8.createElement)(Chevron, { open })
     ),
-    open ? (0, import_react7.createElement)("div", {
+    open ? (0, import_react8.createElement)("div", {
       style: {
         ...wrap,
         fontSize: 13,
@@ -12731,7 +12903,7 @@ function ReasoningBlock({
   );
 }
 function ThinkingTail({ t }) {
-  return (0, import_react7.createElement)("div", {
+  return (0, import_react8.createElement)("div", {
     "data-magic-ceo-process-thinking-tail": true,
     style: {
       display: "inline-flex",
@@ -12741,7 +12913,7 @@ function ThinkingTail({ t }) {
       lineHeight: "20px",
       color: MUTED
     }
-  }, (0, import_react7.createElement)(ThinkingDots), t("process.thinking"));
+  }, (0, import_react8.createElement)(ThinkingDots), t("process.thinking"));
 }
 function shouldShowThinkingTail(steps, live) {
   if (!live) return false;
@@ -12757,7 +12929,7 @@ function CeoProcessTimeline({
   hideReportContent = false,
   t
 }) {
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     ensurePulseCss();
   }, []);
   if (steps.length === 0 && !live) return null;
@@ -12765,7 +12937,7 @@ function CeoProcessTimeline({
   let reasoning = [];
   const flushReasoning = (streaming) => {
     if (reasoning.length === 0) return;
-    nodes.push((0, import_react7.createElement)(ReasoningBlock, {
+    nodes.push((0, import_react8.createElement)(ReasoningBlock, {
       key: `thought-${String(nodes.length)}`,
       texts: reasoning,
       streaming,
@@ -12789,19 +12961,19 @@ function CeoProcessTimeline({
           index2 += 1;
           grouped.push(next);
         }
-        nodes.push(grouped.length >= 2 ? (0, import_react7.createElement)(FetchSourceCollection, {
+        nodes.push(grouped.length >= 2 ? (0, import_react8.createElement)(FetchSourceCollection, {
           key: `fetch-group-${grouped[0].toolCallId}`,
           steps: grouped,
           t
-        }) : (0, import_react7.createElement)(ToolStep, { key: `tool-${step.toolCallId}-${String(index2)}`, step, t }));
+        }) : (0, import_react8.createElement)(ToolStep, { key: `tool-${step.toolCallId}-${String(index2)}`, step, t }));
         continue;
       }
-      nodes.push((0, import_react7.createElement)(ToolStep, { key: `tool-${step.toolCallId}-${String(index2)}`, step, t }));
+      nodes.push((0, import_react8.createElement)(ToolStep, { key: `tool-${step.toolCallId}-${String(index2)}`, step, t }));
       continue;
     }
     if (hideReportContent && looksLikeMemberReport(step.text)) continue;
     if (hideReportContent && looksLikeStructuredDump(step.text)) continue;
-    nodes.push((0, import_react7.createElement)("div", {
+    nodes.push((0, import_react8.createElement)("div", {
       key: `content-${String(index2)}`,
       "data-magic-ceo-process-content": true,
       style: {
@@ -12815,10 +12987,10 @@ function CeoProcessTimeline({
   }
   flushReasoning(live && steps.at(-1)?.kind === "reasoning");
   if (shouldShowThinkingTail(steps, live)) {
-    nodes.push((0, import_react7.createElement)(ThinkingTail, { key: "thinking-tail", t }));
+    nodes.push((0, import_react8.createElement)(ThinkingTail, { key: "thinking-tail", t }));
   }
   if (nodes.length === 0) return null;
-  return (0, import_react7.createElement)("div", {
+  return (0, import_react8.createElement)("div", {
     "data-magic-ceo-process": true,
     style: { ...wrap, display: "flex", flexDirection: "column", gap: 10 }
   }, ...nodes);
@@ -12858,18 +13030,18 @@ function badgeStyle(status) {
 }
 function sectionTitle(label, tone) {
   const color2 = tone === "danger" ? DANGER2 : tone === "warn" ? WARN : MUTED2;
-  return (0, import_react8.createElement)("h3", {
+  return (0, import_react9.createElement)("h3", {
     style: { margin: 0, fontSize: 12, fontWeight: 510, color: color2, lineHeight: "16px" }
   }, label);
 }
 function section(label, body, tone) {
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "section",
     {
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(label, tone),
-    (0, import_react8.createElement)("div", {
+    (0, import_react9.createElement)("div", {
       style: {
         ...wrap,
         fontSize: 13,
@@ -12884,10 +13056,10 @@ function CollapsibleTask({
   text,
   t
 }) {
-  const [open, setOpen] = (0, import_react8.useState)(false);
-  const [overflow, setOverflow] = (0, import_react8.useState)(false);
-  const measure = (0, import_react8.useRef)(null);
-  (0, import_react8.useLayoutEffect)(() => {
+  const [open, setOpen] = (0, import_react9.useState)(false);
+  const [overflow, setOverflow] = (0, import_react9.useState)(false);
+  const measure = (0, import_react9.useRef)(null);
+  (0, import_react9.useLayoutEffect)(() => {
     const el = measure.current;
     if (el === null) return;
     const check = () => {
@@ -12901,22 +13073,22 @@ function CollapsibleTask({
       observer.disconnect();
     };
   }, [text]);
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "section",
     {
       "data-magic-ceo-task": true,
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(t("field.task")),
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(
       "div",
       { style: { position: "relative", minWidth: 0 } },
-      (0, import_react8.createElement)(
+      (0, import_react9.createElement)(
         "div",
         {
           style: open || overflow === false ? void 0 : { maxHeight: TASK_COLLAPSE_H, overflow: "hidden" }
         },
-        (0, import_react8.createElement)("div", {
+        (0, import_react9.createElement)("div", {
           ref: measure,
           style: {
             ...wrap,
@@ -12927,7 +13099,7 @@ function CollapsibleTask({
           }
         }, text)
       ),
-      overflow && open === false ? (0, import_react8.createElement)("div", {
+      overflow && open === false ? (0, import_react9.createElement)("div", {
         "aria-hidden": true,
         style: {
           position: "absolute",
@@ -12940,7 +13112,7 @@ function CollapsibleTask({
         }
       }) : null
     ),
-    overflow ? (0, import_react8.createElement)("button", {
+    overflow ? (0, import_react9.createElement)("button", {
       type: "button",
       onClick: () => {
         setOpen((current) => !current);
@@ -12963,10 +13135,10 @@ function CollapsibleField({
   tone,
   t
 }) {
-  const [open, setOpen] = (0, import_react8.useState)(false);
-  const [overflow, setOverflow] = (0, import_react8.useState)(false);
-  const measure = (0, import_react8.useRef)(null);
-  (0, import_react8.useLayoutEffect)(() => {
+  const [open, setOpen] = (0, import_react9.useState)(false);
+  const [overflow, setOverflow] = (0, import_react9.useState)(false);
+  const measure = (0, import_react9.useRef)(null);
+  (0, import_react9.useLayoutEffect)(() => {
     const el = measure.current;
     if (el === null) return;
     const check = () => {
@@ -12980,27 +13152,27 @@ function CollapsibleField({
       observer.disconnect();
     };
   }, [body]);
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "div",
     {
       style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }
     },
-    (0, import_react8.createElement)("div", {
+    (0, import_react9.createElement)("div", {
       style: {
         fontSize: 12,
         fontWeight: 510,
         color: tone === "danger" ? DANGER2 : tone === "warn" ? WARN : MUTED2
       }
     }, label),
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(
       "div",
       { style: { position: "relative", minWidth: 0 } },
-      (0, import_react8.createElement)(
+      (0, import_react9.createElement)(
         "div",
         {
           style: open || overflow === false ? void 0 : { maxHeight: FIELD_COLLAPSE_H, overflow: "hidden" }
         },
-        (0, import_react8.createElement)("div", {
+        (0, import_react9.createElement)("div", {
           ref: measure,
           style: {
             ...wrap,
@@ -13011,7 +13183,7 @@ function CollapsibleField({
           }
         }, body)
       ),
-      overflow && open === false ? (0, import_react8.createElement)("div", {
+      overflow && open === false ? (0, import_react9.createElement)("div", {
         "aria-hidden": true,
         style: {
           position: "absolute",
@@ -13024,7 +13196,7 @@ function CollapsibleField({
         }
       }) : null
     ),
-    overflow ? (0, import_react8.createElement)("button", {
+    overflow ? (0, import_react9.createElement)("button", {
       type: "button",
       onClick: () => {
         setOpen((current) => !current);
@@ -13046,16 +13218,16 @@ function DebriefCard({
   details,
   t
 }) {
-  const [open, setOpen] = (0, import_react8.useState)(false);
+  const [open, setOpen] = (0, import_react9.useState)(false);
   const hasDetails = details.length > 0;
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "section",
     {
       "data-magic-ceo-debrief": true,
       style: { display: "flex", flexDirection: "column", gap: 6, minWidth: 0, marginBottom: 16 }
     },
     sectionTitle(t("debrief.title")),
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(
       "div",
       {
         style: {
@@ -13068,7 +13240,7 @@ function DebriefCard({
           background: surface.layer2
         }
       },
-      (0, import_react8.createElement)("div", {
+      (0, import_react9.createElement)("div", {
         style: {
           ...wrap,
           fontSize: 14,
@@ -13078,14 +13250,14 @@ function DebriefCard({
           whiteSpace: "pre-wrap"
         }
       }, summary),
-      hasDetails && open ? details.map((item) => (0, import_react8.createElement)(CollapsibleField, {
+      hasDetails && open ? details.map((item) => (0, import_react9.createElement)(CollapsibleField, {
         key: item.label,
         label: item.label,
         body: item.body,
         tone: item.tone,
         t
       })) : null,
-      hasDetails ? (0, import_react8.createElement)("button", {
+      hasDetails ? (0, import_react9.createElement)("button", {
         type: "button",
         onClick: () => {
           setOpen((current) => !current);
@@ -13109,10 +13281,10 @@ function InterveneControls({
   t
 }) {
   const running = member.status === "running";
-  const [note, setNote] = (0, import_react8.useState)("");
+  const [note, setNote] = (0, import_react9.useState)("");
   const draft = note.trim();
   const runId = member.runId ?? member.rawId ?? member.callId;
-  const button = (label, message, tone, disabled) => (0, import_react8.createElement)("button", {
+  const button = (label, message, tone, disabled) => (0, import_react9.createElement)("button", {
     type: "button",
     disabled,
     onClick: () => {
@@ -13130,20 +13302,20 @@ function InterveneControls({
       fontWeight: 510
     }
   }, label);
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "div",
     {
       "data-magic-ceo-intervene": member.callId,
       style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }
     },
-    (0, import_react8.createElement)("div", { style: { fontSize: 12, fontWeight: 510, color: MUTED2 } }, t("intervene.title")),
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)("div", { style: { fontSize: 12, fontWeight: 510, color: MUTED2 } }, t("intervene.title")),
+    (0, import_react9.createElement)(
       "div",
       { style: { display: "flex", gap: 6 } },
       running ? button(t("intervene.halt"), haltMessageFor(runId), "danger", false) : null,
       !running && member.report?.status === "unknown_after_restart" ? button(t("intervene.resume"), resumeMessageFor(runId), "accent", false) : null
     ),
-    running ? (0, import_react8.createElement)("textarea", {
+    running ? (0, import_react9.createElement)("textarea", {
       value: note,
       rows: 2,
       placeholder: t("intervene.placeholder"),
@@ -13163,7 +13335,7 @@ function InterveneControls({
         lineHeight: "18px"
       }
     }) : null,
-    running && draft !== "" ? (0, import_react8.createElement)("button", {
+    running && draft !== "" ? (0, import_react9.createElement)("button", {
       type: "button",
       onClick: () => {
         send(`Call ceo_replan with redirect run_id ${runId} and note: ${draft}`);
@@ -13209,7 +13381,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
   }));
   const showDebrief = summary !== "" || debriefDetails.length > 0;
   const showEmpty = filled.length === 0 && !member.lastMessage && process2.length === 0 && !live;
-  return (0, import_react8.createElement)(
+  return (0, import_react9.createElement)(
     "aside",
     {
       "data-magic-ceo-inspector": member.callId,
@@ -13223,12 +13395,12 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
         flexDirection: "column"
       }
     },
-    (0, import_react8.createElement)(
+    (0, import_react9.createElement)(
       "header",
       {
         style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0, marginBottom: 16 }
       },
-      (0, import_react8.createElement)("span", {
+      (0, import_react9.createElement)("span", {
         style: {
           ...wrap,
           flex: 1,
@@ -13241,11 +13413,11 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           color: PRIMARY2
         }
       }, displayCeoSeat(member, roster2)),
-      (0, import_react8.createElement)("span", {
+      (0, import_react9.createElement)("span", {
         style: badgeStyle(presentation.viewStatus)
       }, t(`status.${presentation.viewStatus}`))
     ),
-    live ? (0, import_react8.createElement)("div", {
+    live ? (0, import_react9.createElement)("div", {
       style: {
         marginBottom: 16,
         padding: "10px 12px",
@@ -13257,9 +13429,9 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
         color: PRIMARY2
       }
     }, t("inspector.live")) : null,
-    (0, import_react8.createElement)(CollapsibleTask, { text: member.task, t }),
+    (0, import_react9.createElement)(CollapsibleTask, { text: member.task, t }),
     member.dependsOn.length > 0 ? section(t("depends.on"), member.dependsOn.join(", ")) : null,
-    member.usage !== void 0 ? (0, import_react8.createElement)(
+    member.usage !== void 0 ? (0, import_react9.createElement)(
       "div",
       {
         "data-magic-ceo-usage": true,
@@ -13273,7 +13445,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           color: MUTED2
         }
       },
-      (0, import_react8.createElement)("span", {
+      (0, import_react9.createElement)("span", {
         style: {
           padding: "2px 8px",
           borderRadius: 99,
@@ -13284,9 +13456,9 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
           member.usage.totalTokens ?? member.usage.inputTokens + member.usage.outputTokens
         )
       })),
-      (0, import_react8.createElement)("span", null, t("tokens.input", { tokens: formatTokenCount(member.usage.inputTokens) })),
-      (0, import_react8.createElement)("span", null, t("tokens.output", { tokens: formatTokenCount(member.usage.outputTokens) })),
-      member.usage.cacheReadTokens !== void 0 ? (0, import_react8.createElement)("span", null, t("tokens.cache", { tokens: formatTokenCount(member.usage.cacheReadTokens) })) : null
+      (0, import_react9.createElement)("span", null, t("tokens.input", { tokens: formatTokenCount(member.usage.inputTokens) })),
+      (0, import_react9.createElement)("span", null, t("tokens.output", { tokens: formatTokenCount(member.usage.outputTokens) })),
+      member.usage.cacheReadTokens !== void 0 ? (0, import_react9.createElement)("span", null, t("tokens.cache", { tokens: formatTokenCount(member.usage.cacheReadTokens) })) : null
     ) : null,
     member.contextChannels !== void 0 && member.contextChannels.length > 0 ? section(
       t("context.title"),
@@ -13295,31 +13467,31 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       ).join("\n")
     ) : null,
     member.redirectedNote !== void 0 ? section(t("intervene.redirected"), member.redirectedNote, "warn") : null,
-    onIntervene !== void 0 && (member.status === "running" || presentation.viewStatus === "unknown_after_restart") ? (0, import_react8.createElement)(InterveneControls, {
+    onIntervene !== void 0 && (member.status === "running" || presentation.viewStatus === "unknown_after_restart") ? (0, import_react9.createElement)(InterveneControls, {
       member,
       send: (message) => {
         onIntervene("halt", message);
       },
       t
     }) : null,
-    process2.length > 0 || live ? (0, import_react8.createElement)(
+    process2.length > 0 || live ? (0, import_react9.createElement)(
       "div",
       { style: { marginBottom: 16 } },
-      (0, import_react8.createElement)(CeoProcessTimeline, {
+      (0, import_react9.createElement)(CeoProcessTimeline, {
         steps: process2,
         live,
         hideReportContent: true,
         t
       })
     ) : null,
-    presentation.viewStatus === "unknown_after_restart" ? (0, import_react8.createElement)("div", {
+    presentation.viewStatus === "unknown_after_restart" ? (0, import_react9.createElement)("div", {
       style: { marginBottom: 16, fontSize: 12, color: MUTED2 }
-    }, t("inspector.unknown")) : showEmpty ? (0, import_react8.createElement)("div", {
+    }, t("inspector.unknown")) : showEmpty ? (0, import_react9.createElement)("div", {
       style: { marginBottom: 16, fontSize: 12, color: MUTED2 }
     }, t(
       member.status === "queued" ? "inspector.queued" : "inspector.noReport"
     )) : null,
-    presentation.needsDecision ? (0, import_react8.createElement)("div", {
+    presentation.needsDecision ? (0, import_react9.createElement)("div", {
       style: {
         marginBottom: 16,
         padding: "10px 12px",
@@ -13332,7 +13504,7 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       }
     }, t("inspector.decisionInChat")) : null,
     presentation.hasBlocker && report?.risksOrBlockers ? section(t("badge.blocker"), report.risksOrBlockers, "danger") : null,
-    showDebrief ? (0, import_react8.createElement)(DebriefCard, {
+    showDebrief ? (0, import_react9.createElement)(DebriefCard, {
       summary: summary || t("field.conclusion"),
       details: debriefDetails,
       t
@@ -13352,12 +13524,12 @@ function nextStickState(stuck, gap) {
   return gap < STICK_ATTACH_PX;
 }
 function useStickToBottom(resetKey, followOnReset) {
-  const scrollRef = (0, import_react9.useRef)(null);
-  const contentRef = (0, import_react9.useRef)(null);
-  const stickRef = (0, import_react9.useRef)(true);
-  const followRef = (0, import_react9.useRef)(followOnReset);
+  const scrollRef = (0, import_react10.useRef)(null);
+  const contentRef = (0, import_react10.useRef)(null);
+  const stickRef = (0, import_react10.useRef)(true);
+  const followRef = (0, import_react10.useRef)(followOnReset);
   followRef.current = followOnReset;
-  const [atBottom, setAtBottom] = (0, import_react9.useState)(true);
+  const [atBottom, setAtBottom] = (0, import_react10.useState)(true);
   const applyStick = (stuck) => {
     stickRef.current = stuck;
     setAtBottom(stuck);
@@ -13371,7 +13543,7 @@ function useStickToBottom(resetKey, followOnReset) {
     applyStick(true);
     scrollToBottom();
   };
-  (0, import_react9.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     const el = scrollRef.current;
     if (el === null) return;
     const onScroll = () => {
@@ -13387,7 +13559,7 @@ function useStickToBottom(resetKey, followOnReset) {
       el.removeEventListener("wheel", onWheel);
     };
   }, [resetKey]);
-  (0, import_react9.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     const content = contentRef.current;
     const viewport = scrollRef.current;
     if (content === null || typeof ResizeObserver === "undefined") return;
@@ -13408,7 +13580,7 @@ function useStickToBottom(resetKey, followOnReset) {
       observer.disconnect();
     };
   }, [resetKey]);
-  (0, import_react9.useLayoutEffect)(() => {
+  (0, import_react10.useLayoutEffect)(() => {
     if (followRef.current) {
       applyStick(true);
       scrollToBottom();
@@ -13424,7 +13596,7 @@ function ToBottomButton({
   onClick,
   label
 }) {
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "button",
     {
       type: "button",
@@ -13450,7 +13622,7 @@ function ToBottomButton({
         cursor: "pointer"
       }
     },
-    (0, import_react9.createElement)("svg", {
+    (0, import_react10.createElement)("svg", {
       "aria-hidden": true,
       width: 16,
       height: 16,
@@ -13460,7 +13632,7 @@ function ToBottomButton({
       strokeWidth: 2,
       strokeLinecap: "round",
       strokeLinejoin: "round"
-    }, (0, import_react9.createElement)("path", { d: "m6 9 6 6 6-6" }))
+    }, (0, import_react10.createElement)("path", { d: "m6 9 6 6 6-6" }))
   );
 }
 function attentionTone(kind) {
@@ -13478,7 +13650,7 @@ function attentionPreview(member, kind) {
   return member.report?.notDone ?? member.lastMessage ?? member.task;
 }
 function rowButton(key, title, preview, meta, tone, onSelect) {
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "button",
     {
       key,
@@ -13498,11 +13670,11 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
         cursor: "pointer"
       }
     },
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8 } },
-      (0, import_react9.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, title),
-      (0, import_react9.createElement)("span", {
+      (0, import_react10.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, title),
+      (0, import_react10.createElement)("span", {
         style: {
           marginLeft: "auto",
           fontSize: 11,
@@ -13510,7 +13682,7 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
         }
       }, meta)
     ),
-    (0, import_react9.createElement)("div", {
+    (0, import_react10.createElement)("div", {
       style: {
         fontSize: 12,
         lineHeight: "18px",
@@ -13527,17 +13699,17 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
 function overview(roster2, t) {
   const attention = ceoAttentionItems(roster2);
   if (roster2.length === 0) {
-    return (0, import_react9.createElement)("div", {
+    return (0, import_react10.createElement)("div", {
       style: { fontSize: 13, lineHeight: "20px", color: ink.tertiary }
     }, t("workspace.empty"));
   }
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "div",
     { style: { display: "flex", flexDirection: "column", gap: 16 } },
-    attention.length > 0 ? (0, import_react9.createElement)(
+    attention.length > 0 ? (0, import_react10.createElement)(
       "section",
       { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      (0, import_react9.createElement)("div", {
+      (0, import_react10.createElement)("div", {
         style: { fontSize: 12, fontWeight: 510, color: ink.tertiary }
       }, t("attention.title")),
       ...attention.map((item) => rowButton(
@@ -13551,10 +13723,10 @@ function overview(roster2, t) {
         }
       ))
     ) : null,
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)(
       "section",
       { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      (0, import_react9.createElement)("div", {
+      (0, import_react10.createElement)("div", {
         style: { fontSize: 12, fontWeight: 510, color: ink.tertiary }
       }, t("roster.title")),
       ...roster2.map((member) => {
@@ -13573,9 +13745,9 @@ function overview(roster2, t) {
     )
   );
 }
-function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
-  const selected3 = (0, import_react9.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
-  const roster2 = (0, import_react9.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
+function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, t }) {
+  const selected3 = (0, import_react10.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
+  const roster2 = (0, import_react10.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
   const tabActions = useTabInfo().tab.actions;
   const close = () => {
     if (selected3 !== null) {
@@ -13584,7 +13756,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
     }
     tabActions.close();
   };
-  const inspector = selected3 === null ? null : (0, import_react9.createElement)(CeoMemberInspector, {
+  const inspector = selected3 === null ? null : (0, import_react10.createElement)(CeoMemberInspector, {
     key: selected3.callId,
     member: selected3,
     roster: roster2,
@@ -13599,7 +13771,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
     selected3?.callId ?? sessionId ?? "",
     selected3?.status === "running"
   );
-  return (0, import_react9.createElement)(
+  return (0, import_react10.createElement)(
     "div",
     {
       "data-magic-ceo-workspace": true,
@@ -13615,7 +13787,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
         color: ink.primary
       }
     },
-    selected3 === null ? (0, import_react9.createElement)(
+    selected3 === null ? (0, import_react10.createElement)(
       "header",
       {
         style: {
@@ -13626,7 +13798,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           borderBottom: `0.5px solid ${line.subtle}`
         }
       },
-      (0, import_react9.createElement)("div", {
+      (0, import_react10.createElement)("div", {
         style: {
           overflow: "hidden",
           fontSize: 14,
@@ -13636,7 +13808,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           whiteSpace: "nowrap"
         }
       }, t("workspace.title")),
-      (0, import_react9.createElement)("button", {
+      (0, import_react10.createElement)("button", {
         type: "button",
         "aria-label": t("workspace.close"),
         onClick: close,
@@ -13652,7 +13824,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           fontSize: 11
         }
       }, t("workspace.close"))
-    ) : (0, import_react9.createElement)(
+    ) : (0, import_react10.createElement)(
       "div",
       {
         style: {
@@ -13661,7 +13833,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           padding: "8px 12px 0"
         }
       },
-      (0, import_react9.createElement)("button", {
+      (0, import_react10.createElement)("button", {
         type: "button",
         "aria-label": t("workspace.close"),
         onClick: close,
@@ -13678,7 +13850,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
         }
       }, "\xD7")
     ),
-    (0, import_react9.createElement)(
+    (0, import_react10.createElement)(
       "div",
       {
         style: {
@@ -13688,7 +13860,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           minHeight: 0
         }
       },
-      (0, import_react9.createElement)(
+      (0, import_react10.createElement)(
         "div",
         {
           ref: scrollRef,
@@ -13700,9 +13872,19 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
             overflowY: "auto"
           }
         },
-        (0, import_react9.createElement)("div", { ref: contentRef }, selected3 === null ? overview(roster2, t) : inspector)
+        (0, import_react10.createElement)(
+          "div",
+          { ref: contentRef },
+          selected3 === null ? overview(roster2, t) : inspector,
+          (0, import_react10.createElement)(
+            "div",
+            { style: { marginTop: 16, borderTop: `0.5px solid ${line.subtle}`, paddingTop: 8 } },
+            (0, import_react10.createElement)("div", { style: { fontSize: 12, fontWeight: 510, marginBottom: 4, color: ink.secondary } }, t("tasks.title")),
+            (0, import_react10.createElement)(TaskBoardCard, { sessionId, api: taskBoard, t })
+          )
+        )
       ),
-      selected3 !== null && atBottom === false ? (0, import_react9.createElement)(ToBottomButton, { onClick: jumpToBottom, label: t("workspace.toBottom") }) : null
+      selected3 !== null && atBottom === false ? (0, import_react10.createElement)(ToBottomButton, { onClick: jumpToBottom, label: t("workspace.toBottom") }) : null
     )
   );
 }
@@ -13953,6 +14135,16 @@ var zh = {
   "process.thought.show": "\u601D\u8003",
   "process.thought.hide": "\u6536\u8D77\u601D\u8003",
   "workspace.toBottom": "\u56DE\u5230\u5E95\u90E8",
+  "tasks.title": "\u4EFB\u52A1\u677F",
+  "tasks.loading": "\u4EFB\u52A1\u677F\u52A0\u8F7D\u4E2D\u2026",
+  "tasks.unavailable": "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528\uFF08\u5B98\u65B9\u56E2\u961F\u670D\u52A1\u672A\u5C31\u7EEA\uFF09",
+  "tasks.empty": "\u4EFB\u52A1\u677F\u4E0A\u8FD8\u6CA1\u6709\u4EFB\u52A1",
+  "tasks.create": "\u65B0\u5EFA",
+  "tasks.subject": "\u65B0\u4EFB\u52A1\u6807\u9898",
+  "tasks.complete": "\u5B8C\u6210",
+  "tasks.status.pending": "\u5F85\u5904\u7406",
+  "tasks.status.in_progress": "\u8FDB\u884C\u4E2D",
+  "tasks.status.completed": "\u5DF2\u5B8C\u6210",
   "process.fetch.http": "HTTP",
   "process.fetch.open": "\u6253\u5F00\u539F\u9875",
   "process.fetch.empty": "\uFF08\u65E0\u6B63\u6587\uFF09",
@@ -14069,6 +14261,16 @@ var en = {
   "process.thought.show": "Thought",
   "process.thought.hide": "Hide Thought",
   "workspace.toBottom": "Back to bottom",
+  "tasks.title": "Task board",
+  "tasks.loading": "Loading the task board\u2026",
+  "tasks.unavailable": "Task board unavailable (Agent Teams service not ready)",
+  "tasks.empty": "No tasks on the board yet",
+  "tasks.create": "Create",
+  "tasks.subject": "New task title",
+  "tasks.complete": "Done",
+  "tasks.status.pending": "pending",
+  "tasks.status.in_progress": "in progress",
+  "tasks.status.completed": "completed",
   "process.fetch.http": "HTTP",
   "process.fetch.open": "Open page",
   "process.fetch.empty": "(no content)",
@@ -14171,12 +14373,30 @@ function registerCeoUi(ctx, components) {
     key: "ceo_delegate",
     locale: "magicCeo"
   }, components.row));
+  const readAgentTeams = () => {
+    const reflect = ctx.reflect;
+    const remote = reflect?.get("remote", false);
+    if (remote?.agentTeams === void 0) {
+      throw new Error("\u4EFB\u52A1\u677F\u901A\u9053\u672A\u5C31\u7EEA\uFF08remote.agentTeams \u672A\u6302\u8F7D\uFF09");
+    }
+    return remote.agentTeams;
+  };
+  const leadSessionIdOf = (sessionId) => {
+    const parent = ctx.sessions.binding?.(sessionId)?.session?.getSnapshot?.().subagent?.address?.parentSessionId;
+    return parent ?? sessionId;
+  };
+  const taskBoardApi = {
+    view: async (sessionId) => await readAgentTeams().view(leadSessionIdOf(sessionId)),
+    createTask: async (sessionId, input) => await readAgentTeams().createTask(leadSessionIdOf(sessionId), input),
+    updateTask: async (sessionId, input) => await readAgentTeams().updateTask(leadSessionIdOf(sessionId), input)
+  };
   ctx.slots.inject("sidebar.right.pane.tab", () => ctx.slots.register({
     name: "sidebar.right.pane.tab",
     key: CEO_MEMBER_TAB_ID,
     locale: "magicCeo",
     inject: (sessionId) => ({
       sessionId,
+      taskBoard: taskBoardApi,
       sendIntervention: (message) => {
         void promptSession(sessionId, message);
       }

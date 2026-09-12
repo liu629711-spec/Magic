@@ -172,6 +172,13 @@ ${xyflowCss}
 .magic-ceo-canvas .react-flow__attribution { display: none; }
 .magic-ceo-node-face {
   animation: magic-ceo-node-enter 0.28s ease-out both;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+/* 整卡可点：光标 + hover 光圈（点击任意节点打开成员工作区）。 */
+.magic-ceo-canvas .react-flow__node { cursor: pointer; }
+.magic-ceo-canvas .react-flow__node:hover { z-index: 1; }
+.magic-ceo-canvas .react-flow__node:hover .magic-ceo-node-face {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 20%, transparent);
 }
 @keyframes magic-ceo-node-enter {
   from { opacity: 0; transform: scale(0.92); }
@@ -473,7 +480,7 @@ function GoalNode({ data }: NodeProps<Node<GoalNodeData>>) {
   return h('div', {
     'data-magic-ceo-node': 'goal',
     className: `magic-ceo-node-face ${graphNodeDimClass(dimmed)}`,
-    style: { ...cardStyle(false, false, undefined, true), cursor: 'default', ...faceStyle(data.enterIndex) },
+    style: { ...cardStyle(false, false, undefined, true), ...faceStyle(data.enterIndex) },
   },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
       endpointAvatar('goal', 'queued'),

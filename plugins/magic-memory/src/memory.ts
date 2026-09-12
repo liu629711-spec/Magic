@@ -6,6 +6,7 @@
  */
 
 import type { MagicTable } from './store.ts'
+import { isVisibleOnChain } from './scope.ts'
 import {
   makeMemoryRecord,
   type MemoryAudience,
@@ -44,8 +45,7 @@ export class MemoryNotFoundError extends Error {
 export function isVisibleTo(record: MemoryRecord, audience: MemoryAudience): boolean {
   // 'member' 受众只能看 member 可见的记忆；'ceo' 受众看全部（含 ceo 私有）。
   if (record.disputed) return false
-  if (record.audience === 'member') return true
-  return audience === 'ceo'
+  return isVisibleOnChain(record.audience, audience)
 }
 
 export class MemoryStore {
@@ -73,6 +73,13 @@ export class MemoryStore {
     for (const [, record] of this.table.entries()) {
       if (isVisibleTo(record, audience)) out.push(record)
     }
+    return out.sort(byUpdatedDesc)
+  }
+
+  /** 维护专用：枚举全部记录（含争议，不做受众过滤）——清扫争议滞留需要看到它们。 */
+  listAll(): MemoryRecord[] {
+    const out: MemoryRecord[] = []
+    for (const [, record] of this.table.entries()) out.push(record)
     return out.sort(byUpdatedDesc)
   }
 

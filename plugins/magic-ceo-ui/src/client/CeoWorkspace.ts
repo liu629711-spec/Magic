@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ceoAttentionItems, displayCeoSeat, presentCeoMember, type CeoAttentionKind, type CeoTeamMember } from '../team.ts'
+import { TaskBoardCard, type TaskBoardApi } from './TaskBoard.ts'
 import { CeoMemberInspector } from './CeoMemberInspector.ts'
 import { ink, line, surface } from './theme.ts'
 import {
@@ -24,6 +25,8 @@ export interface CeoWorkspaceProps {
   useTabInfo: () => { tab: { actions: { close: () => void } } }
   /** Send a per-member intervention (halt/redirect/resume) into the parent chat. */
   sendIntervention?: (message: string) => void
+  /** 官方 agent-team 任务板通道（remote.agentTeams）；缺席时任务板整体降级隐藏。 */
+  taskBoard?: TaskBoardApi
   t: (key: string, params?: Record<string, unknown>) => string
 }
 
@@ -283,7 +286,7 @@ function overview(
   )
 }
 
-export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }: CeoWorkspaceProps) {
+export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, t }: CeoWorkspaceProps) {
   const selected = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember)
   const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster)
   const tabActions = useTabInfo().tab.actions
@@ -411,7 +414,13 @@ export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }: Ceo
         overflowY: 'auto',
       },
     },
-      h('div', { ref: contentRef }, selected === null ? overview(roster, t) : inspector),
+      h('div', { ref: contentRef },
+        selected === null ? overview(roster, t) : inspector,
+        h('div', { style: { marginTop: 16, borderTop: `0.5px solid ${line.subtle}`, paddingTop: 8 } },
+          h('div', { style: { fontSize: 12, fontWeight: 510, marginBottom: 4, color: ink.secondary } }, t('tasks.title')),
+          h(TaskBoardCard, { sessionId, api: taskBoard, t }),
+        ),
+      ),
     ),
     selected !== null && atBottom === false
       ? h(ToBottomButton, { onClick: jumpToBottom, label: t('workspace.toBottom') })

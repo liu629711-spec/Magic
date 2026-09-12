@@ -1,4 +1,5 @@
 import { ceoMemberReportDefinition, ceoTeamDefinition } from './definition.ts'
+import type { TaskBoardApi } from './TaskBoard.ts'
 
 export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight']
 
@@ -61,6 +62,16 @@ export const zh = {
   'process.thought.show': '思考',
   'process.thought.hide': '收起思考',
   'workspace.toBottom': '回到底部',
+  'tasks.title': '任务板',
+  'tasks.loading': '任务板加载中…',
+  'tasks.unavailable': '任务板不可用（官方团队服务未就绪）',
+  'tasks.empty': '任务板上还没有任务',
+  'tasks.create': '新建',
+  'tasks.subject': '新任务标题',
+  'tasks.complete': '完成',
+  'tasks.status.pending': '待处理',
+  'tasks.status.in_progress': '进行中',
+  'tasks.status.completed': '已完成',
   'process.fetch.http': 'HTTP',
   'process.fetch.open': '打开原页',
   'process.fetch.empty': '（无正文）',
@@ -178,6 +189,16 @@ export const en = {
   'process.thought.show': 'Thought',
   'process.thought.hide': 'Hide Thought',
   'workspace.toBottom': 'Back to bottom',
+  'tasks.title': 'Task board',
+  'tasks.loading': 'Loading the task board…',
+  'tasks.unavailable': 'Task board unavailable (Agent Teams service not ready)',
+  'tasks.empty': 'No tasks on the board yet',
+  'tasks.create': 'Create',
+  'tasks.subject': 'New task title',
+  'tasks.complete': 'Done',
+  'tasks.status.pending': 'pending',
+  'tasks.status.in_progress': 'in progress',
+  'tasks.status.completed': 'completed',
   'process.fetch.http': 'HTTP',
   'process.fetch.open': 'Open page',
   'process.fetch.empty': '(no content)',
@@ -251,9 +272,25 @@ export interface CeoUiContext {
           content: Array<{ type: 'text'; text: string }>,
           mode: 'queue' | 'steer',
         ) => Promise<{ ok: boolean; error?: { message?: string } }>
+        /** 任务板按 lead 会话路由：成员子会话从这里读父会话 id（对齐官方面板）。 */
+        getSnapshot?: () => {
+          subagent?: {
+            address?: {
+              parentSessionId?: string
+            }
+          }
+        }
       }
     } | undefined
   }
+  /**
+   * 运行时按需注入（core-cordis 原生能力）：remote.agentTeams 由 ui-agent-team 的
+   * Remote contribution 挂载，点号命名空间不能走静态 inject 列表（loader 不支持），
+   * 必须照官方 client-ui-agent-team/mount.ts 的方式用 ctx.inject 在回调里取。
+   */
+  inject?: (names: readonly string[], fn: (scoped: {
+    remote?: { agentTeams?: TaskBoardApi }
+  }) => unknown) => unknown
   sidebarRightTabs: {
     register: (definition: {
       id: string
@@ -324,12 +361,37 @@ export function registerCeoUi(
   // Stage two of the tab: the body under the definition's id. The seat's
   // default inject supplies `useTabInfo` (tab.actions.close, tab.navigation);
   // the framework merges it with this spec's own inject.
+  // 任务板通道：remote.agentTeams 由 ui-agent-team 挂在 'remote' 服务上（兄弟 fiber，
+  // ctx.inject 的父链解析不到——实测 "cannot get property remote without inject"）。
+  // 改用 cordis reflect 服务的免注入读取（get('remote', false)，reflect.ts:226），
+  // 并在调用时惰性取命名空间（挂载时序不再敏感）；通道缺失时调用抛可读错误，
+  // 前端降级为「任务板不可用」。
+  const readAgentTeams = (): TaskBoardApi => {
+    const reflect = (ctx as unknown as {
+      reflect?: { get: (name: string, required: boolean) => unknown }
+    }).reflect
+    const remote = reflect?.get('remote', false) as { agentTeams?: TaskBoardApi } | undefined
+    if (remote?.agentTeams === undefined) {
+      throw new Error('任务板通道未就绪（remote.agentTeams 未挂载）')
+    }
+    return remote.agentTeams
+  }
+  const leadSessionIdOf = (sessionId: string): string => {
+    const parent = ctx.sessions.binding?.(sessionId)?.session?.getSnapshot?.().subagent?.address?.parentSessionId
+    return parent ?? sessionId
+  }
+  const taskBoardApi: TaskBoardApi = {
+    view: async (sessionId) => await readAgentTeams().view(leadSessionIdOf(sessionId)),
+    createTask: async (sessionId, input) => await readAgentTeams().createTask(leadSessionIdOf(sessionId), input),
+    updateTask: async (sessionId, input) => await readAgentTeams().updateTask(leadSessionIdOf(sessionId), input),
+  }
   ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
     name: 'sidebar.right.pane.tab',
     key: CEO_MEMBER_TAB_ID,
     locale: 'magicCeo',
     inject: (sessionId: string) => ({
       sessionId,
+      taskBoard: taskBoardApi,
       sendIntervention: (message: string) => { void promptSession(sessionId, message) },
     }),
   }, components.workspace))

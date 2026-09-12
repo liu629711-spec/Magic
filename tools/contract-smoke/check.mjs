@@ -28,6 +28,11 @@ const CORE_CORDIS_API = new Set([
   'clearInterval', 'bail', 'parallel', 'serial', 'all', 'collect',
 ])
 
+// Remote 命名空间：由官方插件在运行时挂载（remote.$mount(contribution)），静态扫描
+// 看不到 provide 调用，需要显式登记。挂载方与命名空间一一对应：
+//   remote.agentTeams —— ui-agent-team（已在 web.patch.yml 挂载）
+const RUNTIME_REMOTE_NAMESPACES = new Set(['remote.agentTeams'])
+
 // 递归列举目录下的所有文件。
 function* walk(dir) {
   let entries
@@ -485,8 +490,9 @@ export function contractSmoke(opts) {
   }
 
   const magicProvided = buildMagicProvided(pluginsRoot)
-  const available = new Set([...dsh.declared, ...dsh.provided, ...magicProvided])
+  const available = new Set([...dsh.declared, ...dsh.provided, ...magicProvided, ...RUNTIME_REMOTE_NAMESPACES])
   const sources = buildSources(dsh, magicProvided)
+  for (const name of RUNTIME_REMOTE_NAMESPACES) sources.set(name, 'runtime-remote')
 
   const pluginDirs = listPluginDirs(pluginsRoot)
   if (pluginDirs.length === 0) {
