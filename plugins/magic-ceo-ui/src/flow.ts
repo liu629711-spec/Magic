@@ -10,8 +10,15 @@ export const CEO_FLOW = {
   padY: 36,
 } as const
 
-export type CeoFlowNodeKind = 'goal' | 'member' | 'ceo'
+export type CeoFlowNodeKind = 'goal' | 'member' | 'ceo' | 'task'
 export type CeoFlowEdgeKind = 'goal' | 'depends' | 'report'
+
+/** 任务板节点在画布上的最小投影（来自官方 remote.agentTeams.view 的任务）。 */
+export interface CeoFlowTask {
+  readonly id: string
+  readonly subject: string
+  readonly status: 'pending' | 'in_progress' | 'completed' | 'deleted'
+}
 
 export interface CeoFlowBox {
   readonly x: number
@@ -24,6 +31,7 @@ export interface CeoFlowNode extends CeoFlowBox {
   readonly id: string
   readonly kind: CeoFlowNodeKind
   readonly member?: CeoTeamMember
+  readonly task?: CeoFlowTask
   readonly enterIndex: number
 }
 
@@ -52,6 +60,8 @@ export interface CeoFlowLayout {
   readonly nodes: readonly CeoFlowNode[]
   readonly edges: readonly CeoFlowEdge[]
   readonly lanes: readonly CeoFlowLane[]
+  /** 任务板泳道（有任务时才出现），画布底部横排。 */
+  readonly taskLane?: CeoFlowLane
 }
 
 export function ceoFlowMemberId(callId: string): string {
@@ -126,9 +136,16 @@ export function ceoFlowEdgePath(from: CeoFlowBox, to: CeoFlowBox): string {
   return `M ${String(x1)} ${String(y1)} C ${String(x1 + dx)} ${String(y1)}, ${String(x2 - dx)} ${String(y2)}, ${String(x2)} ${String(y2)}`
 }
 
-export function layoutCeoTeamFlow(members: readonly CeoTeamMember[]): CeoFlowLayout {
+export function layoutCeoTeamFlow(
+  members: readonly CeoTeamMember[],
+  tasks: readonly CeoFlowTask[] = [],
+): CeoFlowLayout {
   if (members.length === 0) {
-    return { width: 0, height: 0, nodes: [], edges: [], lanes: [] }
+    // 没有成员但有任务时：只渲染任务泳道。
+    if (tasks.length === 0) {
+      return { width: 0, height: 0, nodes: [], edges: [], lanes: [] }
+    }
+    return layoutTaskLaneOnly(tasks)
   }
 
   const memo = new Map<string, number>()
@@ -246,5 +263,84 @@ export function layoutCeoTeamFlow(members: readonly CeoTeamMember[]): CeoFlowLay
     })
   }
 
+  // 任务板泳道：画布底部横排（有任务时才出现）。
+  let taskLane: CeoFlowLane | undefined
+  if (tasks.length > 0) {
+    const laneGap = 36
+    const laneLabelH = 20
+    const laneY = height + laneGap
+    const perRow = Math.max(1, Math.floor((width - CEO_FLOW.padX * 2) / (CEO_FLOW.member.width + CEO_FLOW.columnGap)))
+    const taskRows = Math.ceil(tasks.length / perRow)
+    const taskNodeH = 64
+    for (const [index, task] of tasks.entries()) {
+      const row = Math.floor(index / perRow)
+      const col = index % perRow
+      nodes.push({
+        id: `task:${task.id}`,
+        kind: 'task',
+        task,
+        x: CEO_FLOW.padX + col * (CEO_FLOW.member.width + CEO_FLOW.columnGap),
+        y: laneY + laneLabelH + row * (taskNodeH + CEO_FLOW.rowGap),
+        enterIndex: memberColumnCount + 2 + index,
+        width: CEO_FLOW.member.width,
+        height: taskNodeH,
+      })
+    }
+    const taskLaneHeight = laneLabelH + taskRows * (taskNodeH + CEO_FLOW.rowGap)
+    taskLane = {
+      id: 'lane:tasks',
+      label: `任务板 · ${String(tasks.length)} 个任务`,
+      x: CEO_FLOW.padX - WAVE_PAD,
+      y: laneY - WAVE_PAD,
+      w: width - CEO_FLOW.padX * 2 + WAVE_PAD * 2,
+      h: taskLaneHeight + WAVE_PAD * 2,
+      labelX: CEO_FLOW.padX + 8,
+      labelY: laneY - WAVE_PAD,
+    }
+    return {
+      width,
+      height: laneY - WAVE_PAD + taskLaneHeight + WAVE_PAD * 2,
+      nodes,
+      edges,
+      lanes,
+      taskLane,
+    }
+  }
+
   return { width, height, nodes, edges, lanes }
+}
+
+/** 只渲染任务泳道的布局（无成员图时）。 */
+function layoutTaskLaneOnly(tasks: readonly CeoFlowTask[]): CeoFlowLayout {
+  const perRow = 4
+  const width = CEO_FLOW.padX * 2 + perRow * (CEO_FLOW.member.width + CEO_FLOW.columnGap)
+  const taskNodeH = 64
+  const nodes: CeoFlowNode[] = tasks.map((task, index) => ({
+    id: `task:${task.id}`,
+    kind: 'task',
+    task,
+    x: CEO_FLOW.padX + (index % perRow) * (CEO_FLOW.member.width + CEO_FLOW.columnGap),
+    y: CEO_FLOW.padY + 24 + Math.floor(index / perRow) * (taskNodeH + CEO_FLOW.rowGap),
+    enterIndex: index,
+    width: CEO_FLOW.member.width,
+    height: taskNodeH,
+  }))
+  const rows = Math.max(1, Math.ceil(tasks.length / perRow))
+  return {
+    width,
+    height: CEO_FLOW.padY * 2 + 24 + rows * (taskNodeH + CEO_FLOW.rowGap),
+    nodes,
+    edges: [],
+    lanes: [],
+    taskLane: {
+      id: 'lane:tasks',
+      label: `任务板 · ${String(tasks.length)} 个任务`,
+      x: CEO_FLOW.padX,
+      y: CEO_FLOW.padY,
+      w: width - CEO_FLOW.padX * 2,
+      h: rows * (taskNodeH + CEO_FLOW.rowGap) + 24,
+      labelX: CEO_FLOW.padX + 8,
+      labelY: CEO_FLOW.padY,
+    },
+  }
 }

@@ -2502,7 +2502,7 @@ function defaultTouchable() {
   return navigator.maxTouchPoints || "ontouchstart" in this;
 }
 function drag_default() {
-  var filter2 = defaultFilter, container = defaultContainer, subject = defaultSubject, touchable = defaultTouchable, gestures = {}, listeners2 = dispatch_default("start", "drag", "end"), active = 0, mousedownx, mousedowny, mousemoving, touchending, clickDistance2 = 0;
+  var filter2 = defaultFilter, container = defaultContainer, subject = defaultSubject, touchable = defaultTouchable, gestures = {}, listeners3 = dispatch_default("start", "drag", "end"), active = 0, mousedownx, mousedowny, mousemoving, touchending, clickDistance2 = 0;
   function drag(selection2) {
     selection2.on("mousedown.drag", mousedowned).filter(touchable).on("touchstart.drag", touchstarted).on("touchmove.drag", touchmoved, nonpassive).on("touchend.drag touchcancel.drag", touchended).style("touch-action", "none").style("-webkit-tap-highlight-color", "rgba(0,0,0,0)");
   }
@@ -2565,7 +2565,7 @@ function drag_default() {
     }
   }
   function beforestart(that, container2, event, d, identifier, touch) {
-    var dispatch2 = listeners2.copy(), p = pointer_default(touch || event, container2), dx, dy, s;
+    var dispatch2 = listeners3.copy(), p = pointer_default(touch || event, container2), dx, dy, s;
     if ((s = subject.call(that, new DragEvent("beforestart", {
       sourceEvent: event,
       target: drag,
@@ -2624,8 +2624,8 @@ function drag_default() {
     return arguments.length ? (touchable = typeof _ === "function" ? _ : constant_default2(!!_), drag) : touchable;
   };
   drag.on = function() {
-    var value = listeners2.on.apply(listeners2, arguments);
-    return value === listeners2 ? drag : value;
+    var value = listeners3.on.apply(listeners3, arguments);
+    return value === listeners3 ? drag : value;
   };
   drag.clickDistance = function(_) {
     return arguments.length ? (clickDistance2 = (_ = +_) * _, drag) : Math.sqrt(clickDistance2);
@@ -4227,7 +4227,7 @@ function defaultConstrain(transform2, extent, translateExtent) {
   );
 }
 function zoom_default2() {
-  var filter2 = defaultFilter2, extent = defaultExtent, constrain = defaultConstrain, wheelDelta2 = defaultWheelDelta, touchable = defaultTouchable2, scaleExtent = [0, Infinity], translateExtent = [[-Infinity, -Infinity], [Infinity, Infinity]], duration = 250, interpolate = zoom_default, listeners2 = dispatch_default("start", "zoom", "end"), touchstarting, touchfirst, touchending, touchDelay = 500, wheelDelay = 150, clickDistance2 = 0, tapDistance = 10;
+  var filter2 = defaultFilter2, extent = defaultExtent, constrain = defaultConstrain, wheelDelta2 = defaultWheelDelta, touchable = defaultTouchable2, scaleExtent = [0, Infinity], translateExtent = [[-Infinity, -Infinity], [Infinity, Infinity]], duration = 250, interpolate = zoom_default, listeners3 = dispatch_default("start", "zoom", "end"), touchstarting, touchfirst, touchending, touchDelay = 500, wheelDelay = 150, clickDistance2 = 0, tapDistance = 10;
   function zoom(selection2) {
     selection2.property("__zoom", defaultTransform).on("wheel.zoom", wheeled, { passive: false }).on("mousedown.zoom", mousedowned).on("dblclick.zoom", dblclicked).filter(touchable).on("touchstart.zoom", touchstarted).on("touchmove.zoom", touchmoved).on("touchend.zoom touchcancel.zoom", touchended).style("-webkit-tap-highlight-color", "rgba(0,0,0,0)");
   }
@@ -4339,7 +4339,7 @@ function zoom_default2() {
     },
     emit: function(type) {
       var d = select_default2(this.that).datum();
-      listeners2.call(
+      listeners3.call(
         type,
         this.that,
         new ZoomEvent(type, {
@@ -4347,7 +4347,7 @@ function zoom_default2() {
           target: zoom,
           type,
           transform: this.that.__zoom,
-          dispatch: listeners2
+          dispatch: listeners3
         }),
         d
       );
@@ -4497,8 +4497,8 @@ function zoom_default2() {
     return arguments.length ? (interpolate = _, zoom) : interpolate;
   };
   zoom.on = function() {
-    var value = listeners2.on.apply(listeners2, arguments);
-    return value === listeners2 ? zoom : value;
+    var value = listeners3.on.apply(listeners3, arguments);
+    return value === listeners3 ? zoom : value;
   };
   zoom.clickDistance = function(_) {
     return arguments.length ? (clickDistance2 = (_ = +_) * _, zoom) : Math.sqrt(clickDistance2);
@@ -7194,20 +7194,20 @@ var import_with_selector = __toESM(require_with_selector(), 1);
 var import_meta = {};
 var createStoreImpl = (createState) => {
   let state;
-  const listeners2 = /* @__PURE__ */ new Set();
+  const listeners3 = /* @__PURE__ */ new Set();
   const setState = (partial, replace) => {
     const nextState = typeof partial === "function" ? partial(state) : partial;
     if (!Object.is(nextState, state)) {
       const previousState = state;
       state = (replace != null ? replace : typeof nextState !== "object" || nextState === null) ? nextState : Object.assign({}, state, nextState);
-      listeners2.forEach((listener) => listener(state, previousState));
+      listeners3.forEach((listener) => listener(state, previousState));
     }
   };
   const getState = () => state;
   const getInitialState2 = () => initialState;
   const subscribe = (listener) => {
-    listeners2.add(listener);
-    return () => listeners2.delete(listener);
+    listeners3.add(listener);
+    return () => listeners3.delete(listener);
   };
   const destroy = () => {
     if ((import_meta.env ? import_meta.env.MODE : void 0) !== "production") {
@@ -7215,7 +7215,7 @@ var createStoreImpl = (createState) => {
         "[DEPRECATED] The `destroy` method will be unsupported in a future version. Instead use unsubscribe function returned by subscribe. Everything will be garbage-collected if store is garbage-collected."
       );
     }
-    listeners2.clear();
+    listeners3.clear();
   };
   const api = { setState, getState, getInitialState: getInitialState2, subscribe, destroy };
   const initialState = state = createState(setState, getState, api);
@@ -10633,9 +10633,12 @@ function stacked(count, nodeHeight, canvasHeight) {
   const top = CEO_FLOW.padY + Math.max(0, (canvasHeight - 2 * CEO_FLOW.padY - columnHeight) / 2);
   return Array.from({ length: count }, (_, index2) => top + index2 * (nodeHeight + CEO_FLOW.rowGap));
 }
-function layoutCeoTeamFlow(members) {
+function layoutCeoTeamFlow(members, tasks = []) {
   if (members.length === 0) {
-    return { width: 0, height: 0, nodes: [], edges: [], lanes: [] };
+    if (tasks.length === 0) {
+      return { width: 0, height: 0, nodes: [], edges: [], lanes: [] };
+    }
+    return layoutTaskLaneOnly(tasks);
   }
   const memo3 = /* @__PURE__ */ new Map();
   const columns = members.map((member) => columnOf(member, members, /* @__PURE__ */ new Set(), memo3));
@@ -10739,7 +10742,215 @@ function layoutCeoTeamFlow(members) {
       labelY: y0 - WAVE_PAD - 16
     });
   }
+  let taskLane;
+  if (tasks.length > 0) {
+    const laneGap = 36;
+    const laneLabelH = 20;
+    const laneY = height + laneGap;
+    const perRow = Math.max(1, Math.floor((width - CEO_FLOW.padX * 2) / (CEO_FLOW.member.width + CEO_FLOW.columnGap)));
+    const taskRows = Math.ceil(tasks.length / perRow);
+    const taskNodeH = 64;
+    for (const [index2, task] of tasks.entries()) {
+      const row = Math.floor(index2 / perRow);
+      const col = index2 % perRow;
+      nodes.push({
+        id: `task:${task.id}`,
+        kind: "task",
+        task,
+        x: CEO_FLOW.padX + col * (CEO_FLOW.member.width + CEO_FLOW.columnGap),
+        y: laneY + laneLabelH + row * (taskNodeH + CEO_FLOW.rowGap),
+        enterIndex: memberColumnCount + 2 + index2,
+        width: CEO_FLOW.member.width,
+        height: taskNodeH
+      });
+    }
+    const taskLaneHeight = laneLabelH + taskRows * (taskNodeH + CEO_FLOW.rowGap);
+    taskLane = {
+      id: "lane:tasks",
+      label: `\u4EFB\u52A1\u677F \xB7 ${String(tasks.length)} \u4E2A\u4EFB\u52A1`,
+      x: CEO_FLOW.padX - WAVE_PAD,
+      y: laneY - WAVE_PAD,
+      w: width - CEO_FLOW.padX * 2 + WAVE_PAD * 2,
+      h: taskLaneHeight + WAVE_PAD * 2,
+      labelX: CEO_FLOW.padX + 8,
+      labelY: laneY - WAVE_PAD
+    };
+    return {
+      width,
+      height: laneY - WAVE_PAD + taskLaneHeight + WAVE_PAD * 2,
+      nodes,
+      edges,
+      lanes,
+      taskLane
+    };
+  }
   return { width, height, nodes, edges, lanes };
+}
+function layoutTaskLaneOnly(tasks) {
+  const perRow = 4;
+  const width = CEO_FLOW.padX * 2 + perRow * (CEO_FLOW.member.width + CEO_FLOW.columnGap);
+  const taskNodeH = 64;
+  const nodes = tasks.map((task, index2) => ({
+    id: `task:${task.id}`,
+    kind: "task",
+    task,
+    x: CEO_FLOW.padX + index2 % perRow * (CEO_FLOW.member.width + CEO_FLOW.columnGap),
+    y: CEO_FLOW.padY + 24 + Math.floor(index2 / perRow) * (taskNodeH + CEO_FLOW.rowGap),
+    enterIndex: index2,
+    width: CEO_FLOW.member.width,
+    height: taskNodeH
+  }));
+  const rows = Math.max(1, Math.ceil(tasks.length / perRow));
+  return {
+    width,
+    height: CEO_FLOW.padY * 2 + 24 + rows * (taskNodeH + CEO_FLOW.rowGap),
+    nodes,
+    edges: [],
+    lanes: [],
+    taskLane: {
+      id: "lane:tasks",
+      label: `\u4EFB\u52A1\u677F \xB7 ${String(tasks.length)} \u4E2A\u4EFB\u52A1`,
+      x: CEO_FLOW.padX,
+      y: CEO_FLOW.padY,
+      w: width - CEO_FLOW.padX * 2,
+      h: rows * (taskNodeH + CEO_FLOW.rowGap) + 24,
+      labelX: CEO_FLOW.padX + 8,
+      labelY: CEO_FLOW.padY
+    }
+  };
+}
+
+// src/client/task-board-data.ts
+function taskMutationFailure(result) {
+  if (result === void 0) return "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528";
+  if (result.ok !== true) return result.error?.message ?? "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528";
+  const inner = result.value;
+  if (inner === void 0) return "\u64CD\u4F5C\u5931\u8D25";
+  if (inner.ok === true) return void 0;
+  return inner.error?.code === "team-task-conflict" ? `\u4EFB\u52A1\u5DF2\u88AB\u66F4\u65B0\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5\uFF08${inner.error.message ?? "team-task-conflict"}\uFF09` : inner.error?.message ?? "\u64CD\u4F5C\u5931\u8D25";
+}
+function taskRowsFromResult(result) {
+  if (result === void 0) return { kind: "loading", tasks: [] };
+  if (result.ok !== true) {
+    return { kind: "unavailable", tasks: [], message: result.error?.message };
+  }
+  const tasks = (result.value?.tasks ?? []).filter((task) => task.status !== "deleted");
+  return { kind: tasks.length === 0 ? "empty" : "ready", tasks };
+}
+function statusDotColor(status) {
+  if (status === "completed") return "var(--dsw-alias-state-success, #16a34a)";
+  if (status === "in_progress") return "var(--dsw-alias-state-business-primary, #3b82f6)";
+  return "var(--dsw-alias-border-l3, #6b6b7a)";
+}
+function taskRowOf(task) {
+  const blockedBy = task.blockedBy ?? [];
+  return {
+    title: task.subject,
+    statusText: task.status,
+    blockedByText: blockedBy.length === 0 ? "" : `\u963B\u585E\u4E8E\uFF1A${blockedBy.join("\u3001")}`,
+    completable: task.status !== "completed"
+  };
+}
+function completePayload(task) {
+  return { taskId: task.id, expectedRevision: task.revision, action: "complete" };
+}
+
+// src/client/task-board-store.ts
+var EMPTY_TASK_BOARD_SNAPSHOT = { tasks: [], loading: false };
+function getEmptyTaskBoardSnapshot() {
+  return EMPTY_TASK_BOARD_SNAPSHOT;
+}
+var snapshot = EMPTY_TASK_BOARD_SNAPSHOT;
+var boundSessionId;
+var listeners2 = /* @__PURE__ */ new Set();
+function notify2() {
+  for (const listener of listeners2) listener();
+}
+function sameTasks(left, right) {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  return left.every((task, index2) => {
+    const other = right[index2];
+    return other !== void 0 && task.id === other.id && task.subject === other.subject && task.status === other.status && task.revision === other.revision;
+  });
+}
+function commit(next) {
+  const previous = snapshot;
+  const tasks = sameTasks(next.tasks, previous.tasks) ? previous.tasks : next.tasks;
+  if (tasks === previous.tasks && next.loading === previous.loading && next.error === previous.error && next.selectedTaskId === previous.selectedTaskId) {
+    return;
+  }
+  snapshot = { tasks, loading: next.loading, error: next.error, selectedTaskId: next.selectedTaskId };
+  notify2();
+}
+function subscribeTaskBoard(listener) {
+  listeners2.add(listener);
+  return () => {
+    listeners2.delete(listener);
+  };
+}
+function getTaskBoardSnapshot() {
+  return snapshot;
+}
+function resetTaskBoardForSession(sessionId) {
+  if (boundSessionId === sessionId) return;
+  boundSessionId = sessionId;
+  commit(EMPTY_TASK_BOARD_SNAPSHOT);
+}
+function selectCeoTask(taskId) {
+  if (snapshot.selectedTaskId === taskId) return;
+  commit({ ...snapshot, selectedTaskId: taskId });
+}
+function applyView(sessionId, result) {
+  void sessionId;
+  if (result === void 0) {
+    commit({ ...snapshot, loading: false, error: "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528" });
+    return;
+  }
+  if (result.ok !== true) {
+    commit({ ...snapshot, loading: false, error: result.error?.message ?? "\u4EFB\u52A1\u677F\u4E0D\u53EF\u7528" });
+    return;
+  }
+  const tasks = (result.value?.tasks ?? []).filter((task) => task.status !== "deleted");
+  const selectedTaskId = snapshot.selectedTaskId !== void 0 && tasks.some((task) => task.id === snapshot.selectedTaskId) ? snapshot.selectedTaskId : void 0;
+  commit({ tasks, loading: false, error: void 0, selectedTaskId });
+}
+async function reloadTaskBoard(api, sessionId) {
+  resetTaskBoardForSession(sessionId);
+  if (snapshot.loading) return;
+  commit({ ...snapshot, loading: true });
+  try {
+    applyView(sessionId, await api.view(sessionId));
+  } catch (cause) {
+    commit({
+      ...snapshot,
+      loading: false,
+      error: cause instanceof Error ? cause.message : String(cause)
+    });
+  }
+}
+async function settleMutation(api, sessionId, envelope) {
+  const failure = taskMutationFailure(envelope);
+  if (failure === void 0) {
+    await reloadTaskBoard(api, sessionId);
+    return;
+  }
+  await reloadTaskBoard(api, sessionId);
+  commit({ ...snapshot, error: failure });
+  throw new Error(failure);
+}
+async function createTaskOnBoard(api, sessionId, subject) {
+  const envelope = await api.createTask(sessionId, {
+    subject,
+    description: subject,
+    blockedBy: [],
+    writeScopes: []
+  });
+  await settleMutation(api, sessionId, envelope);
+}
+async function completeTaskOnBoard(api, sessionId, taskId, expectedRevision) {
+  const envelope = await api.updateTask(sessionId, { taskId, expectedRevision, action: "complete" });
+  await settleMutation(api, sessionId, envelope);
 }
 
 // src/processView.ts
@@ -11614,10 +11825,54 @@ function CeoNode({ data }) {
     )
   );
 }
+var noopTaskBoardSubscribe = (listener) => {
+  void listener;
+  return () => void 0;
+};
+function TaskNode({ data }) {
+  const statusLabel = data.task.status === "completed" ? data.t("tasks.status.completed") : data.task.status === "in_progress" ? data.t("tasks.status.in_progress") : data.t("tasks.status.pending");
+  const dot = data.task.status === "completed" ? "var(--dsw-alias-state-success, #16a34a)" : data.task.status === "in_progress" ? "var(--dsw-alias-state-business-primary, #3b82f6)" : "var(--dsw-alias-border-l3, #6b6b7a)";
+  const done = data.task.status === "completed";
+  return (0, import_react5.createElement)(
+    "div",
+    {
+      "data-magic-ceo-node": "task",
+      "data-magic-ceo-task-node": data.task.id,
+      "data-status": data.task.status,
+      "data-selected": data.selected ? "true" : void 0,
+      className: graphNodeDimClass(false)
+    },
+    (0, import_react5.createElement)(
+      "div",
+      {
+        className: "magic-ceo-node-face",
+        style: {
+          boxSizing: "border-box",
+          width: 210,
+          height: 64,
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: `0.5px solid ${data.selected ? "var(--dsw-alias-state-business-primary, #3b82f6)" : "var(--dsw-alias-border-l2, #3a3a48)"}`,
+          background: done ? "color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 40%, transparent)" : "var(--dsw-alias-bg-base, #ffffff)"
+        }
+      },
+      (0, import_react5.createElement)(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 7 } },
+        (0, import_react5.createElement)("span", { "aria-hidden": true, style: { flex: "0 0 auto", width: 7, height: 7, borderRadius: 99, background: dot } }),
+        (0, import_react5.createElement)("span", {
+          style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? "line-through" : void 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+        }, data.task.subject)
+      ),
+      (0, import_react5.createElement)("div", { style: { marginTop: 3, fontSize: 11, color: ink.tertiary } }, statusLabel)
+    )
+  );
+}
 var nodeTypes = {
   goal: GoalNode,
   member: MemberNode,
-  ceo: CeoNode
+  ceo: CeoNode,
+  task: TaskNode
 };
 var edgeTypes = {
   flow: FlowEdge
@@ -11641,6 +11896,41 @@ function useElapsedSeconds(live) {
     };
   }, [live]);
   return live && startedRef.current !== null ? Math.max(0, Math.floor((Date.now() - startedRef.current) / 1e3)) : frozenRef.current;
+}
+function TaskLaneBand({ lane }) {
+  return (0, import_react5.createElement)(
+    ViewportPortal,
+    null,
+    (0, import_react5.createElement)(
+      import_react5.Fragment,
+      { key: lane.id },
+      (0, import_react5.createElement)("div", {
+        "data-magic-ceo-lane": lane.id,
+        style: {
+          position: "absolute",
+          transform: `translate(${String(lane.x)}px, ${String(lane.y)}px)`,
+          width: lane.w,
+          height: lane.h,
+          borderRadius: 12,
+          border: "1px solid color-mix(in srgb, var(--dsw-alias-border-l3, #4a4a58) 30%, transparent)",
+          background: "color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 55%, transparent)",
+          zIndex: -1,
+          pointerEvents: "none"
+        }
+      }),
+      (0, import_react5.createElement)("div", {
+        style: {
+          position: "absolute",
+          transform: `translate(${String(lane.labelX)}px, ${String(lane.labelY)}px)`,
+          fontSize: 11,
+          lineHeight: "16px",
+          fontWeight: 510,
+          color: ink.secondary,
+          pointerEvents: "none"
+        }
+      }, lane.label)
+    )
+  );
 }
 function WaveLanes({ lanes }) {
   if (lanes.length === 0) return null;
@@ -11711,8 +12001,21 @@ function hoverRelatedIds(hoveredNodeId, edges) {
   walk(downstream);
   return related;
 }
+var CANVAS_FIT_VIEW = { padding: 0.2, minZoom: 0.35, maxZoom: 1.6 };
+function RefitWhenMeasured() {
+  const { fitView } = useReactFlow();
+  const width = useStore((state) => state.width);
+  const height = useStore((state) => state.height);
+  const fitted = (0, import_react5.useRef)(false);
+  (0, import_react5.useEffect)(() => {
+    if (fitted.current || width <= 0 || height <= 0) return;
+    fitted.current = true;
+    void fitView({ ...CANVAS_FIT_VIEW });
+  }, [width, height, fitView]);
+  return null;
+}
 var Canvas = (0, import_react5.memo)(function Canvas2(props) {
-  const layout = layoutCeoTeamFlow(props.members);
+  const layout = layoutCeoTeamFlow(props.members, props.tasks);
   const sinkStatus = ceoTeamSinkStatus(props.members);
   const [hoveredId, setHoveredId] = (0, import_react5.useState)(null);
   const hoverState = (0, import_react5.useMemo)(() => ({
@@ -11740,6 +12043,20 @@ var Canvas = (0, import_react5.memo)(function Canvas2(props) {
           type: "ceo",
           position: { x: node.x, y: node.y },
           data: { status: sinkStatus, enterIndex: node.enterIndex, t: props.t },
+          width: node.width,
+          height: node.height,
+          style: { width: node.width, height: node.height },
+          draggable: false,
+          selectable: false
+        };
+      }
+      if (node.kind === "task") {
+        const task = node.task;
+        return {
+          id: node.id,
+          type: "task",
+          position: { x: node.x, y: node.y },
+          data: { task, selected: task.id === props.selectedTaskId, enterIndex: node.enterIndex, t: props.t },
           width: node.width,
           height: node.height,
           style: { width: node.width, height: node.height },
@@ -11790,7 +12107,7 @@ var Canvas = (0, import_react5.memo)(function Canvas2(props) {
       };
     });
     return { nodes, edges };
-  }, [layout, props.goalPreview, props.selectedCallId, props.t, sinkStatus, props.members]);
+  }, [layout, props.goalPreview, props.selectedCallId, props.t, sinkStatus, props.members, props.tasks, props.selectedTaskId]);
   const height = Math.min(520, Math.max(300, layout.height + 72));
   return (0, import_react5.createElement)(
     "div",
@@ -11819,9 +12136,9 @@ var Canvas = (0, import_react5.memo)(function Canvas2(props) {
           nodeTypes,
           edgeTypes,
           fitView: true,
-          fitViewOptions: { padding: 0.2, minZoom: 0.35, maxZoom: 1.6 },
-          minZoom: 0.35,
-          maxZoom: 1.6,
+          fitViewOptions: CANVAS_FIT_VIEW,
+          minZoom: CANVAS_FIT_VIEW.minZoom,
+          maxZoom: CANVAS_FIT_VIEW.maxZoom,
           panOnDrag: true,
           zoomOnScroll: true,
           zoomOnPinch: true,
@@ -11842,17 +12159,28 @@ var Canvas = (0, import_react5.memo)(function Canvas2(props) {
             if (node.type === "member") {
               const member = node.data.member;
               selectCeoMember(member);
+              selectCeoTask(void 0);
+              props.openWorkspace();
+              return;
+            }
+            if (node.type === "task") {
+              const task = node.data.task;
+              selectCeoTask(task.id);
+              selectCeoMember(null);
               props.openWorkspace();
               return;
             }
             if (node.type === "ceo") {
               selectCeoMember(null);
+              selectCeoTask(void 0);
               props.openWorkspace();
             }
           }
         },
+        (0, import_react5.createElement)(RefitWhenMeasured),
         (0, import_react5.createElement)(Background, { gap: 20, size: 1, color: "color-mix(in srgb, var(--dsw-alias-border-l2, #3a3a48) 45%, transparent)" }),
-        (0, import_react5.createElement)(WaveLanes, { lanes: layout.lanes })
+        (0, import_react5.createElement)(WaveLanes, { lanes: layout.lanes }),
+        layout.taskLane !== void 0 ? (0, import_react5.createElement)(TaskLaneBand, { lane: layout.taskLane }) : null
       )
     )
   );
@@ -11883,6 +12211,14 @@ function StatusIcon({ status }) {
 function CeoTeamGraph(props) {
   const selected3 = (0, import_react5.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
   const roster2 = (0, import_react5.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
+  const taskBoard = (0, import_react5.useSyncExternalStore)(
+    props.taskBoard?.subscribe ?? noopTaskBoardSubscribe,
+    props.taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot,
+    getEmptyTaskBoardSnapshot
+  );
+  (0, import_react5.useEffect)(() => {
+    props.taskBoard?.reload();
+  }, [props.taskBoard]);
   const turnMembers = props.node.data.members;
   const members = turnMembers.map(
     (member) => roster2.find((item) => item.callId === member.callId) ?? member
@@ -11995,6 +12331,10 @@ function CeoTeamGraph(props) {
           selectedCallId: selected3?.callId,
           goalPreview,
           openWorkspace: props.openWorkspace,
+          // 复用已订阅快照里的稳定数组（原先每次渲染都 getSnapshot().map(...)，
+          // 既重复读取又产出新引用 → 下游 memo/useMemo 全失效 → ReactFlow 每帧重排）。
+          tasks: taskBoard.tasks,
+          selectedTaskId: taskBoard.selectedTaskId,
           t: props.t
         })
       ) : (0, import_react5.createElement)("div", {
@@ -12014,35 +12354,6 @@ var import_react10 = require("react");
 
 // src/client/TaskBoard.ts
 var import_react7 = require("react");
-
-// src/client/task-board-data.ts
-function taskRowsFromResult(result) {
-  if (result === void 0) return { kind: "loading", tasks: [] };
-  if (result.ok !== true) {
-    return { kind: "unavailable", tasks: [], message: result.error?.message };
-  }
-  const tasks = (result.data.tasks ?? []).filter((task) => task.status !== "deleted");
-  return { kind: tasks.length === 0 ? "empty" : "ready", tasks };
-}
-function statusDotColor(status) {
-  if (status === "completed") return "var(--dsw-alias-state-success, #16a34a)";
-  if (status === "in_progress") return "var(--dsw-alias-state-business-primary, #3b82f6)";
-  return "var(--dsw-alias-border-l3, #6b6b7a)";
-}
-function taskRowOf(task) {
-  const blockedBy = task.blockedBy ?? [];
-  return {
-    title: task.subject,
-    statusText: task.status,
-    blockedByText: blockedBy.length === 0 ? "" : `\u963B\u585E\u4E8E\uFF1A${blockedBy.join("\u3001")}`,
-    completable: task.status !== "completed"
-  };
-}
-function completePayload(task) {
-  return { taskId: task.id, expectedRevision: task.revision, action: "complete" };
-}
-
-// src/client/TaskBoard.ts
 function TaskBoardCard({
   sessionId,
   api,
@@ -12052,25 +12363,36 @@ function TaskBoardCard({
   const [draft, setDraft] = (0, import_react7.useState)("");
   const [busy, setBusy] = (0, import_react7.useState)(false);
   const [error, setError] = (0, import_react7.useState)("");
+  const [attempt, setAttempt] = (0, import_react7.useState)(0);
+  const reload = async () => {
+    if (api === void 0 || sessionId === void 0) {
+      setState({ kind: "unavailable", tasks: [] });
+      return;
+    }
+    try {
+      setState(taskRowsFromResult(await api.view(sessionId)));
+      setError(void 0);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setState({ kind: "unavailable", tasks: [], message });
+      if (attempt < 3) {
+        window.setTimeout(() => {
+          setAttempt((value) => value + 1);
+        }, 2500);
+      }
+    }
+  };
   (0, import_react7.useEffect)(() => {
-    const reload = async () => {
-      if (api === void 0 || sessionId === void 0) {
-        setState({ kind: "unavailable", tasks: [] });
-        return;
-      }
-      try {
-        setState(taskRowsFromResult(await api.view(sessionId)));
-      } catch {
-        setState({ kind: "unavailable", tasks: [] });
-      }
-    };
     void reload();
-  }, [sessionId, api, busy]);
+  }, [sessionId, api, busy, attempt]);
   const run = async (operation) => {
     setBusy(true);
     setError("");
     try {
-      await operation();
+      const result = await operation();
+      if (result !== void 0 && result !== null && result.ok === false) {
+        setError(result.error?.message ?? "\u64CD\u4F5C\u5931\u8D25");
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -12103,7 +12425,34 @@ function TaskBoardCard({
         background: "rgba(255,255,255,0.03)"
       }
     },
-    state.kind === "loading" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.7, textAlign: "center", padding: "6px 0" } }, t("tasks.loading")) : state.kind === "unavailable" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, color: "rgba(220,120,120,1)", textAlign: "center", padding: "6px 0" } }, t("tasks.unavailable")) : state.kind === "empty" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.6, textAlign: "center", padding: "10px 0" } }, t("tasks.empty")) : (0, import_react7.createElement)(
+    state.kind === "loading" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.7, textAlign: "center", padding: "6px 0" } }, t("tasks.loading")) : state.kind === "unavailable" ? (0, import_react7.createElement)(
+      "div",
+      { style: { display: "flex", flexDirection: "column", gap: 4, alignItems: "center", padding: "6px 0", fontSize: 12, color: "rgba(220,120,120,1)" } },
+      (0, import_react7.createElement)(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8 } },
+        (0, import_react7.createElement)("span", null, t("tasks.unavailable")),
+        (0, import_react7.createElement)("button", {
+          type: "button",
+          disabled: busy,
+          onClick: () => {
+            void reload();
+          },
+          style: {
+            marginLeft: "auto",
+            border: "0.5px solid rgba(255,255,255,0.14)",
+            borderRadius: 6,
+            padding: "2px 8px",
+            cursor: busy ? "default" : "pointer",
+            fontSize: 11,
+            background: "transparent",
+            color: "inherit",
+            opacity: busy ? 0.5 : 1
+          }
+        }, t("tasks.retry"))
+      ),
+      state.message !== void 0 ? (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.85, textAlign: "center" } }, state.message) : null
+    ) : state.kind === "empty" ? (0, import_react7.createElement)("div", { style: { fontSize: 12, opacity: 0.6, textAlign: "center", padding: "10px 0" } }, t("tasks.empty")) : (0, import_react7.createElement)(
       "div",
       {
         style: { display: "flex", flexDirection: "column", gap: 3, maxHeight: 240, overflowY: "auto", margin: "-2px" }
@@ -12136,7 +12485,7 @@ function TaskBoardCard({
               style: { marginLeft: "auto", flex: "0 0 auto", border: 0, borderRadius: 6, padding: "2px 7px", cursor: busy ? "default" : "pointer", fontSize: 11, background: "transparent", color: "inherit", opacity: 0.55 }
             }, t("tasks.complete")) : null
           ),
-          row.blockedByByText === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByByText)
+          row.blockedByText === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByText)
         );
       })
     ),
@@ -12152,7 +12501,7 @@ function TaskBoardCard({
         },
         onKeyDown: (event) => {
           if (event.key === "Enter" && draft.trim() !== "" && !busy) {
-            void run(() => api.createTask(sessionId, { subject: draft.trim(), description: "", blockedBy: [], writeScopes: [] }));
+            void run(() => api.createTask(sessionId, { subject: draft.trim(), description: draft.trim(), blockedBy: [], writeScopes: [] }));
             setDraft("");
           }
         },
@@ -12179,6 +12528,35 @@ function TaskBoardCard({
       }, t("tasks.create"))
     ),
     error === "" ? null : (0, import_react7.createElement)("div", { style: { fontSize: 11, color: "rgba(220,120,120,1)" } }, error)
+  );
+}
+function TaskBoardDetail({
+  task,
+  onComplete,
+  t
+}) {
+  const done = task.status === "completed";
+  return (0, import_react7.createElement)(
+    "div",
+    {
+      "data-magic-ceo-task-detail": task.id,
+      style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderRadius: 10, border: "0.5px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }
+    },
+    (0, import_react7.createElement)(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 8 } },
+      (0, import_react7.createElement)("span", {
+        "aria-hidden": true,
+        style: { flex: "0 0 auto", width: 8, height: 8, borderRadius: 99, background: done ? "var(--dsw-alias-state-success, #16a34a)" : task.status === "in_progress" ? "var(--dsw-alias-state-business-primary, #3b82f6)" : "var(--dsw-alias-border-l3, #6b6b7a)" }
+      }),
+      (0, import_react7.createElement)("span", { style: { fontSize: 12, fontWeight: 510, textDecoration: done ? "line-through" : void 0 } }, task.subject),
+      !done && onComplete !== void 0 ? (0, import_react7.createElement)("button", {
+        type: "button",
+        onClick: onComplete,
+        style: { marginLeft: "auto", flex: "0 0 auto", border: 0, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, background: "var(--dsw-alias-state-business-primary, #3b82f6)", color: "#fff", fontWeight: 510 }
+      }, t("tasks.complete")) : null
+    ),
+    (0, import_react7.createElement)("div", { style: { fontSize: 11, opacity: 0.65 } }, t(`tasks.status.${done ? "completed" : task.status === "in_progress" ? "in_progress" : "pending"}`))
   );
 }
 
@@ -13548,6 +13926,8 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
 }
 
 // src/client/CeoWorkspace.ts
+var noopBoardSubscribe = () => () => {
+};
 var STICK_DETACH_PX = 80;
 var STICK_ATTACH_PX = 24;
 function distanceFromBottom(el) {
@@ -13779,7 +14159,9 @@ function overview(roster2, t) {
     )
   );
 }
-function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, t }) {
+function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, taskBoardApi, t }) {
+  const boardState = (0, import_react10.useSyncExternalStore)(taskBoard?.subscribe ?? noopBoardSubscribe, taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot, getEmptyTaskBoardSnapshot);
+  const selectedTask = boardState.selectedTaskId === void 0 ? void 0 : boardState.tasks.find((task) => task.id === boardState.selectedTaskId);
   const selected3 = (0, import_react10.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
   const roster2 = (0, import_react10.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
   const tabActions = useTabInfo().tab.actions;
@@ -13914,7 +14296,15 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, taskBoard, t })
             "div",
             { style: { marginTop: 16, borderTop: `0.5px solid ${line.subtle}`, paddingTop: 8 } },
             (0, import_react10.createElement)("div", { style: { fontSize: 12, fontWeight: 510, marginBottom: 4, color: ink.secondary } }, t("tasks.title")),
-            (0, import_react10.createElement)(TaskBoardCard, { sessionId, api: taskBoard, t })
+            selectedTask !== void 0 ? (0, import_react10.createElement)(TaskBoardDetail, {
+              key: selectedTask.id,
+              task: selectedTask,
+              onComplete: taskBoard === void 0 ? void 0 : () => {
+                void taskBoard.complete(selectedTask.id, selectedTask.revision);
+                taskBoard.reload();
+              },
+              t
+            }) : (0, import_react10.createElement)(TaskBoardCard, { sessionId, api: taskBoardApi, t })
           )
         )
       ),
@@ -14109,7 +14499,11 @@ var ceoMemberReportDefinition = {
 };
 
 // src/client/register.ts
-var inject = ["uiConversation", "slots", "sessions", "locale", "sidebarRightTabs", "sidebarRight"];
+var inject = ["uiConversation", "slots", "sessions", "locale", "sidebarRightTabs", "sidebarRight", "remote", "remote.agentTeams"];
+try {
+  window.sessionStorage.setItem("magic-ceo-lib", "v7-20260912");
+} catch {
+}
 var zh = {
   "graph.title": "CEO \u7F16\u6392\u56FE",
   "graph.empty": "\u8FD8\u6CA1\u6709\u6210\u5458",
@@ -14176,6 +14570,7 @@ var zh = {
   "tasks.create": "\u65B0\u5EFA",
   "tasks.subject": "\u65B0\u4EFB\u52A1\u6807\u9898",
   "tasks.complete": "\u5B8C\u6210",
+  "tasks.retry": "\u91CD\u8BD5",
   "tasks.status.pending": "\u5F85\u5904\u7406",
   "tasks.status.in_progress": "\u8FDB\u884C\u4E2D",
   "tasks.status.completed": "\u5DF2\u5B8C\u6210",
@@ -14302,6 +14697,7 @@ var en = {
   "tasks.create": "Create",
   "tasks.subject": "New task title",
   "tasks.complete": "Done",
+  "tasks.retry": "Retry",
   "tasks.status.pending": "pending",
   "tasks.status.in_progress": "in progress",
   "tasks.status.completed": "completed",
@@ -14390,7 +14786,9 @@ function registerCeoUi(ctx, components) {
     inject: () => ({
       openWorkspace: () => {
         ctx.sidebarRight.openTab(CEO_MEMBER_TAB_KIND);
-      }
+      },
+      sessionId: ctx.sessions.list?.getSnapshot().current,
+      taskBoard: taskBoardHandle
     })
   }, components.graph));
   ctx.slots.inject("conversation.input.dock", () => ctx.slots.register({
@@ -14407,29 +14805,40 @@ function registerCeoUi(ctx, components) {
     key: "ceo_delegate",
     locale: "magicCeo"
   }, components.row));
-  const readAgentTeams = () => {
-    const reflect = ctx.reflect;
-    const remote = reflect?.get("remote", false);
-    if (remote?.agentTeams === void 0) {
-      const remoteType = typeof remote;
-      const remoteKeys = remote !== null && remote !== void 0 ? Object.keys(remote).join(",") : "n/a";
-      const message = `\u4EFB\u52A1\u677F\u901A\u9053\u672A\u5C31\u7EEA\uFF1Areflect.get('remote')=${remoteType} keys=[${remoteKeys}] agentTeams=${typeof remote?.agentTeams}`;
-      try {
-        window.sessionStorage.setItem("magic-ceo-diag", message);
-      } catch {
-      }
-      throw new Error(message);
-    }
-    return remote.agentTeams;
-  };
   const leadSessionIdOf = (sessionId) => {
     const parent = ctx.sessions.binding?.(sessionId)?.session?.getSnapshot?.().subagent?.address?.parentSessionId;
     return parent ?? sessionId;
+  };
+  const readAgentTeams = () => {
+    const teams = ctx["remote.agentTeams"];
+    if (teams === void 0) {
+      throw new Error("\u4EFB\u52A1\u677F\u901A\u9053\u672A\u5C31\u7EEA\uFF08remote.agentTeams \u672A\u6CE8\u5165\uFF09");
+    }
+    return teams;
   };
   const taskBoardApi = {
     view: async (sessionId) => await readAgentTeams().view(leadSessionIdOf(sessionId)),
     createTask: async (sessionId, input) => await readAgentTeams().createTask(leadSessionIdOf(sessionId), input),
     updateTask: async (sessionId, input) => await readAgentTeams().updateTask(leadSessionIdOf(sessionId), input)
+  };
+  const swallow = () => void 0;
+  const taskBoardHandle = {
+    subscribe: subscribeTaskBoard,
+    getSnapshot: getTaskBoardSnapshot,
+    reload: () => {
+      const sessionId = ctx.sessions.list?.getSnapshot().current;
+      if (sessionId !== void 0) void reloadTaskBoard(taskBoardApi, sessionId);
+    },
+    create: (subject) => {
+      const sessionId = ctx.sessions.list?.getSnapshot().current;
+      if (sessionId === void 0) return Promise.resolve();
+      return createTaskOnBoard(taskBoardApi, sessionId, subject).catch(swallow);
+    },
+    complete: (taskId, revision) => {
+      const sessionId = ctx.sessions.list?.getSnapshot().current;
+      if (sessionId === void 0) return Promise.resolve();
+      return completeTaskOnBoard(taskBoardApi, sessionId, taskId, revision).catch(swallow);
+    }
   };
   ctx.slots.inject("sidebar.right.pane.tab", () => ctx.slots.register({
     name: "sidebar.right.pane.tab",
@@ -14437,12 +14846,18 @@ function registerCeoUi(ctx, components) {
     locale: "magicCeo",
     inject: (sessionId) => ({
       sessionId,
-      taskBoard: taskBoardApi,
+      // 两个面各司其职：句柄供订阅（画布点选任务 → 右坞详情），api 供卡片自加载列表。
+      taskBoard: taskBoardHandle,
+      taskBoardApi,
       sendIntervention: (message) => {
         void promptSession(sessionId, message);
       }
     })
   }, components.workspace));
+  try {
+    window.sessionStorage.setItem("magic-ceo-apply", "done-" + String(Date.now()));
+  } catch {
+  }
 }
 
 // src/client/index.ts

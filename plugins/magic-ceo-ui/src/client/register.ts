@@ -1,7 +1,11 @@
 import { ceoMemberReportDefinition, ceoTeamDefinition } from './definition.ts'
 import type { TaskBoardApi } from './TaskBoard.ts'
+import { getTaskBoardSnapshot, reloadTaskBoard, subscribeTaskBoard, createTaskOnBoard, completeTaskOnBoard } from './task-board-store.ts'
 
-export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight']
+export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.agentTeams']
+
+// 模块加载标记：用于确认浏览器拿到的是否为新构建（排查 lib 缓存）。
+try { window.sessionStorage.setItem('magic-ceo-lib', 'v7-20260912') } catch { /* 忽略 */ }
 
 export const zh = {
   'graph.title': 'CEO 编排图',
@@ -69,6 +73,7 @@ export const zh = {
   'tasks.create': '新建',
   'tasks.subject': '新任务标题',
   'tasks.complete': '完成',
+  'tasks.retry': '重试',
   'tasks.status.pending': '待处理',
   'tasks.status.in_progress': '进行中',
   'tasks.status.completed': '已完成',
@@ -196,6 +201,7 @@ export const en = {
   'tasks.create': 'Create',
   'tasks.subject': 'New task title',
   'tasks.complete': 'Done',
+  'tasks.retry': 'Retry',
   'tasks.status.pending': 'pending',
   'tasks.status.in_progress': 'in progress',
   'tasks.status.completed': 'completed',
@@ -342,6 +348,8 @@ export function registerCeoUi(
     locale: 'magicCeo',
     inject: () => ({
       openWorkspace: () => { ctx.sidebarRight.openTab(CEO_MEMBER_TAB_KIND) },
+      sessionId: ctx.sessions.list?.getSnapshot().current,
+      taskBoard: taskBoardHandle,
     }),
   }, components.graph))
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
@@ -361,42 +369,63 @@ export function registerCeoUi(
   // Stage two of the tab: the body under the definition's id. The seat's
   // default inject supplies `useTabInfo` (tab.actions.close, tab.navigation);
   // the framework merges it with this spec's own inject.
-  // 任务板通道：remote.agentTeams 由 ui-agent-team 挂在 'remote' 服务上（兄弟 fiber，
-  // ctx.inject 的父链解析不到——实测 "cannot get property remote without inject"）。
-  // 改用 cordis reflect 服务的免注入读取（get('remote', false)，reflect.ts:226），
-  // 并在调用时惰性取命名空间（挂载时序不再敏感）；通道缺失时调用抛可读错误，
-  // 前端降级为「任务板不可用」。
-  const readAgentTeams = (): TaskBoardApi => {
-    const reflect = (ctx as unknown as {
-      reflect?: { get: (name: string, required: boolean) => unknown }
-    }).reflect
-    const remote = reflect?.get('remote', false) as { agentTeams?: TaskBoardApi } | undefined
-    if (remote?.agentTeams === undefined) {
-      const remoteType = typeof remote
-      const remoteKeys = remote !== null && remote !== undefined ? Object.keys(remote as object).join(',') : 'n/a'
-      const message = `任务板通道未就绪：reflect.get('remote')=${remoteType} keys=[${remoteKeys}] agentTeams=${typeof (remote as { agentTeams?: unknown } | undefined)?.agentTeams}`
-      try { window.sessionStorage.setItem('magic-ceo-diag', message) } catch { /* 忽略 */ }
-      throw new Error(message)
-    }
-    return remote.agentTeams
-  }
+  // 任务板通道：官方 ui-agent-team/mount.ts 的静态 inject 就包含 'remote'
+  // （父服务），其 apply 内 await $mount(agentTeamsRemote) 后，
+  // ctx.remote.agentTeams 命名空间即可用；本插件的 apply 晚于其挂载，
+  // 调用发生在渲染期，时序安全。缺席时调用抛可读错误，前端降级。
   const leadSessionIdOf = (sessionId: string): string => {
     const parent = ctx.sessions.binding?.(sessionId)?.session?.getSnapshot?.().subagent?.address?.parentSessionId
     return parent ?? sessionId
+  }
+  const readAgentTeams = (): TaskBoardApi => {
+    // 命名空间是独立注入服务名 'remote.agentTeams'（ui-agent-team $mount 注册）；
+    // 属性访问 ctx.remote.agentTeams 会被 cordis 代理拦截并要求注入该名。
+    const teams = (ctx as unknown as Record<string, TaskBoardApi | undefined>)['remote.agentTeams']
+    if (teams === undefined) {
+      throw new Error('任务板通道未就绪（remote.agentTeams 未注入）')
+    }
+    return teams
   }
   const taskBoardApi: TaskBoardApi = {
     view: async (sessionId) => await readAgentTeams().view(leadSessionIdOf(sessionId)),
     createTask: async (sessionId, input) => await readAgentTeams().createTask(leadSessionIdOf(sessionId), input),
     updateTask: async (sessionId, input) => await readAgentTeams().updateTask(leadSessionIdOf(sessionId), input),
   }
+  // 任务板句柄：画布（chat.node）与工作区（右坞）共用的订阅/操作面。
+  // 会话 id 从 sessions.list 取当前会话（画布只出现在 lead 会话视图）。
+  // 写操作失败时 store 已把原因写入快照（UI 呈现），这里吞掉异常只为
+  // 避免 unhandled rejection 变成控制台噪声。
+  const swallow = (): undefined => undefined
+  const taskBoardHandle = {
+    subscribe: subscribeTaskBoard,
+    getSnapshot: getTaskBoardSnapshot,
+    reload: () => {
+      const sessionId = ctx.sessions.list?.getSnapshot().current
+      if (sessionId !== undefined) void reloadTaskBoard(taskBoardApi, sessionId)
+    },
+    create: (subject: string) => {
+      const sessionId = ctx.sessions.list?.getSnapshot().current
+      if (sessionId === undefined) return Promise.resolve()
+      return createTaskOnBoard(taskBoardApi, sessionId, subject).catch(swallow)
+    },
+    complete: (taskId: string, revision: number) => {
+      const sessionId = ctx.sessions.list?.getSnapshot().current
+      if (sessionId === undefined) return Promise.resolve()
+      return completeTaskOnBoard(taskBoardApi, sessionId, taskId, revision).catch(swallow)
+    },
+  }
+
   ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
     name: 'sidebar.right.pane.tab',
     key: CEO_MEMBER_TAB_ID,
     locale: 'magicCeo',
     inject: (sessionId: string) => ({
       sessionId,
-      taskBoard: taskBoardApi,
+      // 两个面各司其职：句柄供订阅（画布点选任务 → 右坞详情），api 供卡片自加载列表。
+      taskBoard: taskBoardHandle,
+      taskBoardApi,
       sendIntervention: (message: string) => { void promptSession(sessionId, message) },
     }),
   }, components.workspace))
+  try { window.sessionStorage.setItem('magic-ceo-apply', 'done-' + String(Date.now())) } catch { /* 忽略 */ }
 }

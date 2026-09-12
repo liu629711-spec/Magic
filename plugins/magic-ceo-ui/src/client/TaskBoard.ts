@@ -29,27 +29,36 @@ export function TaskBoardCard({
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  /** RPC 通道未就绪时的有界自动重试（页面加载初期网关可能尚未连上）。 */
+  const [attempt, setAttempt] = useState(0)
 
-  useEffect(() => {
-    const reload = async (): Promise<void> => {
-      if (api === undefined || sessionId === undefined) {
-        setState({ kind: 'unavailable', tasks: [] })
-        return
-      }
-      try {
-        setState(taskRowsFromResult(await api.view(sessionId)))
-      } catch {
-        setState({ kind: 'unavailable', tasks: [] })
+  const reload = async (): Promise<void> => {
+    if (api === undefined || sessionId === undefined) {
+      setState({ kind: 'unavailable', tasks: [] })
+      return
+    }
+    try {
+      setState(taskRowsFromResult(await api.view(sessionId)))
+      setError(undefined)
+    } catch (cause) {
+      // 传输异常（如页面加载初期网关未连上）→ 有界自动重试；详情透出到界面。
+      const message = cause instanceof Error ? cause.message : String(cause)
+      setState({ kind: 'unavailable', tasks: [], message })
+      if (attempt < 3) {
+        window.setTimeout(() => { setAttempt(value => value + 1) }, 2500)
       }
     }
-    void reload()
-  }, [sessionId, api, busy])
+  }
+  useEffect(() => { void reload() }, [sessionId, api, busy, attempt])
 
   const run = async (operation: () => Promise<unknown>): Promise<void> => {
     setBusy(true)
     setError('')
     try {
-      await operation()
+      const result = await operation() as { ok?: boolean; error?: { message?: string } } | undefined
+      if (result !== undefined && result !== null && result.ok === false) {
+        setError(result.error?.message ?? '操作失败')
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -82,7 +91,22 @@ export function TaskBoardCard({
     state.kind === 'loading'
       ? h('div', { style: { fontSize: 12, opacity: 0.7, textAlign: 'center', padding: '6px 0' } }, t('tasks.loading'))
       : state.kind === 'unavailable'
-        ? h('div', { style: { fontSize: 12, color: 'rgba(220,120,120,1)', textAlign: 'center', padding: '6px 0' } }, t('tasks.unavailable'))
+        ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', padding: '6px 0', fontSize: 12, color: 'rgba(220,120,120,1)' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            h('span', null, t('tasks.unavailable')),
+            h('button', {
+              type: 'button',
+              disabled: busy,
+              onClick: () => { void reload() },
+              style: {
+                marginLeft: 'auto', border: '0.5px solid rgba(255,255,255,0.14)', borderRadius: 6,
+                padding: '2px 8px', cursor: busy ? 'default' : 'pointer', fontSize: 11,
+                background: 'transparent', color: 'inherit', opacity: busy ? 0.5 : 1,
+              },
+            }, t('tasks.retry'))),
+          state.message !== undefined
+            ? h('div', { style: { fontSize: 11, opacity: 0.85, textAlign: 'center' } }, state.message)
+            : null)
         : state.kind === 'empty'
           ? h('div', { style: { fontSize: 12, opacity: 0.6, textAlign: 'center', padding: '10px 0' } }, t('tasks.empty'))
           : h('div', {
@@ -114,7 +138,7 @@ export function TaskBoardCard({
                     }, t('tasks.complete'))
                     : null,
                 ),
-                row.blockedByByText === '' ? null : h('div', { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByByText),
+                row.blockedByText === '' ? null : h('div', { style: { fontSize: 11, opacity: 0.6, paddingLeft: 15 } }, row.blockedByText),
               )
             })),
     h('div', { style: { display: 'flex', gap: 6 } },
@@ -125,7 +149,7 @@ export function TaskBoardCard({
         onChange: (event: { target: { value: string } }) => { setDraft(event.target.value) },
         onKeyDown: (event: { key: string }) => {
           if (event.key === 'Enter' && draft.trim() !== '' && !busy) {
-            void run(() => api.createTask(sessionId, { subject: draft.trim(), description: '', blockedBy: [], writeScopes: [] }))
+            void run(() => api.createTask(sessionId, { subject: draft.trim(), description: draft.trim(), blockedBy: [], writeScopes: [] }))
             setDraft('')
           }
         },
@@ -151,3 +175,38 @@ export function TaskBoardCard({
 }
 
 export type { TaskBoardApi, TeamTaskDuck, TaskBoardState } from './task-board-data.ts'
+
+// ── 选中任务详情（画布点任务节点 → 右坞显示）────────────────────────────
+
+/** 一个选中任务的详情卡：状态、主题、完成按钮（CAS）。 */
+export function TaskBoardDetail({
+  task,
+  onComplete,
+  t,
+}: {
+  task: { id: string; subject: string; status: string; revision: number }
+  onComplete?: () => void
+  t: Translate
+}): ReactNode {
+  const done = task.status === 'completed'
+  return h('div', {
+    'data-magic-ceo-task-detail': task.id,
+    style: { display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', borderRadius: 10, border: '0.5px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' },
+  },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+      h('span', {
+        'aria-hidden': true,
+        style: { flex: '0 0 auto', width: 8, height: 8, borderRadius: 99, background: done ? 'var(--dsw-alias-state-success, #16a34a)' : task.status === 'in_progress' ? 'var(--dsw-alias-state-business-primary, #3b82f6)' : 'var(--dsw-alias-border-l3, #6b6b7a)' },
+      }),
+      h('span', { style: { fontSize: 12, fontWeight: 510, textDecoration: done ? 'line-through' : undefined } }, task.subject),
+      !done && onComplete !== undefined
+        ? h('button', {
+          type: 'button',
+          onClick: onComplete,
+          style: { marginLeft: 'auto', flex: '0 0 auto', border: 0, borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: 11, background: 'var(--dsw-alias-state-business-primary, #3b82f6)', color: '#fff', fontWeight: 510 },
+        }, t('tasks.complete'))
+        : null,
+    ),
+    h('div', { style: { fontSize: 11, opacity: 0.65 } }, t(`tasks.status.${done ? 'completed' : task.status === 'in_progress' ? 'in_progress' : 'pending'}`)),
+  )
+}

@@ -12,7 +12,7 @@ test('taskRowsFromResult：ok/失败/空/未定义 四态归一', () => {
   const failed = taskRowsFromResult({ ok: false, error: { message: 'boom' } })
   assert.equal(failed.kind, 'unavailable')
   assert.equal(failed.message, 'boom')
-  const empty = taskRowsFromResult({ ok: true, data: { tasks: [] } })
+  const empty = taskRowsFromResult({ ok: true, value: { tasks: [] } })
   assert.equal(empty.kind, 'empty')
   const view: TeamViewDuck = {
     tasks: [
@@ -20,7 +20,7 @@ test('taskRowsFromResult：ok/失败/空/未定义 四态归一', () => {
       { id: 't2', revision: 1, subject: '联调接口', status: 'pending', blockedBy: ['t1'], ready: false },
     ],
   }
-  const ready = taskRowsFromResult({ ok: true, data: view })
+  const ready = taskRowsFromResult({ ok: true, value: view })
   assert.equal(ready.kind, 'ready')
   assert.equal(ready.tasks.length, 2)
 })

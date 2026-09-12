@@ -10,6 +10,8 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useNodeId,
+  useReactFlow,
+  useStore,
   ViewportPortal,
   type Edge,
   type EdgeProps,
@@ -17,8 +19,9 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import xyflowCss from '@xyflow/react/dist/style.css'
-import { ceoFlowMemberId, ceoTeamSinkStatus, layoutCeoTeamFlow, type CeoFlowEdgeKind, type CeoFlowLane } from '../flow.ts'
+import { ceoFlowMemberId, ceoTeamSinkStatus, layoutCeoTeamFlow, type CeoFlowEdgeKind, type CeoFlowLane, type CeoFlowTask } from '../flow.ts'
 import { parseCeoMemberReport } from '../team.ts'
+import { getEmptyTaskBoardSnapshot, selectCeoTask, type TaskBoardSnapshot } from './task-board-store.ts'
 import { toolDisplayName } from '../processView.ts'
 import {
   debriefSummaryOf,
@@ -32,10 +35,24 @@ import {
 import { getCeoRoster, getSelectedCeoMember, publishCeoTeam, selectCeoMember, subscribeCeoSelection } from './selection.ts'
 import { ink, line, surface } from './theme.ts'
 
+export interface CeoTeamGraphTaskBoard {
+  subscribe: (listener: () => void) => () => void
+  /**
+   * 必须返回**引用稳定**的快照（状态未变时返回同一对象）。
+   * 见 task-board-store.ts 的「关键不变量」：返回不稳定的快照会让
+   * useSyncExternalStore 判定 store 一直在变 → 无限重渲染（React #185）。
+   */
+  getSnapshot: () => TaskBoardSnapshot
+  reload: () => void
+  create: (subject: string) => Promise<void>
+}
+
 export interface CeoTeamGraphProps {
   node: { data: CeoTeamView }
   sessionId?: string
   openWorkspace: () => void
+  /** 官方任务板（remote.agentTeams）句柄：画布任务泳道的数据源与操作面。 */
+  taskBoard?: CeoTeamGraphTaskBoard
   t: (key: string, params?: Record<string, unknown>) => string
 }
 
@@ -747,10 +764,66 @@ function CeoNode({ data }: NodeProps<Node<CeoNodeData>>) {
   )
 }
 
+const noopTaskBoardSubscribe = (listener: () => void): (() => void) => {
+  void listener
+  return () => undefined
+}
+
+interface TaskNodeData {
+  task: CeoFlowTask
+  selected: boolean
+  enterIndex: number
+  t: Translate
+}
+
+/** 任务板节点：状态点 + 主题 + 状态文字（画布底部泳道）。 */
+function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
+  const statusLabel = data.task.status === 'completed'
+    ? data.t('tasks.status.completed')
+    : data.task.status === 'in_progress'
+      ? data.t('tasks.status.in_progress')
+      : data.t('tasks.status.pending')
+  const dot = data.task.status === 'completed'
+    ? 'var(--dsw-alias-state-success, #16a34a)'
+    : data.task.status === 'in_progress'
+      ? 'var(--dsw-alias-state-business-primary, #3b82f6)'
+      : 'var(--dsw-alias-border-l3, #6b6b7a)'
+  const done = data.task.status === 'completed'
+  return h('div', {
+    'data-magic-ceo-node': 'task',
+    'data-magic-ceo-task-node': data.task.id,
+    'data-status': data.task.status,
+    'data-selected': data.selected ? 'true' : undefined,
+    className: graphNodeDimClass(false),
+  },
+    h('div', {
+      className: 'magic-ceo-node-face',
+      style: {
+        boxSizing: 'border-box',
+        width: 210,
+        height: 64,
+        padding: '8px 10px',
+        borderRadius: 10,
+        border: `0.5px solid ${data.selected ? 'var(--dsw-alias-state-business-primary, #3b82f6)' : 'var(--dsw-alias-border-l2, #3a3a48)'}`,
+        background: done ? 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 40%, transparent)' : 'var(--dsw-alias-bg-base, #ffffff)',
+      },
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 7 } },
+        h('span', { 'aria-hidden': true, style: { flex: '0 0 auto', width: 7, height: 7, borderRadius: 99, background: dot } }),
+        h('span', {
+          style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? 'line-through' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+        }, data.task.subject),
+      ),
+      h('div', { style: { marginTop: 3, fontSize: 11, color: ink.tertiary } }, statusLabel),
+    ),
+  )
+}
+
 const nodeTypes = {
   goal: GoalNode,
   member: MemberNode,
   ceo: CeoNode,
+  task: TaskNode,
 }
 
 const edgeTypes = {
@@ -775,6 +848,39 @@ function useElapsedSeconds(live: boolean): number {
   return live && startedRef.current !== null
     ? Math.max(0, Math.floor((Date.now() - startedRef.current) / 1000))
     : frozenRef.current
+}
+
+/** 任务板泳道底带 + 标题（视觉与 WaveLanes 同族）。 */
+function TaskLaneBand({ lane }: { lane: CeoFlowLane }): ReactNode {
+  return h(ViewportPortal, null,
+    h(Fragment, { key: lane.id },
+      h('div', {
+        'data-magic-ceo-lane': lane.id,
+        style: {
+          position: 'absolute',
+          transform: `translate(${String(lane.x)}px, ${String(lane.y)}px)`,
+          width: lane.w,
+          height: lane.h,
+          borderRadius: 12,
+          border: '1px solid color-mix(in srgb, var(--dsw-alias-border-l3, #4a4a58) 30%, transparent)',
+          background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 55%, transparent)',
+          zIndex: -1,
+          pointerEvents: 'none',
+        },
+      }),
+      h('div', {
+        style: {
+          position: 'absolute',
+          transform: `translate(${String(lane.labelX)}px, ${String(lane.labelY)}px)`,
+          fontSize: 11,
+          lineHeight: '16px',
+          fontWeight: 510,
+          color: ink.secondary,
+          pointerEvents: 'none',
+        },
+      }, lane.label),
+    ),
+  )
 }
 
 /** AgentCore WaveLanes: one soft backdrop band per wave column, rendered under
@@ -851,14 +957,46 @@ function hoverRelatedIds(
   return related
 }
 
+/** 画布视图自适应参数（初始化 fitView 与「迟到的可见」补正共用同一份）。 */
+const CANVAS_FIT_VIEW = { padding: 0.2, minZoom: 0.35, maxZoom: 1.6 } as const
+
+/**
+ * 补正「容器在不可见状态下被量到 0 尺寸」导致的整张画布偏到容器外。
+ *
+ * 成因链：DSH 把对话里的过程行折叠为 `hidden="until-found"`（等价
+ * `content-visibility: hidden`）→ 画布卡若在这种行里挂载，ReactFlow 的
+ * ResizeObserver 读到 width/height = 0 → 初始化 fitView 把 zoom 钳到
+ * minZoom(0.35) 并以「零尺寸视口」居中，于是 translateX = (0 − 内容宽×0.35)/2，
+ * 所有节点被推出容器（容器 overflow: hidden）→ **DOM 全在、画面空白**。
+ * ReactFlow 只在初始化时 fitView，之后尺寸恢复也不会重算，所以要么补这一次，
+ * 要么用户永远看不到内容。
+ *
+ * 只在「首次量到真实尺寸」时补正一次：之后保留用户自己的平移/缩放。
+ */
+function RefitWhenMeasured(): null {
+  const { fitView } = useReactFlow()
+  const width = useStore(state => state.width)
+  const height = useStore(state => state.height)
+  const fitted = useRef(false)
+  useEffect(() => {
+    if (fitted.current || width <= 0 || height <= 0) return
+    fitted.current = true
+    void fitView({ ...CANVAS_FIT_VIEW })
+  }, [width, height, fitView])
+  return null
+}
+
 const Canvas = memo(function Canvas(props: {
   members: readonly CeoTeamMember[]
   selectedCallId: string | undefined
   goalPreview: string
   openWorkspace: () => void
+  tasks: ReadonlyArray<CeoFlowTask>
+  /** 当前选中的任务 id（选中态由画布任务节点高亮）。 */
+  selectedTaskId: string | undefined
   t: Translate
 }) {
-  const layout = layoutCeoTeamFlow(props.members)
+  const layout = layoutCeoTeamFlow(props.members, props.tasks)
   const sinkStatus = ceoTeamSinkStatus(props.members)
   // AgentCore graphHover: hovering a node brightens its full upstream+downstream
   // path and dims everything else — paint-level only, never RF node.className.
@@ -888,6 +1026,20 @@ const Canvas = memo(function Canvas(props: {
           type: 'ceo',
           position: { x: node.x, y: node.y },
           data: { status: sinkStatus, enterIndex: node.enterIndex, t: props.t },
+          width: node.width,
+          height: node.height,
+          style: { width: node.width, height: node.height },
+          draggable: false,
+          selectable: false,
+        }
+      }
+      if (node.kind === 'task') {
+        const task = node.task!
+        return {
+          id: node.id,
+          type: 'task',
+          position: { x: node.x, y: node.y },
+          data: { task, selected: task.id === props.selectedTaskId, enterIndex: node.enterIndex, t: props.t },
           width: node.width,
           height: node.height,
           style: { width: node.width, height: node.height },
@@ -950,7 +1102,7 @@ const Canvas = memo(function Canvas(props: {
       }
     })
     return { nodes, edges }
-  }, [layout, props.goalPreview, props.selectedCallId, props.t, sinkStatus, props.members])
+  }, [layout, props.goalPreview, props.selectedCallId, props.t, sinkStatus, props.members, props.tasks, props.selectedTaskId])
 
   const height = Math.min(520, Math.max(300, layout.height + 72))
 
@@ -975,9 +1127,9 @@ const Canvas = memo(function Canvas(props: {
         nodeTypes,
         edgeTypes,
         fitView: true,
-        fitViewOptions: { padding: 0.2, minZoom: 0.35, maxZoom: 1.6 },
-        minZoom: 0.35,
-        maxZoom: 1.6,
+        fitViewOptions: CANVAS_FIT_VIEW,
+        minZoom: CANVAS_FIT_VIEW.minZoom,
+        maxZoom: CANVAS_FIT_VIEW.maxZoom,
         panOnDrag: true,
         zoomOnScroll: true,
         zoomOnPinch: true,
@@ -994,17 +1146,33 @@ const Canvas = memo(function Canvas(props: {
           if (node.type === 'member') {
             const member = (node.data as MemberNodeData).member
             selectCeoMember(member)
+            selectCeoTask(undefined)
+            props.openWorkspace()
+            return
+          }
+          if (node.type === 'task') {
+            const task = (node.data as TaskNodeData).task
+            // 必须传 id：store 的 selectedTaskId 是字符串，CeoWorkspace 用
+            // `tasks.find(t => t.id === selectedTaskId)` 匹配。传对象则永不命中，
+            // 点任务节点只会打开右坞的普通列表、出不来任务详情。
+            selectCeoTask(task.id)
+            selectCeoMember(null)
             props.openWorkspace()
             return
           }
           if (node.type === 'ceo') {
             selectCeoMember(null)
+            selectCeoTask(undefined)
             props.openWorkspace()
           }
         },
       },
+        h(RefitWhenMeasured),
         h(Background, { gap: 20, size: 1, color: 'color-mix(in srgb, var(--dsw-alias-border-l2, #3a3a48) 45%, transparent)' }),
         h(WaveLanes, { lanes: layout.lanes }),
+        layout.taskLane !== undefined
+          ? h(TaskLaneBand, { lane: layout.taskLane })
+          : null,
       ),
     ),
   )
@@ -1043,6 +1211,12 @@ function StatusIcon({ status }: { status: CeoMemberViewStatus }): ReactNode {
 export function CeoTeamGraph(props: CeoTeamGraphProps) {
   const selected = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember)
   const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster)
+  const taskBoard = useSyncExternalStore(
+    props.taskBoard?.subscribe ?? noopTaskBoardSubscribe,
+    props.taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot,
+    getEmptyTaskBoardSnapshot,
+  )
+  useEffect(() => { props.taskBoard?.reload() }, [props.taskBoard])
   const turnMembers = props.node.data.members
   const members = turnMembers.map(member =>
     roster.find(item => item.callId === member.callId) ?? member,
@@ -1150,6 +1324,10 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
               selectedCallId: selected?.callId,
               goalPreview,
               openWorkspace: props.openWorkspace,
+              // 复用已订阅快照里的稳定数组（原先每次渲染都 getSnapshot().map(...)，
+              // 既重复读取又产出新引用 → 下游 memo/useMemo 全失效 → ReactFlow 每帧重排）。
+              tasks: taskBoard.tasks,
+              selectedTaskId: taskBoard.selectedTaskId,
               t: props.t,
             }),
           )

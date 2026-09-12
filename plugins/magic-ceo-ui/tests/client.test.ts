@@ -3,9 +3,10 @@ import { test } from 'node:test'
 import { CEO_MEMBER_TAB_ID, CEO_MEMBER_TAB_KIND, inject, registerCeoUi, zh } from '../src/client/register.ts'
 
 const fakeTaskBoard = {
-  view: async () => ({ ok: true as const, data: { tasks: [] } }),
-  createTask: async () => ({ ok: true as const, data: {} }),
-  updateTask: async () => ({ ok: true as const, data: {} }),
+  // 线上载波信封的载荷字段是 value（官方 RemoteResult<T>），不是 data
+  view: async () => ({ ok: true as const, value: { tasks: [] } }),
+  createTask: async () => ({ ok: true as const, value: { ok: true as const } }),
+  updateTask: async () => ({ ok: true as const, value: { ok: true as const } }),
 }
 
 test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar member workspace', async () => {
@@ -85,7 +86,8 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
         openedTabs.push(kind)
       },
     },
-    reflect: { get: (name: string) => (name === 'remote' ? { agentTeams: fakeTaskBoard } : undefined) },
+    remote: { agentTeams: fakeTaskBoard },
+    'remote.agentTeams': fakeTaskBoard,
     slots: {
       inject: (_name, factory) => factory(),
       register: (spec) => {
@@ -100,7 +102,7 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
     effect: (factory) => factory(),
   }, { graph: 'graph', row: 'row', workspace: 'workspace', drawer: 'drawer' })
 
-  assert.deepEqual(inject, ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight'])
+  assert.deepEqual(inject, ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.agentTeams'])
   assert.equal(definitions[0]?.kind, 'ceo-team')
   assert.equal(definitions[0]?.target, 'chat')
   assert.equal(definitions[1]?.kind, 'ceo-member-report')
@@ -114,19 +116,40 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
   ])
 
   // The canvas node's inject opens the member workspace page tab by kind.
-  const graphSpec = slots[0]!.spec as { inject: () => { openWorkspace: () => void } }
+  const graphSpec = slots[0]!.spec as {
+    inject: () => {
+      openWorkspace: () => void
+      taskBoard: { subscribe: unknown; getSnapshot: () => unknown }
+    }
+  }
   graphSpec.inject().openWorkspace()
   assert.deepEqual(openedTabs, [CEO_MEMBER_TAB_KIND])
+  // 画布卡必须是「句柄」：有 subscribe/getSnapshot 才能被 useSyncExternalStore 订阅。
+  // 若这里误注入 RPC 本体，getSnapshot 为 undefined → 回落到空快照 → React #185 拆卡。
+  const graphBoard = graphSpec.inject().taskBoard
+  assert.equal(typeof graphBoard.subscribe, 'function')
+  assert.equal(typeof graphBoard.getSnapshot, 'function')
+  assert.equal(graphBoard.getSnapshot(), graphBoard.getSnapshot(), 'getSnapshot 必须引用稳定（否则 React #185）')
 
   // The workspace body gets its session id and intervention sender from the seat.
   const workspaceSpec = slots[3]!.spec as { inject: (sessionId: string) => Record<string, unknown> }
   const workspaceInject = workspaceSpec.inject('session-1') as Record<string, unknown>
   assert.equal(workspaceInject.sessionId, 'session-1')
   assert.equal(typeof workspaceInject.sendIntervention, 'function')
-  // 任务板通道随座位注入：惰性读 remote 的包装，调用穿透到 fake
-  assert.notEqual(workspaceInject.taskBoard, undefined)
-  // view 返回穿透 fake 的 Promise（reflect 桩提供 remote，不会拒绝）
-  const viewPromise = (workspaceInject.taskBoard as typeof fakeTaskBoard).view('session-1')
+  // 右坞同样拿「句柄」用于订阅：点画布任务节点 → store 记 selectedTaskId → 右坞据此出详情。
+  // 曾误注入 RPC 本体（只有 view/createTask/updateTask），导致 getSnapshot 缺席 →
+  // 回落到不稳定的空快照 → 右坞整块 slot 崩（slot entry crashed in 'sidebar.right.pane.tab'）。
+  const workspaceBoard = workspaceInject.taskBoard as Record<string, unknown>
+  assert.notEqual(workspaceBoard, undefined)
+  for (const key of ['subscribe', 'getSnapshot', 'reload', 'create', 'complete']) {
+    assert.equal(typeof workspaceBoard[key], 'function', `workspace.taskBoard.${key} 必须是函数`)
+  }
+  const workspaceSnapshot = (workspaceBoard.getSnapshot as () => unknown)()
+  assert.equal(workspaceSnapshot, (workspaceBoard.getSnapshot as () => unknown)(), 'getSnapshot 必须引用稳定（否则 React #185）')
+  // RPC 本体走独立通道：TaskBoardCard 自加载列表用
+  const workspaceApi = workspaceInject.taskBoardApi as typeof fakeTaskBoard
+  assert.notEqual(workspaceApi, undefined)
+  const viewPromise = workspaceApi.view('session-1')
   assert.equal(viewPromise instanceof Promise, true)
-  assert.deepEqual(await viewPromise, { ok: true, data: { tasks: [] } })
+  assert.deepEqual(await viewPromise, { ok: true, value: { tasks: [] } })
 })
