@@ -30,7 +30,7 @@ import { isDarkScheme, subscribeColorScheme } from './theme.ts'
 import { SandboxStatusBar } from './SandboxStatusBar.tsx'
 import { appendToDraft } from './conversation-draft.ts'
 import { useSelectionPopup, type FileSelectionPayload } from './selection-popup.ts'
-import { mountFileCommentCards, sidenoteFileNotes } from './file-comment-cards.ts'
+import { mountFileCommentCards, sidenoteFileNotes, type FileNoteItem } from './file-comment-cards.ts'
 import { buildSelectionInsert, headerOf, linesOfSelection } from './selection-payload.ts'
 import { analyzeMarkdownHtml } from './markdown-html.ts'
 import { LazyMermaidMarkdown, MarkdownDocument, type MarkdownHtmlMedia } from './MarkdownHtml.tsx'
@@ -121,6 +121,17 @@ export function TextEditor(props: FileViewerProps) {
       getSurface: () => (markdown && mode === 'preview' ? mdRef.current : null),
     })
   }, [markdown, mode, path, content])
+  // Magic local patch (2026-09-13): edit-mode comment list — the preview card
+  // layer idles on CodeMirror surfaces, so comments stay visible/deletable
+  // here (session-wide; each card carries its file:line header).
+  const [fileComments, setFileComments] = useState<FileNoteItem[]>([])
+  useEffect(() => {
+    const notes = sidenoteFileNotes()
+    if (notes === null) return
+    const sync = (): void => { setFileComments([...notes.list(scope.sessionId)]) }
+    sync()
+    return notes.subscribe(sync)
+  }, [scope.sessionId])
   const [commentText, setCommentText] = useState('')
   const saveFileComment = (): void => {
     const editor = commentEditor
@@ -548,6 +559,24 @@ export function TextEditor(props: FileViewerProps) {
             className={clsx(css.editorCm, (markdown || html) && mode === 'preview' && css.editorCmHidden)}
             ref={hostRef}
           />
+          {mode === 'edit' && fileComments.length > 0 && (
+            <div style={{ padding: '4px 8px 10px' }}>
+              {fileComments.map(note => (
+                <div key={note.id} style={{ border: '1px solid rgba(127,127,127,.4)', borderLeft: '3px solid #2563eb', borderRadius: 8, padding: '6px 8px', margin: '6px 0', fontSize: 12, lineHeight: 1.5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, opacity: 0.72 }}>
+                    <span>{note.kind === 'comment' ? '评论' : '片段'} · {note.header}</span>
+                    <button
+                      type="button"
+                      style={{ border: 'none', background: 'transparent', color: 'inherit', opacity: 0.6, cursor: 'pointer', fontSize: 12, padding: 0 }}
+                      onClick={() => { sidenoteFileNotes()?.remove(scope.sessionId, note.id) }}
+                    >{t('delete')}</button>
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: 3 }}>{note.quote}</div>
+                  {note.note !== undefined && <div style={{ marginTop: 3, whiteSpace: 'pre-wrap' }}>💬 {note.note}</div>}
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
       {markdown && mode === 'preview' && (

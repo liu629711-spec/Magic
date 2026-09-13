@@ -262,6 +262,11 @@
 - insert:
     - id: prompt-optimizer
       name: ../plugins/dsh-oss-prompt-optimizer/lib/index.js
+      config:
+        # rc.2 实测（2026-09-14）：glm-5.3-flash-local 是推理模型，优化复杂
+        # 提示词时推理段可超 60s，默认 timeoutMs 到点掐流 → aborted → 重试
+        # 烧完 maxCalls 预算。提到 180s（上游流式实测 6s/300 token，健康）。
+        timeoutMs: 180000
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ── vendored 中文汉化（非 Magic 产品插件）──────────────────────────────────
