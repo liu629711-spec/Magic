@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # 宿主版本 canary：每周一跑 latest 组合（发现「宿主新版悄悄发布」的触发机制，
+  # 对抗矩阵滞后——arch-adversarial B1-3）。
+  schedule:
+    - cron: '0 1 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Arch gates (分层/边界/预算)
+        run: pnpm check:arch
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+
+  # Pack the plugin as an npm tarball, mount it into a REAL DSH instance
+  # through the official `dsh plugin --profile web add` channel (together with
+  # dsh-better-sidebar from npm), and drive the DSH web UI headlessly
+  # (Playwright Chromium) through the journey lanes. No API key needed — the
+  # seeded session jsonl makes the fork path work keyless.
+  plugin-mount:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 矩阵钉版（版本韧性架构第四节；「peer 钉版」在 DSH 插件生态无 npm 落点，
+    # 执行面只有这里的矩阵）：
+    # - DSH 维度：在用版本 0.1.1-rc.2 + 下一代 0.1.2-rc.1（覆盖宿主漂移方向）；
+    # - BS 维度：peer 下限 0.12.3 + 最新 0.18.0（0.1.2 适配版）。
+    # 已知排除：BS 0.12.3 × DSH 0.1.2-rc.1（BS 旧版宿主半在 0.1.2 崩溃，
+    # 非我方切点——spike 实证 2026-09-07）。
+    # lane 全量跑（3 组合并行成本可接受）；矩阵再扩张时上 @smoke 子集
+    # （lane tag 化是 WI-01 前置项）。
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dsh-version: '0.1.1-rc.2'
+            bs-version: '0.12.3'
+          - dsh-version: '0.1.1-rc.2'
+            bs-version: '0.18.0'
+          - dsh-version: '0.1.2-rc.1'
+            bs-version: '0.18.0'
+    continue-on-error: ${{ matrix.experimental || false }}
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+      BS_VERSION: ${{ matrix.bs-version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install dsh CLI (pinned)
+        run: npm install -g @deepseek-ai/dsh@${{ matrix.dsh-version }}
+
+      - name: Build and pack the npm tarball
+        run: pnpm build && pnpm pack
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Mount + headless-render smoke
+        run: pnpm test:mount
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-dsh-${{ matrix.dsh-version }}-bs-${{ matrix.bs-version }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  # 宿主版本 canary（weekly）：latest DSH × latest BS——新版发布早发现。
+  # 与 plugin-mount 的差别：版本全部取 npm latest，不钉；失败即宿主又漂了。
+  host-canary:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Report latest host versions
+        run: |
+          echo "dsh latest: $(npm view @deepseek-ai/dsh version)"
+          echo "better-sidebar latest: $(npm view dsh-better-sidebar version)"
+      - name: Install dsh CLI (latest)
+        run: npm install -g @deepseek-ai/dsh@latest
+      - name: Build and pack the npm tarball
+        run: pnpm build && pnpm pack
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Canary mount smoke (latest hosts)
+        env:
+          BS_VERSION: latest
+        run: pnpm test:mount

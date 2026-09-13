@@ -206,6 +206,14 @@ export function builtinTabs(ctx: Context, options: BuiltinTabOptions = {}): read
       description: () => t('guideDescSidechat'),
       icon: sidechatTabIcon,
       order: 35,
+      // Magic local patch (2026-09-13): hidden from the + menu / start page —
+      // dsh-sidenote's fork-based side chat (native right-dock page kind,
+      // main-conversation renderer parity) replaces this built-in side chat;
+      // two coexisting side-chat surfaces reproduce the ego/magic-browser
+      // confusion (model AND user picking between duplicates). The
+      // descriptor stays registered so persisted sidechat tabs still render
+      // (user closes them like any tab) instead of orphaning.
+      hidden: true,
       // Codex-style: EVERY side conversation is its own tab. A plain open
       // mints a fresh tab flagged `autoCreate` (the view creates the EMPTY
       // thread on mount); a thread switch from the header menu parks the

@@ -1,0 +1,183 @@
+/**
+ * Demo-asset capture: drive the seeded scratch GUI through the feature
+ * journeys and save polished screenshots into docs/assets/ for the README.
+ *
+ * Usage: boot the scratch env (see scripts/e2e-mount.sh), then
+ *   DSH_E2E_URL=http://127.0.0.1:<port> node scripts/capture-demo.mjs
+ */
+import { mkdirSync } from 'node:fs'
+import { chromium } from '@playwright/test'
+
+const BASE_URL = process.env.DSH_E2E_URL
+if (!BASE_URL) throw new Error('DSH_E2E_URL missing')
+const OUT = new URL('../docs/assets/', import.meta.url).pathname
+mkdirSync(OUT, { recursive: true })
+
+const browser = await chromium.launch()
+const page = await browser.newPage({ viewport: { width: 1440, height: 860 } })
+
+async function shot(name) {
+  await page.waitForTimeout(600)
+  await page.screenshot({ path: `${OUT}${name}.png` })
+  console.log('captured', name)
+}
+
+async function dismissOnboarding(p) {
+  for (let round = 0; round < 8; round++) {
+    let dismissed = false
+    for (const name of ['Continue', 'Configure later']) {
+      const b = p.getByRole('button', { name, exact: true }).first()
+      if ((await b.count()) === 0) continue
+      try { await b.click({ timeout: 3000 }); dismissed = true; await p.waitForTimeout(800) } catch {}
+    }
+    if (!dismissed) break
+  }
+}
+
+async function ensureSidebarExpanded(p) {
+  const expand = p.getByRole('button', { name: /Expand sidebar/ }).first()
+  if ((await expand.count()) > 0) { await expand.click(); await p.waitForTimeout(800) }
+}
+
+/** D1 折叠卡展开（WI-01 起 fork 历史默认折叠）。 */
+async function expandInherited(p) {
+  const sidebar = p.locator('[data-dsh-better-sidebar]')
+  const card = sidebar.locator('[data-disclosure-row]', { hasText: /Inherited from main session|继承自主会话/ }).filter({ visible: true }).first()
+  await card.waitFor({ state: 'visible', timeout: 60_000 })
+  if ((await card.getAttribute('aria-expanded')) !== 'true') await card.click()
+  await p.waitForTimeout(600)
+}
+
+await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(4000)
+await dismissOnboarding(page)
+
+// 打开伪造会话
+const openSidebar = page.getByRole('button', { name: 'Open sidebar' }).first()
+if ((await openSidebar.count()) > 0) { await openSidebar.click(); await page.waitForTimeout(800) }
+const seedRow = page.getByText('Side chat plugin review').first()
+await seedRow.waitFor({ state: 'visible', timeout: 30_000 })
+await seedRow.click()
+await page.waitForTimeout(2000)
+// 关掉首次划选提示气泡（role=note 的 ×），别让它飘进截图。
+const hintClose = page.locator('[role="note"] button').first()
+if ((await hintClose.count()) > 0) { await hintClose.click().catch(() => {}); await page.waitForTimeout(300) }
+
+// 提示气泡在消息渲染后才出现，开场那一次关闭可能竞态落空——划选前再关一次。
+const hintClose2 = page.locator('[role="note"] button').first()
+if ((await hintClose2.count()) > 0) { await hintClose2.click().catch(() => {}); await page.waitForTimeout(300) }
+
+// 1. 划选浮层——先把目标文本滚进视口中央再选（插件锚定 range 的实时矩形；
+// 文本在视口外时浮层会贴视口顶缘——录制事故的根因）。
+await page.evaluate(() => {
+  const messages = document.querySelectorAll('[data-chat-flow-kind="assistant-step"]')
+  for (const el of messages) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const text = node.textContent ?? ''
+      const needle = 'full history snapshot'
+      const at = text.indexOf(needle)
+      if (at === -1) continue
+      ;(node.parentElement ?? el).scrollIntoView({ block: 'center' })
+      return
+    }
+  }
+})
+await page.waitForTimeout(800)
+await page.evaluate(() => {
+  const messages = document.querySelectorAll('[data-chat-flow-kind="assistant-step"]')
+  for (const el of messages) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const text = node.textContent ?? ''
+      const needle = 'full history snapshot'
+      const at = text.indexOf(needle)
+      if (at === -1) continue
+      const range = document.createRange()
+      range.setStart(node, at)
+      range.setEnd(node, at + needle.length)
+      const sel = window.getSelection()
+      sel?.removeAllRanges(); sel?.addRange(range)
+      document.dispatchEvent(new Event('selectionchange'))
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      return
+    }
+  }
+})
+const overlay = page.locator('[data-dsh-sidenote]')
+await overlay.getByText('Add to conversation').waitFor({ state: 'visible', timeout: 10_000 })
+await shot('01-selection-popover')
+
+// 2. 注解编辑器
+await overlay.getByText('Add to conversation').click()
+await page.waitForTimeout(400)
+const noteInput = overlay.locator('input').first()
+await noteInput.fill('watch the memory cost')
+await shot('02-annotation-editor')
+
+// 3. 角标 + chip
+await overlay.locator('button[aria-label="Save note"]').click()
+await page.getByText('1 annotation').first().waitFor({ state: 'visible', timeout: 10_000 })
+// 角标在 gutter，滚到锚点可见
+await page.evaluate(() => {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+  for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+    if ((n.textContent ?? '').includes('full history snapshot')) {
+      n.parentElement?.scrollIntoView({ block: 'center' })
+      return
+    }
+  }
+})
+await shot('03-badge-and-chip')
+
+// 5. 侧边聊天面板（fork 历史 + 独立 composer）——先于发送携带拍：无模型
+//    环境的 turn 报错行不能污染面板镜头。
+await ensureSidebarExpanded(page)
+const sidebar = page.locator('[data-dsh-better-sidebar]')
+await sidebar.getByRole('button', { name: /New tab/ }).first().click()
+await page.getByRole('menuitem', { name: /Side chat/ }).first().click()
+// 折叠态：D1 卡 + 操作行 + composer 芯片组（权限/模型）
+await page.waitForTimeout(1500)
+await shot('04a-side-chat-collapsed')
+await expandInherited(page)
+// 展开一张工具卡（Bash 终端卡——标题已让位人话描述，命令原文在展开体里）
+const termRow = sidebar.locator('[data-disclosure-row]', { hasText: 'Bash · List workspace files' }).first()
+if ((await termRow.count()) > 0) {
+  await termRow.click()
+  await page.waitForTimeout(600)
+}
+await shot('04-side-chat-panel')
+
+// 5b. 侧边 composer 斜杠菜单（WI-02）
+const sideComposer = sidebar.getByRole('textbox').first()
+await sideComposer.click()
+await page.keyboard.type('/')
+await page.waitForTimeout(800)
+await shot('04b-side-slash-menu')
+await page.keyboard.press('Escape')
+
+// 6. 回流：hover 侧边面板 assistant 消息 → 点回流 → 主输入框上方 chip。
+const sideMsg = sidebar.locator('[class*="_assistantRow"]').last()
+await sideMsg.hover()
+const reflowBtn = sidebar.locator('button[aria-label="Send back to main session"]').last()
+await reflowBtn.waitFor({ state: 'visible', timeout: 5_000 })
+await reflowBtn.click()
+await page.getByText(/side-chat reflow/).first().waitFor({ state: 'visible', timeout: 10_000 })
+await page.waitForTimeout(400)
+await shot('06-reflow-chip')
+
+// 4（末位拍）。发送携带（Enter 拦截 → 协议块随消息发出 → 气泡留痕标签）。
+//    无模型环境 turn 会报错——只截气泡本体，避开下方的错误行；
+//    放在最后是因为报错行会留在主区画面里。
+const composer = page.getByRole('textbox', { name: /Message the agent|输入消息|随心输入/ }).first()
+await composer.click()
+await composer.pressSequentially('looks good to me — ship it with these noted', { delay: 10 })
+await page.keyboard.press('Enter')
+const sentBubble = page.locator('[data-chat-flow-kind="user"]', { hasText: 'looks good to me' }).last()
+await sentBubble.waitFor({ state: 'visible', timeout: 10_000 })
+await page.waitForTimeout(400)
+await sentBubble.screenshot({ path: `${OUT}05-sent-trace.png` })
+console.log('captured 05-sent-trace')
+
+await browser.close()
+console.log('demo assets written to docs/assets/')

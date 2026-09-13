@@ -117,8 +117,28 @@ export function isAllowedLoopbackUrl(url: string, allowlist: string): boolean {
   return parseLoopbackAllowlist(allowlist)(parsed.hostname, parsed.port)
 }
 
+/**
+ * Magic local patch (2026-09-13): the markdown autolinker in chat prose
+ * swallows trailing CJK punctuation into the href ("https://x.com，页面标题…"
+ * → the URL parser punycodes the glued prose into `xn--…` garbage hosts).
+ * Strip trailing prose characters ONLY while they sit in the authority
+ * (host) segment — a CJK PATH is legitimate and must be preserved.
+ */
+const PROSE_TAIL = /[\s\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF「」『』“”‘’·…—]+$/
+
+function trimProseGluedHost(input: string): string {
+  const schemeEnd = input.indexOf('://')
+  if (schemeEnd === -1) return input
+  const authorityStart = schemeEnd + 3
+  const pathStart = input.indexOf('/', authorityStart)
+  const authority = pathStart === -1 ? input.slice(authorityStart) : input.slice(authorityStart, pathStart)
+  const trimmed = authority.replace(PROSE_TAIL, '')
+  if (trimmed === authority || trimmed === '') return input
+  return input.slice(0, authorityStart) + trimmed + (pathStart === -1 ? '' : input.slice(pathStart))
+}
+
 export function normalizeBrowserUrl(input: string, selfOrigin: string, allowedLoopback = ''): BrowserNavigateResult {
-  const trimmed = input.trim()
+  const trimmed = trimProseGluedHost(input.trim())
   if (trimmed === '') return { kind: 'invalid' }
   // Distinguish an explicit scheme from a bare host:port. "example.com:8080"
   // would match a naive scheme regex (dots are legal in schemes), so a
