@@ -24,6 +24,7 @@ import type { Context, ConversationService, SessionId, SessionInput } from '../h
 import { buildProtocolBlock } from './format.ts'
 import type { AnnotationStore } from './model.ts'
 import { buildReflowBlock, type ReflowStore } from '../reflow.ts'
+import { buildFileNotesBlock, type FileNotesStore } from './file-notes.ts'
 
 /** Resolve the per-session input facade, degrading to undefined (never throws). */
 export function resolveInput(ctx: Context, sessionId: SessionId): SessionInput | undefined {
@@ -52,7 +53,7 @@ function findSendButtonInCard(): HTMLButtonElement | null {
   return last instanceof HTMLButtonElement ? last : null
 }
 
-export function installSendInterceptor(ctx: Context, store: AnnotationStore, reflow: ReflowStore): () => void {
+export function installSendInterceptor(ctx: Context, store: AnnotationStore, reflow: ReflowStore, fileNotes?: FileNotesStore): () => void {
   /** 重入/连按护栏：事务进行中吞掉命中识别面的 Enter/点击（不重复驱动）。 */
   let committing = false
 
@@ -69,7 +70,8 @@ export function installSendInterceptor(ctx: Context, store: AnnotationStore, ref
     if (sessionId === '') return false
     const active = store.listActive(sessionId)
     const reflows = reflow.list(sessionId)
-    if (active.length === 0 && reflows.length === 0) return false
+    const fileNotesList = fileNotes?.listUnsent(sessionId) ?? []
+    if (active.length === 0 && reflows.length === 0 && fileNotesList.length === 0) return false
     const input = resolveInput(ctx, sessionId)
     if (input === undefined) return false
     const snap = input.state.getSnapshot()
@@ -83,13 +85,15 @@ export function installSendInterceptor(ctx: Context, store: AnnotationStore, ref
     if (seat.querySelector('[role="listbox"]') !== null) return false
     if (seat.querySelector('[aria-expanded="true"]') !== null) return false
 
-    // 拼稿：回流上下文（背景） → 注释协议块（具体锚点） → 用户正文。
+    // 拼稿：回流上下文（背景） → 注释协议块（具体锚点） → 文件片段/评论 → 用户正文。
     const parts: string[] = []
     for (const item of reflows) parts.push(buildReflowBlock(item))
     if (active.length > 0) parts.push(buildProtocolBlock(active))
+    if (fileNotesList.length > 0) parts.push(buildFileNotesBlock(fileNotesList))
     const body = draft.trim()
     const full = [...parts, ...(body === '' ? [] : [body])].join('\n\n')
     const sentIds = active.map(a => a.id)
+    const sentNoteIds = fileNotesList.map(n => n.id)
 
     input.setDraft(full)
     committing = true
@@ -115,6 +119,7 @@ export function installSendInterceptor(ctx: Context, store: AnnotationStore, ref
         // 成功：只翻转当时拼进去的那批注释（窗口内新增的不动）。
         store.markSent(sentIds)
         reflow.clearSession(sessionId)
+        fileNotes?.markSent(sessionId, sentNoteIds)
         return
       }
       // 失败（宿主 notice + 留稿）：草稿仍以我们拼的前缀开头才剥离。

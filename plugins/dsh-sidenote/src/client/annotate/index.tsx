@@ -18,6 +18,8 @@ import { createAnnotationStore } from './model.ts'
 import { createSelectionController } from './selection.ts'
 import { AnnotateOverlay } from './overlay.tsx'
 import { createAnnotationChip, createReflowChip } from './chip.tsx'
+import { createFileNotesChip } from './file-notes-chip.tsx'
+import { createFileNotesStore, installFileNotesBridge } from './file-notes.ts'
 import { installSendInterceptor } from './send.ts'
 import { installBubbleSurgery } from './bubble.ts'
 import type { ReflowStore } from '../reflow.ts'
@@ -26,6 +28,8 @@ export function registerAnnotations(ctx: Context, reflow: ReflowStore): void {
   ctx.effect(() => {
     try {
       const store = createAnnotationStore()
+      // Magic 本地补丁：文件划选片段/评论（better-sidebar 文件页经 window 桥进来）。
+      const fileNotes = createFileNotesStore()
       const controller = createSelectionController(() => ctx.sessions.list.getSnapshot().current ?? '')
 
       // The overlay root: toolbar + badges + highlight + editor + sent viewer.
@@ -35,8 +39,10 @@ export function registerAnnotations(ctx: Context, reflow: ReflowStore): void {
       const root = createRoot(host)
       root.render(<AnnotateOverlay ctx={ctx} store={store} controller={controller} />)
 
-      // 发送携带：拦截器在提交瞬间把协议块（注释 + 回流）拼入正文（草稿零污染）。
-      const offInterceptor = installSendInterceptor(ctx, store, reflow)
+      // 发送携带：拦截器在提交瞬间把协议块（注释 + 回流 + 文件片段/评论）拼入
+      // 正文（草稿零污染）。
+      const offInterceptor = installSendInterceptor(ctx, store, reflow, fileNotes)
+      installFileNotesBridge(fileNotes)
       // 发送后留痕：用户气泡里的协议块隐藏为「批注 ×N」标签。
       const offSurgery = installBubbleSurgery()
 
@@ -57,9 +63,16 @@ export function registerAnnotations(ctx: Context, reflow: ReflowStore): void {
           order: 11,
           registrant: 'dsh-sidenote',
         }, createReflowChip(reflow))
+        const offFileNotes = ctx.slots.register({
+          name: 'conversation.input.dock',
+          id: 'dsh-sidenote-file-notes',
+          order: 12,
+          registrant: 'dsh-sidenote',
+        }, createFileNotesChip(fileNotes))
         return () => {
           offAnnotations()
           offReflow()
+          offFileNotes()
         }
       })
 

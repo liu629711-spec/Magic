@@ -34,11 +34,27 @@ export interface SelectionPopup {
   insert: string
   left: number
   top: number
+  /** Magic local patch (2026-09-13): the raw selection pieces, for the
+   *  sidenote file-notes bridge (chip flow instead of a draft dump). */
+  payload?: FileSelectionPayload
+}
+
+/** Raw selection pieces (path/lines/quote) the callers already computed. */
+export interface FileSelectionPayload {
+  readonly path: string
+  readonly cwd: string | undefined
+  readonly lines: { readonly start: number; readonly end: number } | undefined
+  readonly selected: string
 }
 
 export interface SelectionPopupOptions {
   /** Commit the payload into the composer draft (button click). */
-  onCommit(insert: string): void
+  onCommit(insert: string, payload: FileSelectionPayload | undefined): void
+  /**
+   * Magic local patch (2026-09-13): the「评论」action — the caller opens its
+   * inline comment editor for this selection. Absent = single-button popup.
+   */
+  onComment?(payload: FileSelectionPayload): void
   /**
    * The DOM surface that must stay on screen for the popup to live: the
    * markdown preview container in preview mode, the CodeMirror host
@@ -52,8 +68,11 @@ export interface SelectionPopupControls {
   popup: SelectionPopup | null
   /** Attach to the portaled button element. */
   buttonRef: RefObject<HTMLButtonElement>
+  /** Magic local patch: the portaled popup ROOT (both buttons) — the
+   *  outside-mousedown dismissal guard checks this container. */
+  rootRef: RefObject<HTMLDivElement>
   /** Anchor the popup above a selection (viewport-clamped). */
-  show(insert: string, left: number, top: number): void
+  show(insert: string, left: number, top: number, payload?: FileSelectionPayload): void
   /** Hide the popup (idempotent). */
   hide(): void
   /** The button's click: commit the stored payload, then hide. */
@@ -64,8 +83,10 @@ export function useSelectionPopup(options: SelectionPopupOptions): SelectionPopu
   // Latest-callback refs: the dismissal listeners live for the mount's
   // lifetime, so they must not capture stale closures across renders.
   const onCommitRef = useRef(options.onCommit)
+  const onCommentRef = useRef(options.onComment)
   const getSurfaceRef = useRef(options.getSurface)
   onCommitRef.current = options.onCommit
+  onCommentRef.current = options.onComment
   getSurfaceRef.current = options.getSurface
 
   const [popup, setPopup] = useState<SelectionPopup | null>(null)
@@ -73,14 +94,17 @@ export function useSelectionPopup(options: SelectionPopupOptions): SelectionPopu
   const popupRef = useRef<SelectionPopup | null>(null)
   /** The portaled button itself (for the outside-click guard). */
   const buttonRef = useRef<HTMLButtonElement>(null)
+  /** The portaled popup root (container of every popup button). */
+  const rootRef = useRef<HTMLDivElement>(null)
   /** The surface visibility observer (created lazily on open). */
   const observerRef = useRef<IntersectionObserver | null>(null)
 
-  const show = (insert: string, left: number, top: number): void => {
+  const show = (insert: string, left: number, top: number, payload?: FileSelectionPayload): void => {
     const next: SelectionPopup = {
       insert,
       left: Math.min(Math.max(left, 80), window.innerWidth - 80),
       top,
+      ...(payload !== undefined ? { payload } : {}),
     }
     popupRef.current = next
     setPopup(next)
@@ -94,7 +118,7 @@ export function useSelectionPopup(options: SelectionPopupOptions): SelectionPopu
   const commit = (): void => {
     const current = popupRef.current
     if (current === null) return
-    onCommitRef.current(current.insert)
+    onCommitRef.current(current.insert, current.payload)
     hide()
   }
 
@@ -103,6 +127,8 @@ export function useSelectionPopup(options: SelectionPopupOptions): SelectionPopu
   useEffect(() => {
     const onMouseDown = (event: MouseEvent): void => {
       if (popupRef.current === null) return
+      const root = rootRef.current
+      if (root !== null && (root === event.target || root.contains(event.target as Node))) return
       const button = buttonRef.current
       if (button !== null && (button === event.target || button.contains(event.target as Node))) return
       hide()
@@ -152,5 +178,5 @@ export function useSelectionPopup(options: SelectionPopupOptions): SelectionPopu
     observer.observe(surface)
   }, [popupOpen])
 
-  return { popup, buttonRef, show, hide, commit }
+  return { popup, buttonRef, rootRef, show, hide, commit }
 }

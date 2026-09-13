@@ -30,7 +30,8 @@ import { isDarkScheme, subscribeColorScheme } from './theme.ts'
 import { SandboxStatusBar } from './SandboxStatusBar.tsx'
 import { appendToDraft } from './conversation-draft.ts'
 import { useSelectionPopup } from './selection-popup.ts'
-import { buildSelectionInsert, linesOfSelection } from './selection-payload.ts'
+import { buildSelectionInsert, headerOf, linesOfSelection } from './selection-payload.ts'
+import type { FileSelectionPayload } from './selection-popup.ts'
 import { analyzeMarkdownHtml } from './markdown-html.ts'
 import { LazyMermaidMarkdown, MarkdownDocument, type MarkdownHtmlMedia } from './MarkdownHtml.tsx'
 import { MdToc } from './md-toc.tsx'
@@ -38,6 +39,30 @@ import { splitMermaidBlocks } from './mermaid-blocks.ts'
 import { t } from './locales.ts'
 import { HTML_IFRAME_SANDBOX } from './html-preview.ts'
 import type { EditorToolbarState, FileViewerProps } from './service.ts'
+
+/** Magic local patch (2026-09-13): sidenote's file-notes bridge (the window
+ *  key is owned by dsh-sidenote; absent = legacy draft-insert flow). */
+interface SidenoteFileNotes {
+  add(sessionId: string, seed: { kind: 'snippet' | 'comment'; header: string; quote: string; note?: string }): void
+}
+
+function sidenoteFileNotes(): SidenoteFileNotes | null {
+  const candidate = (window as unknown as Record<string, unknown>).__dshSidenoteFileNotes
+  if (typeof candidate !== 'object' || candidate === null) return null
+  const add = (candidate as { add?: unknown }).add
+  return typeof add === 'function' ? (candidate as SidenoteFileNotes) : null
+}
+
+const popupButtonStyle = {
+  border: '1px solid rgba(127,127,127,.4)',
+  borderRadius: 8,
+  background: 'var(--dsw-bg, #fff)',
+  color: 'inherit',
+  padding: '4px 12px',
+  fontSize: 12,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap' as const,
+}
 import css from './sidebar.module.css'
 
 /** Previewable files (rendered output vs source editing). */
@@ -92,8 +117,45 @@ export function TextEditor(props: FileViewerProps) {
    * listeners (outside mousedown, Escape, hidden tab/window, surface
    * leaving the viewport) — see selection-popup.ts.
    */
+  // Magic local patch (2026-09-13): the「评论」inline editor state + the
+  // sidenote file-notes bridge (snippet/comment chips instead of a draft
+  // dump; legacy fallback when dsh-sidenote is not loaded).
+  const [commentEditor, setCommentEditor] = useState<{ left: number; top: number; payload: FileSelectionPayload; sessionId: string } | null>(null)
+  const [commentText, setCommentText] = useState('')
+  const saveFileComment = (): void => {
+    const editor = commentEditor
+    if (editor === null) return
+    const note = commentText.trim()
+    if (note === '') return
+    sidenoteFileNotes()?.add(editor.sessionId, {
+      kind: 'comment',
+      header: headerOf(editor.payload.path, editor.payload.cwd, editor.payload.lines),
+      quote: editor.payload.selected,
+      note,
+    })
+    setCommentEditor(null)
+    setCommentText('')
+  }
   const selectionPopup = useSelectionPopup({
-    onCommit: (insert) => { appendToDraft(ctx, scope.sessionId, insert) },
+    onCommit: (insert, payload) => {
+      if (payload !== undefined) {
+        const notes = sidenoteFileNotes()
+        if (notes !== null) {
+          notes.add(scope.sessionId, {
+            kind: 'snippet',
+            header: headerOf(payload.path, payload.cwd, payload.lines),
+            quote: payload.selected,
+          })
+          return
+        }
+      }
+      appendToDraft(ctx, scope.sessionId, insert)
+    },
+    onComment: (payload) => {
+      setCommentText('')
+      setCommentEditor({ left: selectionPopup.popup?.left ?? 0, top: selectionPopup.popup?.top ?? 0, payload, sessionId: scope.sessionId })
+      selectionPopup.hide()
+    },
     // The surface that must stay on screen: the markdown preview container
     // in preview mode, the CodeMirror host otherwise.
     getSurface: () => (markdown && mode === 'preview' ? mdRef.current : hostRef.current),
@@ -192,13 +254,17 @@ export function TextEditor(props: FileViewerProps) {
               return
             }
             const doc = update.state.doc
+            const payload: FileSelectionPayload = {
+              path,
+              cwd: scope.cwd,
+              lines: { start: doc.lineAt(sel.from).number, end: doc.lineAt(sel.to).number },
+              selected: text,
+            }
             selectionPopup.show(
-              buildSelectionInsert(path, scope.cwd, {
-                start: doc.lineAt(sel.from).number,
-                end: doc.lineAt(sel.to).number,
-              }, text),
+              buildSelectionInsert(payload.path, payload.cwd, payload.lines, payload.selected),
               rect.left - window.scrollX + (rect.right - rect.left) / 2,
               rect.top - window.scrollY,
+              payload,
             )
           }),
         ] : []),
@@ -391,10 +457,17 @@ export function TextEditor(props: FileViewerProps) {
     }
     const rect = sel.getRangeAt(0).getBoundingClientRect()
     const lines = linesOfSelection(mdText, text)
+    const payload: FileSelectionPayload = {
+      path,
+      cwd: scope.cwd,
+      lines: lines ?? undefined,
+      selected: text,
+    }
     selectionPopup.show(
-      buildSelectionInsert(path, scope.cwd, lines ?? undefined, text),
+      buildSelectionInsert(payload.path, payload.cwd, payload.lines, payload.selected),
       rect.left + rect.width / 2,
       rect.top,
+      payload,
     )
   }
   const editable = content !== undefined
@@ -560,18 +633,93 @@ export function TextEditor(props: FileViewerProps) {
         </>
       )}
       {selectionPopup.popup !== null && createPortal(
-        <button
-          type="button"
-          ref={selectionPopup.buttonRef}
-          className={css.selectionPopup}
-          style={{ left: selectionPopup.popup.left, top: selectionPopup.popup.top }}
-          // Keep the selection (and CodeMirror focus) alive until the click
-          // commits — without this the popup unmounts before click lands.
-          onMouseDown={(event) => { event.preventDefault() }}
-          onClick={selectionPopup.commit}
+        <div
+          ref={selectionPopup.rootRef}
+          style={{ position: 'fixed', left: selectionPopup.popup.left, top: selectionPopup.popup.top, transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 50 }}
         >
-          {t('addToConversation')}
-        </button>,
+          <button
+            type="button"
+            style={popupButtonStyle}
+            // Keep the selection (and CodeMirror focus) alive until the click
+            // commits — without this the popup unmounts before click lands.
+            onMouseDown={(event) => { event.preventDefault() }}
+            onClick={selectionPopup.commit}
+          >
+            {t('addToConversation')}
+          </button>
+          {sidenoteFileNotes() !== null && selectionPopup.popup.payload !== undefined && (
+            <button
+              type="button"
+              style={popupButtonStyle}
+              onMouseDown={(event) => { event.preventDefault() }}
+              onClick={() => {
+                const popup = selectionPopup.popup
+                if (popup?.payload === undefined) return
+                setCommentText('')
+                setCommentEditor({ left: popup.left, top: popup.top, payload: popup.payload, sessionId: scope.sessionId })
+                selectionPopup.hide()
+              }}
+            >
+              {t('fileComment')}
+            </button>
+          )}
+        </div>,
+        document.body,
+      )}
+      {commentEditor !== null && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: commentEditor.left,
+            top: commentEditor.top + 34,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            padding: 8,
+            minWidth: 264,
+            background: 'var(--dsw-bg, #fff)',
+            color: 'inherit',
+            border: '1px solid rgba(127,127,127,.4)',
+            borderRadius: 10,
+            boxShadow: '0 8px 28px rgba(0,0,0,.22)',
+            zIndex: 51,
+          }}
+          onMouseDown={(event) => { event.stopPropagation() }}
+        >
+          <div style={{ fontSize: 11, opacity: 0.7, fontFamily: 'ui-monospace, Consolas, monospace', wordBreak: 'break-all' }}>
+            {headerOf(commentEditor.payload.path, commentEditor.payload.cwd, commentEditor.payload.lines)}
+          </div>
+          <textarea
+            autoFocus
+            value={commentText}
+            onChange={(event) => { setCommentText(event.target.value) }}
+            onKeyDown={(event) => {
+              // Enter submits (Shift+Enter newline; IME composition guarded).
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault()
+                saveFileComment()
+              }
+            }}
+            placeholder={t('fileComment')}
+            style={{ width: '100%', height: 56, fontSize: 13, resize: 'vertical', border: '1px solid rgba(127,127,127,.4)', borderRadius: 6, padding: 6, background: 'transparent', color: 'inherit' }}
+          />
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              style={popupButtonStyle}
+              onClick={() => { setCommentEditor(null); setCommentText('') }}
+            >
+              {t('cancel')}
+            </button>
+            <button
+              type="button"
+              style={{ ...popupButtonStyle, background: '#2563eb', borderColor: '#2563eb', color: '#fff' }}
+              onClick={saveFileComment}
+            >
+              {t('save')}
+            </button>
+          </div>
+        </div>,
         document.body,
       )}
     </>
