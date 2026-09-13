@@ -26,6 +26,7 @@ import { IconCodeOutline16, IconDownloadOutline16 } from '@deepseek-ai/dsh-clien
 import { lazyChunkComponent } from '../lazy-chunk.tsx'
 import { PdfView } from '../PdfView.tsx'
 import { BinaryDownload } from '../binary-download.tsx'
+import { ImageStage } from '../ImageStage.tsx'
 import {
   IconImageOutline16,
   IconMarkdownOutline16,
@@ -54,11 +55,10 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
       icon: (size: number) => <IconImageOutline16 size={size} />,
       exts: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'],
       fetchStrategy: 'mediaUrl',
-      component: ({ mediaUrl: url, title }) => (
-        <div className={css.editorImageWrap}>
-          <img className={css.editorImage} src={url} alt={title} />
-        </div>
-      ),
+      // Magic local patch (2026-09-13): zoomable/pannable stage (wheel zoom
+      // at cursor, drag pan, click 1x/2x toggle, double-click reset) instead
+      // of the plain <img> — screenshots need close inspection.
+      component: ({ mediaUrl: url, title }) => <ImageStage src={url ?? ''} alt={title ?? ''} />,
     },
     {
       id: 'pdf',
