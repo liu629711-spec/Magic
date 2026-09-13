@@ -28,6 +28,21 @@ export interface Config {
     /** Optional initial allow-list of browser tool names; other tools are refused. */
     readonly allowedActions?: readonly string[];
 }
+/** Per-apply (per-context) tool state: sessions, in-flight opens, restriction. */
+export interface ToolBrowserState {
+    /** Per-task browser sessions, keyed by the calling DSH session id. */
+    readonly sessionsByTask: Map<string, BrowserSessionId>;
+    /** In-flight first-open per task key, so concurrent first calls share one session. */
+    readonly pendingOpens: Map<string, Promise<BrowserSessionId>>;
+    /**
+     * Action restriction: an allow-list of browser tool names, or undefined for
+     * unrestricted. When set, any browser_* tool not in the list is refused
+     * (browser_restrict itself is always allowed so the guard can be lifted).
+     * Scoped to one plugin apply (one context), so a restriction set by one
+     * task never leaks into another context.
+     */
+    restrictedTo: readonly string[] | undefined;
+}
 /** Register all browser tools with `ctx.tools`. */
 export declare function apply(ctx: Context, config?: Config): void;
 /** Test hook: inspect and reset session mappings across every live plugin apply. */

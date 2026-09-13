@@ -18,6 +18,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type { BrowserSessionId } from '../browser/types.js'
+import { registerAnnotateTools } from './annotate.js'
 
 /** Plugin name used by loader diagnostics. */
 export const name = 'tool-browser'
@@ -35,7 +36,7 @@ export interface Config {
 }
 
 /** Per-apply (per-context) tool state: sessions, in-flight opens, restriction. */
-interface ToolBrowserState {
+export interface ToolBrowserState {
   /** Per-task browser sessions, keyed by the calling DSH session id. */
   readonly sessionsByTask: Map<string, BrowserSessionId>
   /** In-flight first-open per task key, so concurrent first calls share one session. */
@@ -1508,6 +1509,12 @@ export function apply(ctx: Context, config: Config = {}): void {
       return { restored }
     },
   }))
+
+  // Magic local patch (2026-09-13): page-annotation tools. They live here —
+  // not in a sibling plugin — so they reuse THIS state's per-task session
+  // (provider.open() does not dedupe by label; a second opener would spawn a
+  // second browser window).
+  registerAnnotateTools(ctx, state, { ensureSession, taskKey, agentOf, timeoutMs })
 }
 
 /** Test hook: inspect and reset session mappings across every live plugin apply. */

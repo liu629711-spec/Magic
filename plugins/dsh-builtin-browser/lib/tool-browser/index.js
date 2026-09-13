@@ -14,6 +14,7 @@
  * @module dsh-browser/tool-browser
  */
 import { defineTool } from '@deepseek-ai/dsh-tools';
+import { registerAnnotateTools } from './annotate.js';
 /** Plugin name used by loader diagnostics. */
 export const name = 'tool-browser';
 /** The tool registry, browser seam, and system-prompt registry this tool layer consumes. */
@@ -1467,6 +1468,11 @@ export function apply(ctx, config = {}) {
             return { restored };
         },
     }));
+    // Magic local patch (2026-09-13): page-annotation tools. They live here —
+    // not in a sibling plugin — so they reuse THIS state's per-task session
+    // (provider.open() does not dedupe by label; a second opener would spawn a
+    // second browser window).
+    registerAnnotateTools(ctx, state, { ensureSession, taskKey, agentOf, timeoutMs });
 }
 /** Test hook: inspect and reset session mappings across every live plugin apply. */
 export const internals = {
