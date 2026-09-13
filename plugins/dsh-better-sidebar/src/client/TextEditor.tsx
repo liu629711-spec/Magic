@@ -635,7 +635,7 @@ export function TextEditor(props: FileViewerProps) {
       {selectionPopup.popup !== null && createPortal(
         <div
           ref={selectionPopup.rootRef}
-          style={{ position: 'fixed', left: selectionPopup.popup.left, top: selectionPopup.popup.top, transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 50 }}
+          style={{ position: 'fixed', left: selectionPopup.popup.left, top: selectionPopup.popup.top, transform: 'translate(-50%, calc(-100% - 8px))', display: 'flex', gap: 6, zIndex: 50 }}
         >
           <button
             type="button"

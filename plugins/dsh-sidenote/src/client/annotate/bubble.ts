@@ -69,6 +69,16 @@ function applySurgery(flowItem: HTMLElement): void {
     chip.title = proto.reflows.map(r => `${r.source}: ${flattenReflowContent(r.content).slice(0, 200)}`).join('\n')
     labels.appendChild(chip)
   }
+  // Magic 本地补丁：文件片段/评论留痕 chip（<file-notes> 协议块）。
+  if (proto.fileNotes !== undefined && proto.fileNotes.length > 0) {
+    const chip = document.createElement('span')
+    chip.className = css.sentChip ?? ''
+    chip.textContent = t('fileNotesBubbleLabel', { n: proto.fileNotes.length })
+    chip.title = proto.fileNotes
+      .map(n => `${n.file}${n.note !== undefined ? ` · ${n.note}` : ''}: ${n.quote.length > 200 ? `${n.quote.slice(0, 200)}…` : n.quote}`)
+      .join('\n')
+    labels.appendChild(chip)
+  }
   hidden.insertAdjacentElement('afterend', labels)
 }
 

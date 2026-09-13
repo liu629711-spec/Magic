@@ -82,15 +82,26 @@ export interface ParsedRefFlow {
   readonly content: string
 }
 
+/** Magic 本地补丁：一条文件片段/评论（<file-note> 解析结果）。 */
+export interface ParsedFileNote {
+  readonly file: string
+  readonly quote: string
+  readonly note?: string
+}
+
 export interface ProtocolPrefix {
   /** 协议区在消息文本中的字符长度（前缀，手术按它切）。 */
   readonly length: number
   readonly annotations: readonly ParsedAnnotation[]
   readonly reflows: readonly ParsedRefFlow[]
+  /** Magic 本地补丁：文件片段/评论块（无则缺省，兼容既有用例）。 */
+  readonly fileNotes?: readonly ParsedFileNote[]
 }
 
 const ANNOTATION_RE = /<annotation id="(\d+)">\s*<quote>([\s\S]*?)<\/quote>\s*(?:<note>([\s\S]*?)<\/note>\s*)?<\/annotation>/y
 const REFLOW_RE = /<reflow\s+source="([^"]*)"(?:\s+reason="([^"]*)")?\s*>([\s\S]*?)<\/reflow>/y
+const FILE_NOTES_RE = /<file-notes\s+source="[^"]*"\s*>([\s\S]*?)<\/file-notes>/y
+const FILE_NOTE_RE = /<file-note\s+file="([^"]*)"(?:\s+note="([^"]*)")?\s*>([\s\S]*?)<\/file-note>/y
 
 /**
  * 气泡 tooltip / 面板留痕 chip 的展示拍平：剥掉 <问>/<答> 协议标签只留内容行
@@ -118,6 +129,7 @@ export function splitProtocolPrefix(text: string): ProtocolPrefix | null {
   let pos = 0
   const reflows: ParsedRefFlow[] = []
   const annotations: ParsedAnnotation[] = []
+  const fileNotes: ParsedFileNote[] = []
 
   // 1) 连续的回流块（send.ts 组装序：回流在前）。
   for (;;) {
@@ -150,8 +162,34 @@ export function splitProtocolPrefix(text: string): ProtocolPrefix | null {
     return null
   }
 
-  if (reflows.length === 0 && annotations.length === 0) return null
+  // 3) 文件片段/评论块（Magic 本地补丁；send.ts 组装序：注释之后）。
+  for (;;) {
+    FILE_NOTES_RE.lastIndex = pos
+    const block = FILE_NOTES_RE.exec(text)
+    if (block === null) break
+    const inner = block[1] ?? ''
+    let innerPos = 0
+    for (;;) {
+      FILE_NOTE_RE.lastIndex = innerPos
+      const entry = FILE_NOTE_RE.exec(inner)
+      if (entry === null) break
+      fileNotes.push({
+        file: entry[1] ?? '',
+        quote: (entry[3] ?? '').trim(),
+        ...(entry[2] !== undefined && entry[2] !== '' ? { note: entry[2] } : {}),
+      })
+      innerPos = FILE_NOTE_RE.lastIndex
+    }
+    pos = skipBlank(text, block[0].length + pos)
+  }
+
+  if (reflows.length === 0 && annotations.length === 0 && fileNotes.length === 0) return null
   // 协议区与正文之间的一个空行分隔也一并消费。
   const end = skipBlank(text, pos)
-  return { length: end, annotations, reflows }
+  return {
+    length: end,
+    annotations,
+    reflows,
+    ...(fileNotes.length > 0 ? { fileNotes } : {}),
+  }
 }
