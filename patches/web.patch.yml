@@ -109,11 +109,6 @@
 # ── Magic 产品插件层 ────────────────────────────────────────────────────────
 # 顺序说明：ledger / memory 先于 ceo 加载，让「服务」在 CEO 用到之前就已就绪。
 # 但 CEO 侧用运行时 `ctx.get(...)` 读取，因此该顺序只是习惯，不是正确性前提。
-# magic-browser = PRD-02 §18 的自研实现：Playwright-core 驱动一只真
-# Chromium（本机 Chrome/Edge，独立 profile），10 个 browser_* 结构化工具 +
-# CDP 抓帧直播 + 鼠标接管，观察窗注册进 dsh-better-sidebar 的侧边栏
-# （client 侧 ctx.get('betterSidebar')，缺省时静默降级）。env 开关：
-# MAGIC_BROWSER_HEADLESS=1（无窗低帧率）/ MAGIC_BROWSER_CHROME=<浏览器路径>。
 
 - insert:
     - id: magic-work-mode
@@ -132,8 +127,15 @@
       name: ../plugins/magic-ceo/src/index.ts
     - id: magic-ceo-ui
       name: ../plugins/magic-ceo-ui/src/index.ts
-    - id: magic-browser
-      name: ../plugins/magic-browser/src/index.ts
+
+# magic-browser v1 已于 2026-09-13 从挂载中摘除（源码仍 vendor 在
+# plugins/magic-browser/，退役复盘见 docs/02-实现/08-自研浏览器插件.md）：
+# 「无头 + 直播画布」形态能看不能用，2026-09-13 用户裁定浏览器基线改定
+# dsh-builtin-browser（见上方 vendored 共享浏览器节）。两套 browser_* 工具
+# 并存会让模型随机选择（ego 退场同因），故必须同时摘除。
+# - insert:
+#     - id: magic-browser
+#       name: ../plugins/magic-browser/src/index.ts
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ── Tencent BrowserSkill 桥接：已于 2026-09-13 摘除 ─────────────────────────
