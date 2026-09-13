@@ -141,6 +141,9 @@ export function splitProtocolPrefix(text: string): ProtocolPrefix | null {
   }
 
   // 2) 注释块：头部行 + 连续 <annotation> 块。
+  //    Magic 本地补丁修正：头部行未命中/命中但零注释时不再提前 return null——
+  //    消息可能只携带 file-notes 块（无头部行），必须让第 3 步有机会跑；
+  //    全空由函数末尾的统一门槛判定。
   const rest = text.slice(pos)
   const headerMatch = /^([^\n]*)\n/.exec(rest)
   if (headerMatch !== null && PROTOCOL_HEADER_RE.test(headerMatch[1] ?? '')) {
@@ -154,12 +157,8 @@ export function splitProtocolPrefix(text: string): ProtocolPrefix | null {
     }
     if (annotations.length > 0) {
       pos = cursor
-    } else if (reflows.length === 0) {
-      return null
     }
     // 有回流但头部行后无注释块：头部行属用户巧合文本，不消费（留给正文）。
-  } else if (reflows.length === 0) {
-    return null
   }
 
   // 3) 文件片段/评论块（Magic 本地补丁；send.ts 组装序：注释之后）。
