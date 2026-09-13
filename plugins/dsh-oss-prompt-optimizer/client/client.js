@@ -185,10 +185,11 @@ window.__ModuleLoader__.load({
             var setAnnounce = announceState[1]
             // Owner prop: point-in-time InputState snapshot (the skeleton
             // re-renders on input changes, so the button stays current).
-            // Magic local patch (rc.2): the draft lives at input.state.getSnapshot().draft
-            // in 0.1.5 (input.draft was the 0.1.0-rc.6 shape); read both for compat.
-            var __inputState = props.input && props.input.state && typeof props.input.state.getSnapshot === 'function' ? props.input.state.getSnapshot() : null
-            var draft = __inputState && typeof __inputState.draft === 'string' ? __inputState.draft : (props.input && typeof props.input.draft === 'string' ? props.input.draft : '')
+            // Magic local patch (rc.2): slot children receive the input store via the
+            // uiSession provision hook useInput (props.input / input.draft never existed
+            // on this slot). Compose input.draft read for legacy compat only.
+            var __inputState = typeof props.useInput === 'function' ? props.useInput(function (s) { return s }) : null
+            var draft = __inputState && typeof __inputState.draft === 'string' ? __inputState.draft : (props.input && props.input.state && typeof props.input.state.getSnapshot === 'function' ? props.input.state.getSnapshot().draft : (props.input && typeof props.input.draft === 'string' ? props.input.draft : ''))
             // The error flash never blocks a retry: clicking again retries
             // immediately (and clears the flash).
             var canOptimize = draft.trim().length > 0 && !busy
