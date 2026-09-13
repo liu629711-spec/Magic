@@ -109,6 +109,8 @@ export const en = {
   // sent 留痕（气泡标签 + 只读回看）
   sentChipLabel: '{n} annotated',
   fileNotesBubbleLabel: '{n} file note(s)',
+  fileNotesChipOne: '{n} file snippet',
+  fileNotesChipMany: '{n} file snippets',
   sentBadgeTitle: 'Sent annotation {n} (view only)',
   sentCardTitle: 'Annotation {n} (sent)',
 
@@ -270,6 +272,8 @@ export const zh: Record<CopyKey, string> = {
 
   sentChipLabel: '批注 ×{n}',
   fileNotesBubbleLabel: '文件片段/评论 ×{n}',
+  fileNotesChipOne: '1 条文件引用',
+  fileNotesChipMany: '{n} 条文件引用',
   sentBadgeTitle: '已发送的注释 {n}（只读回看）',
   sentCardTitle: '注释 {n}（已发送）',
 

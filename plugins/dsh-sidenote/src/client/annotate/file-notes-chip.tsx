@@ -1,128 +1,115 @@
 /**
- * 「文件片段/评论」composer chip（Magic 本地补丁）：conversation.input.dock
- * 席位（order 12，注释 10 / 回流 11 之后），统计未发送条数，展开可预览/
- * 删除全部条目。内联样式——局部补丁不进上游 css module。
+ * 「文件片段/评论」composer chip（Magic 本地补丁，dock order 12）：
+ * 渲染完全镜像 createAnnotationChip（同 css.chipWrap/chip/chipPanel/chipRow
+ * 类与交互：Esc/外点收起、会话切换收起、chipRemove/clearAll）——用户裁定
+ * 「完全参考注释来做」。只统计未发送条目（发送后即从 chip 消失，与注释
+ * 的「批注 ×N」一致）；条目本体在发送时已随协议块交付。
  * @module dsh-sidenote/file-notes-chip
  */
-import { useCallback, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { IconCloseOutline16, IconListPenOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { FileNotesStore } from './file-notes.ts'
+import { t } from '../locales.ts'
+import { useLocaleTick } from '../locale-tick.ts'
+import { AnnotateErrorBoundary } from './overlay.tsx'
+import css from './annotate.module.css'
 
 interface ChipProps {
   readonly session: { sessionId: string }
 }
 
-const chipStyle: React.CSSProperties = {
-  border: '1px solid rgba(127,127,127,.4)',
-  borderRadius: 999,
-  background: 'rgba(127,127,127,.08)',
-  color: 'inherit',
-  padding: '3px 12px',
-  fontSize: 12,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-}
-
-const panelStyle: React.CSSProperties = {
-  position: 'absolute',
-  bottom: 'calc(100% + 8px)',
-  left: 0,
-  width: 340,
-  maxHeight: 280,
-  overflow: 'auto',
-  background: 'var(--dsw-bg, #fff)',
-  color: 'inherit',
-  border: '1px solid rgba(127,127,127,.35)',
-  borderRadius: 10,
-  boxShadow: '0 8px 28px rgba(0,0,0,.2)',
-  padding: 10,
-  zIndex: 50,
-}
-
-const itemStyle: React.CSSProperties = {
-  border: '1px solid rgba(127,127,127,.25)',
-  borderRadius: 8,
-  padding: '6px 8px',
-  marginBottom: 6,
-  fontSize: 12,
-}
-
-const headStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: 8,
-}
-
-const kindStyle: React.CSSProperties = { opacity: 0.72 }
-
-const delStyle: React.CSSProperties = {
-  border: 'none',
-  background: 'transparent',
-  color: 'inherit',
-  opacity: 0.6,
-  cursor: 'pointer',
-  fontSize: 12,
-}
-
-const headerStyle: React.CSSProperties = {
-  fontFamily: 'ui-monospace, Consolas, monospace',
-  fontSize: 11,
-  opacity: 0.72,
-  wordBreak: 'break-all',
-  margin: '3px 0',
-}
-
-const quoteStyle: React.CSSProperties = {
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-all',
-  maxHeight: 72,
-  overflow: 'hidden',
-}
-
-const noteStyle: React.CSSProperties = { marginTop: 4, whiteSpace: 'pre-wrap' }
-
-export function createFileNotesChip(store: FileNotesStore) {
-  return function FileNotesChip(props: ChipProps): ReactNode {
+/** Create the slot component bound to one store instance. */
+export function createFileNotesChip(fileNotes: FileNotesStore) {
+  function FileNotesChip(props: ChipProps): ReactNode {
+    useLocaleTick()
     const sessionId = props.session.sessionId
     useSyncExternalStore(
-      useCallback((cb: () => void) => store.subscribe(cb), [store]),
-      () => store.getSnapshot(),
+      useCallback((cb: () => void) => fileNotes.subscribe(cb), [fileNotes]),
+      () => fileNotes.getSnapshot(),
     )
     const [expanded, setExpanded] = useState(false)
-    const items = store.list(sessionId)
-    if (items.length === 0) return null
-    const unsent = items.filter(item => item.sent !== true).length
+    const rootRef = useRef<HTMLDivElement | null>(null)
+
+    useEffect(() => {
+      if (!expanded) return
+      const onKeyDown = (event: KeyboardEvent): void => {
+        if (event.key === 'Escape') {
+          event.stopPropagation()
+          setExpanded(false)
+        }
+      }
+      const onMouseDown = (event: MouseEvent): void => {
+        const root = rootRef.current
+        if (root === null || !(event.target instanceof Node)) return
+        if (!root.contains(event.target)) setExpanded(false)
+      }
+      document.addEventListener('keydown', onKeyDown, true)
+      document.addEventListener('mousedown', onMouseDown, true)
+      return () => {
+        document.removeEventListener('keydown', onKeyDown, true)
+        document.removeEventListener('mousedown', onMouseDown, true)
+      }
+    }, [expanded])
+
+    // 会话切换时收起展开态（slot 组件实例不随会话切换重建）。
+    useEffect(() => {
+      setExpanded(false)
+    }, [sessionId])
+
+    const active = fileNotes.listUnsent(sessionId)
+    if (active.length === 0) return null
+
     return (
-      <div style={{ position: 'relative', display: 'inline-flex' }}>
+      <div ref={rootRef} className={css.chipWrap}>
         <button
           type="button"
-          style={chipStyle}
-          onClick={() => { setExpanded(value => !value) }}
+          className={css.chip}
+          aria-expanded={expanded}
+          onClick={() => { setExpanded(open => !open) }}
         >
-          📄 文件片段/评论{unsent > 0 ? ` · ${unsent} 未发送` : ` · ${items.length}`}
+          <IconListPenOutline16 size={12} />
+          <span>{t(active.length === 1 ? 'fileNotesChipOne' : 'fileNotesChipMany', { n: active.length })}</span>
         </button>
         {expanded && (
-          <div style={panelStyle}>
-            {items.map(item => (
-              <div key={item.id} style={itemStyle}>
-                <div style={headStyle}>
-                  <span style={kindStyle}>
-                    {item.kind === 'comment' ? '评论' : '片段'}{item.sent === true ? ' · 已发送' : ''}
-                  </span>
-                  <button
-                    type="button"
-                    style={delStyle}
-                    onClick={() => { store.remove(sessionId, item.id) }}
-                  >删除</button>
-                </div>
-                <div style={headerStyle}>{item.header}</div>
-                <div style={quoteStyle}>{item.quote}</div>
-                {item.note !== undefined && <div style={noteStyle}>💬 {item.note}</div>}
-              </div>
+          <ul className={css.chipPanel}>
+            {active.map(note => (
+              <li key={note.id} className={css.chipRow}>
+                <span className={css.chipText} title={note.quote}>
+                  {note.quote}
+                  {note.note !== undefined && <span className={css.chipNote}>{t('chipNote', { note: note.note })}</span>}
+                  <span className={css.chipNumber}>{note.header}</span>
+                </span>
+                <button
+                  type="button"
+                  className={css.chipRemove}
+                  title={t('removeTitle')}
+                  aria-label={t('removeAria', { n: note.id })}
+                  onClick={() => { fileNotes.remove(sessionId, note.id) }}
+                >
+                  <IconCloseOutline16 size={12} />
+                </button>
+              </li>
             ))}
-          </div>
+            <li className={css.chipRow}>
+              <button
+                type="button"
+                className={css.chipClearAll}
+                onClick={() => { for (const note of active) fileNotes.remove(sessionId, note.id) }}
+              >
+                {t('clearAll')}
+              </button>
+            </li>
+          </ul>
         )}
       </div>
+    )
+  }
+
+  return function FileNotesChipEntry(props: ChipProps): ReactNode {
+    return (
+      <AnnotateErrorBoundary>
+        <FileNotesChip {...props} />
+      </AnnotateErrorBoundary>
     )
   }
 }
