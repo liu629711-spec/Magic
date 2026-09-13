@@ -170,9 +170,14 @@ export function buildFileNotesBlock(notes: readonly FileNote[]): string {
   return `<file-notes source="工作区文件划选">\n${lines.join('\n')}\n</file-notes>`
 }
 
-/** The window bridge better-sidebar's file viewers call into (optional hop). */
+/** The window bridge better-sidebar's file viewers call into (optional hop).
+ *  Magic 本地补丁扩了 list/remove/subscribe——文件内评论卡（better-sidebar
+ *  预览 DOM）靠它读全量（含已发送）并响应增删。 */
 interface FileNotesBridge {
   add(sessionId: string, seed: FileNoteSeed): void
+  list(sessionId: string): readonly FileNote[]
+  remove(sessionId: string, id: number): void
+  subscribe(fn: () => void): () => void
 }
 
 const BRIDGE_KEY = '__dshSidenoteFileNotes'
@@ -181,6 +186,9 @@ const BRIDGE_KEY = '__dshSidenoteFileNotes'
 export function installFileNotesBridge(store: FileNotesStore): void {
   ;(window as unknown as Record<string, unknown>)[BRIDGE_KEY] = {
     add: (sessionId: string, seed: FileNoteSeed): void => { store.add(sessionId, seed) },
+    list: (sessionId: string): readonly FileNote[] => store.list(sessionId),
+    remove: (sessionId: string, id: number): void => { store.remove(sessionId, id) },
+    subscribe: (fn: () => void): (() => void) => store.subscribe(fn),
   } satisfies FileNotesBridge
 }
 
