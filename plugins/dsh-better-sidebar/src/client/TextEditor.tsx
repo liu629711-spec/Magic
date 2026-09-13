@@ -31,7 +31,9 @@ import { SandboxStatusBar } from './SandboxStatusBar.tsx'
 import { appendToDraft } from './conversation-draft.ts'
 import { useSelectionPopup, type FileSelectionPayload } from './selection-popup.ts'
 import { mountFileCommentCards, sidenoteFileNotes } from './file-comment-cards.ts'
-import { buildCommentCardDom, buildCommentEditorDom, fileCommentExtensions, hideCommentEditorWidget, setCommentCardWidgets, showCommentEditorWidget } from './file-comment-widgets.ts'
+import { fileCommentExtensions, hideCommentEditorWidget, setCommentCardWidgets, showCommentEditorWidget } from './file-comment-widgets.ts'
+import { buildCommentCardDom, buildCommentEditorDom } from './comment-dom.ts'
+import { findAnchorBlock } from './file-comment-cards.ts'
 import { relativeTo } from './paths.ts'
 import { buildSelectionInsert, headerOf, linesOfSelection } from './selection-payload.ts'
 import { analyzeMarkdownHtml } from './markdown-html.ts'
@@ -109,7 +111,6 @@ export function TextEditor(props: FileViewerProps) {
   // Magic local patch (2026-09-13): the「评论」inline editor state + the
   // sidenote file-notes bridge (snippet/comment chips instead of a draft
   // dump; legacy fallback when dsh-sidenote is not loaded).
-  const [commentEditor, setCommentEditor] = useState<{ left: number; top: number; payload: FileSelectionPayload; sessionId: string } | null>(null)
   // Magic local patch: re-anchor the CodeMirror comment-card widgets from the
   // store (single source of truth; called after add/remove/view creation).
   const syncFileCommentCardWidgets = (): void => {
@@ -128,9 +129,14 @@ export function TextEditor(props: FileViewerProps) {
       items.push({
         pos,
         id: note.id,
-        dom: buildCommentCardDom(line, note.note ?? '', () => {
-          notes.remove(scope.sessionId, note.id)
-          syncFileCommentCardWidgets()
+        dom: buildCommentCardDom({
+          line,
+          note: note.note ?? '',
+          deletable: true,
+          onDelete: () => {
+            notes.remove(scope.sessionId, note.id)
+            syncFileCommentCardWidgets()
+          },
         }),
       })
     }
@@ -158,20 +164,6 @@ export function TextEditor(props: FileViewerProps) {
     return notes.subscribe(() => { syncFileCommentCardWidgets() })
   }, [scope.sessionId, path])
   const [commentText, setCommentText] = useState('')
-  const saveFileComment = (): void => {
-    const editor = commentEditor
-    if (editor === null) return
-    const note = commentText.trim()
-    if (note === '') return
-    sidenoteFileNotes()?.add(editor.sessionId, {
-      kind: 'comment',
-      header: headerOf(editor.payload.path, editor.payload.cwd, editor.payload.lines),
-      quote: editor.payload.selected,
-      note,
-    })
-    setCommentEditor(null)
-    setCommentText('')
-  }
   const selectionPopup = useSelectionPopup({
     onCommit: (insert, payload) => {
       if (payload !== undefined) {
@@ -187,43 +179,63 @@ export function TextEditor(props: FileViewerProps) {
       }
       appendToDraft(ctx, scope.sessionId, insert)
     },
-    onComment: (payload) => {
-      // Magic local patch (2026-09-13): edit mode opens the comment editor as
-      // an in-flow CodeMirror line widget (Codex-style); preview mode keeps
-      // the viewport-anchored editor.
-      const view = viewRef.current
-      if (mode === 'edit' && view !== null) {
-        setCommentText('')
-        setCommentEditor(null)
-        showCommentEditorWidget(
-          view,
-          payload.lines?.end ?? 1,
-          buildCommentEditorDom(
-            headerOf(payload.path, payload.cwd, payload.lines),
-            (note) => {
-              sidenoteFileNotes()?.add(scope.sessionId, {
-                kind: 'comment',
-                header: headerOf(payload.path, payload.cwd, payload.lines),
-                quote: payload.selected,
-                note,
-              })
-              hideCommentEditorWidget(view)
-              syncFileCommentCardWidgets()
-            },
-            () => { hideCommentEditorWidget(view); syncFileCommentCardWidgets() },
-          ),
-        )
-        selectionPopup.hide()
-        return
-      }
-      setCommentText('')
-      setCommentEditor({ left: selectionPopup.popup?.left ?? 0, top: selectionPopup.popup?.top ?? 0, payload, sessionId: scope.sessionId })
-      selectionPopup.hide()
-    },
+    onComment: (payload) => { openCommentEditor(payload) },
     // The surface that must stay on screen: the markdown preview container
     // in preview mode, the CodeMirror host otherwise.
     getSurface: () => (markdown && mode === 'preview' ? mdRef.current : hostRef.current),
   })
+  /** Magic local patch: open the comment editor for one selection — the
+   *  edit-mode line-widget path or the preview in-flow module. */
+  const openCommentEditor = (payload: FileSelectionPayload): void => {
+    // Magic local patch (2026-09-13): edit mode opens the comment editor as
+    // an in-flow CodeMirror line widget (Codex-style); preview mode keeps
+    // the viewport-anchored editor.
+    const view = viewRef.current
+    if (mode === 'edit' && view !== null) {
+      showCommentEditorWidget(
+        view,
+        payload.lines?.end ?? 1,
+        buildCommentEditorDom({
+          line: payload.lines?.end,
+          onSubmit: (note) => {
+            sidenoteFileNotes()?.add(scope.sessionId, {
+              kind: 'comment',
+              header: headerOf(payload.path, payload.cwd, payload.lines),
+              quote: payload.selected,
+              note,
+            })
+            hideCommentEditorWidget(view)
+            syncFileCommentCardWidgets()
+          },
+          onCancel: () => { hideCommentEditorWidget(view); syncFileCommentCardWidgets() },
+        }),
+      )
+      selectionPopup.hide()
+      return
+    }
+    // Preview mode: the comment editor is also an in-flow module — it
+    // inserts right after the anchored block in the preview DOM.
+    const surface = mdRef.current
+    const notes = sidenoteFileNotes()
+    const anchor = surface !== null && notes !== null ? findAnchorBlock(surface, payload.selected) : null
+    if (surface === null || notes === null || anchor === null) return
+    const editorDom = buildCommentEditorDom({
+      line: payload.lines?.start,
+      onSubmit: (note) => {
+        notes.add(scope.sessionId, {
+          kind: 'comment',
+          header: headerOf(payload.path, payload.cwd, payload.lines),
+          quote: payload.selected,
+          note,
+        })
+        editorDom.remove()
+      },
+      onCancel: () => { editorDom.remove() },
+    })
+    anchor.after(editorDom)
+    editorDom.querySelector('textarea')?.focus()
+    selectionPopup.hide()
+  }
 
   useEffect(() => subscribeColorScheme(() => { setDark(isDarkScheme()) }), [])
 
@@ -724,77 +736,12 @@ export function TextEditor(props: FileViewerProps) {
               onClick={() => {
                 const popup = selectionPopup.popup
                 if (popup?.payload === undefined) return
-                setCommentText('')
-                setCommentEditor({ left: popup.left, top: popup.top, payload: popup.payload, sessionId: scope.sessionId })
-                selectionPopup.hide()
+                openCommentEditor(popup.payload)
               }}
             >
               {t('fileComment')}
             </button>
           )}
-        </div>,
-        document.body,
-      )}
-      {commentEditor !== null && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            // Magic local patch: clamp inside the preview surface so the panel
-            // never overflows the dock's right edge.
-            left: (() => {
-              const surface = markdown && mode === 'preview' ? mdRef.current : hostRef.current
-              const rect = surface?.getBoundingClientRect()
-              const max = rect !== undefined ? rect.right - 300 : window.innerWidth - 300
-              return Math.max(8, Math.min(commentEditor.left, Math.max(8, max)))
-            })(),
-            top: commentEditor.top + 34,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            padding: 8,
-            minWidth: 264,
-            background: 'var(--dsw-bg, #fff)',
-            color: 'inherit',
-            border: '1px solid rgba(127,127,127,.4)',
-            borderRadius: 10,
-            boxShadow: '0 8px 28px rgba(0,0,0,.22)',
-            zIndex: 51,
-          }}
-          onMouseDown={(event) => { event.stopPropagation() }}
-        >
-          <div style={{ fontSize: 11, opacity: 0.7, fontFamily: 'ui-monospace, Consolas, monospace', wordBreak: 'break-all' }}>
-            {headerOf(commentEditor.payload.path, commentEditor.payload.cwd, commentEditor.payload.lines)}
-          </div>
-          <textarea
-            autoFocus
-            value={commentText}
-            onChange={(event) => { setCommentText(event.target.value) }}
-            onKeyDown={(event) => {
-              // Enter submits (Shift+Enter newline; IME composition guarded).
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault()
-                saveFileComment()
-              }
-            }}
-            placeholder={t('fileComment')}
-            style={{ width: '100%', height: 56, fontSize: 13, resize: 'vertical', border: '1px solid rgba(127,127,127,.4)', borderRadius: 6, padding: 6, background: 'transparent', color: 'inherit' }}
-          />
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              style={popupButtonStyle}
-              onClick={() => { setCommentEditor(null); setCommentText('') }}
-            >
-              {t('cancel')}
-            </button>
-            <button
-              type="button"
-              style={{ ...popupButtonStyle, background: '#2563eb', borderColor: '#2563eb', color: '#fff' }}
-              onClick={saveFileComment}
-            >
-              {t('save')}
-            </button>
-          </div>
         </div>,
         document.body,
       )}

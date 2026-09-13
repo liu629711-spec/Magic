@@ -11,6 +11,7 @@
  */
 import { relativeTo } from './paths.ts'
 import { t } from './locales.ts'
+import { buildCommentCardDom } from './comment-dom.ts'
 
 /** Structural mirror of sidenote's FileNotesBridge (window contract). */
 export interface SidenoteFileNotes {
@@ -55,7 +56,7 @@ function filePartOf(header: string): string {
 }
 
 /** The tightest block element whose text contains the quoted text. */
-function findAnchorBlock(surface: HTMLElement, quote: string): Element | null {
+export function findAnchorBlock(surface: HTMLElement, quote: string): Element | null {
   const needle = normalize(quote).slice(0, 80)
   if (needle === '') return null
   let best: Element | null = null
@@ -72,25 +73,16 @@ function findAnchorBlock(surface: HTMLElement, quote: string): Element | null {
   return best
 }
 
-function buildCard(item: FileNoteItem, remove: (id: number) => void): HTMLElement {
-  const card = document.createElement('div')
-  card.setAttribute(CARD_FLAG, String(item.id))
-  card.style.cssText = cardStyle
-  const head = document.createElement('div')
-  head.style.cssText = 'display:flex;justify-content:space-between;gap:8px;align-items:center;opacity:.72'
-  const who = document.createElement('span')
-  who.textContent = item.header
-  const del = document.createElement('button')
-  del.type = 'button'
-  del.textContent = t('delete')
-  del.style.cssText = 'border:none;background:transparent;color:inherit;opacity:.6;cursor:pointer;font-size:12px;padding:0'
-  del.addEventListener('click', () => { remove(item.id) })
-  head.append(who, del)
-  const body = document.createElement('div')
-  body.style.cssText = 'white-space:pre-wrap;word-break:break-word;margin-top:3px'
-  body.textContent = item.note ?? ''
-  card.append(head, body)
-  return card
+function buildCard(item: FileNoteItem, remove: (id: number) => void, cwd: string | undefined, path: string): HTMLElement {
+  const rel = cwd !== undefined ? relativeTo(cwd, path) : path
+  const lineMatch = /:(\d+)/.exec(item.header)
+  const line = lineMatch !== null && item.header.slice(0, lineMatch.index) === rel ? Number(lineMatch[1]) : undefined
+  return buildCommentCardDom({
+    line,
+    note: item.note ?? '',
+    deletable: true,
+    onDelete: () => { remove(item.id) },
+  })
 }
 
 export interface FileCommentCardsOptions {
@@ -133,7 +125,7 @@ export function mountFileCommentCards(bridge: SidenoteFileNotes, opts: FileComme
       if (surface.querySelector(`[${CARD_FLAG}="${item.id}"]`) !== null) continue
       const anchor = findAnchorBlock(surface, item.quote)
       if (anchor === null) continue
-      anchor.after(buildCard(item, id => { bridge.remove(sessionId, id) }))
+      anchor.after(buildCard(item, id => { bridge.remove(sessionId, id) }, cwd, opts.getPath()))
     }
   }
 
