@@ -29,9 +29,9 @@ import { cmSurfaceTheme, CmThemeCompartment } from './cm-themes.ts'
 import { isDarkScheme, subscribeColorScheme } from './theme.ts'
 import { SandboxStatusBar } from './SandboxStatusBar.tsx'
 import { appendToDraft } from './conversation-draft.ts'
-import { useSelectionPopup } from './selection-popup.ts'
+import { useSelectionPopup, type FileSelectionPayload } from './selection-popup.ts'
+import { mountFileCommentCards, sidenoteFileNotes } from './file-comment-cards.ts'
 import { buildSelectionInsert, headerOf, linesOfSelection } from './selection-payload.ts'
-import type { FileSelectionPayload } from './selection-popup.ts'
 import { analyzeMarkdownHtml } from './markdown-html.ts'
 import { LazyMermaidMarkdown, MarkdownDocument, type MarkdownHtmlMedia } from './MarkdownHtml.tsx'
 import { MdToc } from './md-toc.tsx'
@@ -39,19 +39,6 @@ import { splitMermaidBlocks } from './mermaid-blocks.ts'
 import { t } from './locales.ts'
 import { HTML_IFRAME_SANDBOX } from './html-preview.ts'
 import type { EditorToolbarState, FileViewerProps } from './service.ts'
-
-/** Magic local patch (2026-09-13): sidenote's file-notes bridge (the window
- *  key is owned by dsh-sidenote; absent = legacy draft-insert flow). */
-interface SidenoteFileNotes {
-  add(sessionId: string, seed: { kind: 'snippet' | 'comment'; header: string; quote: string; note?: string }): void
-}
-
-function sidenoteFileNotes(): SidenoteFileNotes | null {
-  const candidate = (window as unknown as Record<string, unknown>).__dshSidenoteFileNotes
-  if (typeof candidate !== 'object' || candidate === null) return null
-  const add = (candidate as { add?: unknown }).add
-  return typeof add === 'function' ? (candidate as SidenoteFileNotes) : null
-}
 
 const popupButtonStyle = {
   border: '1px solid rgba(127,127,127,.4)',
@@ -121,6 +108,19 @@ export function TextEditor(props: FileViewerProps) {
   // sidenote file-notes bridge (snippet/comment chips instead of a draft
   // dump; legacy fallback when dsh-sidenote is not loaded).
   const [commentEditor, setCommentEditor] = useState<{ left: number; top: number; payload: FileSelectionPayload; sessionId: string } | null>(null)
+  // Magic local patch (2026-09-13): in-file comment cards (preview only) —
+  // comments render under their anchored block and are deletable in place.
+  useEffect(() => {
+    const notes = sidenoteFileNotes()
+    if (notes === null) return
+    if (markdown !== true || mode !== 'preview') return
+    return mountFileCommentCards(notes, {
+      getSessionId: () => scope.sessionId,
+      getPath: () => path,
+      getCwd: () => scope.cwd,
+      getSurface: () => (markdown && mode === 'preview' ? mdRef.current : null),
+    })
+  }, [markdown, mode, path, content])
   const [commentText, setCommentText] = useState('')
   const saveFileComment = (): void => {
     const editor = commentEditor
@@ -670,7 +670,14 @@ export function TextEditor(props: FileViewerProps) {
         <div
           style={{
             position: 'fixed',
-            left: commentEditor.left,
+            // Magic local patch: clamp inside the preview surface so the panel
+            // never overflows the dock's right edge.
+            left: (() => {
+              const surface = markdown && mode === 'preview' ? mdRef.current : hostRef.current
+              const rect = surface?.getBoundingClientRect()
+              const max = rect !== undefined ? rect.right - 300 : window.innerWidth - 300
+              return Math.max(8, Math.min(commentEditor.left, Math.max(8, max)))
+            })(),
             top: commentEditor.top + 34,
             display: 'flex',
             flexDirection: 'column',
