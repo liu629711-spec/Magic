@@ -209,7 +209,17 @@ const MessageRow = memo(function MessageRow({ message, question, fold, reflow, p
     }
     case 'assistant':
       return (
-        <div className={css.assistantRow}>
+        <div
+          className={css.assistantRow}
+          // Magic local patch (2026-09-13): anchor attributes so the main-line
+          // selection popover also works inside the side chat (user ruling:
+          // select side-chat text -> add to conversation / annotate). The
+          // namespaced key cannot collide with main-flow message anchors;
+          // data-streaming keeps mid-flight rows ineligible like the main flow.
+          {...(message.streaming === true ? { 'data-streaming': '' } : {})}
+          data-chat-flow-kind="assistant-step"
+          data-chat-anchor-key={`side:${parentSessionId}:${message.key}`}
+        >
           {message.text !== '' && message.streaming !== true && (
             <div className={css.rowActions}>
               <ReflowButton reflow={reflow} parentSessionId={parentSessionId} sideTitle={sideTitle} text={message.text} question={question} />

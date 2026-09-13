@@ -366,7 +366,7 @@ export function SideChatPanel(props: TabComponentProps & { reflow: ReflowStore }
     : parentPending > 0 ? 'pending' : parentSnap?.running === true ? 'running' : 'idle'
 
   return (
-    <div ref={rootRef} className={css.root}>
+    <div ref={rootRef} className={css.root} data-sidenote-sidechat="">
       {parentState !== null && meta.parentSessionId !== undefined && (
         <button
           type="button"

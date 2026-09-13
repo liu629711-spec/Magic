@@ -40,8 +40,18 @@ export interface SelectionState {
 /** The assistant message node kind (v1 实测纠正值 — 勿引旧值 `assistant`). */
 export const ASSISTANT_KIND = 'assistant-step'
 
-/** Selector roots our UI must never react to (sidebar viewer + our own root). */
+/** Selector roots our UI must never react to (sidebar viewer + our own root).
+ *  Magic local patch (2026-09-13): the sidenote side-chat panel opts itself
+ *  back IN via [data-sidenote-sidechat] — the panel lives inside the
+ *  better-sidebar surface, and the user ruled that selecting side-chat text
+ *  must offer 添加到对话/annotate like the main flow. */
 const EXCLUDED_ROOTS = '[data-dsh-better-sidebar], [data-dsh-sidenote]'
+const ALLOWED_ROOT = '[data-sidenote-sidechat]'
+
+function isExcludedRoot(el: HTMLElement | null): boolean {
+  if (el === null) return false
+  return el.closest(EXCLUDED_ROOTS) !== null && el.closest(ALLOWED_ROOT) === null
+}
 
 /** Pure validation of one candidate selection (unit-tested without DOM). */
 export function isEligibleSelection(input: {
@@ -109,9 +119,7 @@ export function captureSelection(currentSessionId: string): SelectionSnapshot | 
     sameMessage: message !== null && message === endMessage,
     kind: message?.dataset.chatFlowKind ?? '',
     streaming: message !== null && isStreaming(message),
-    excluded: anchor !== null
-      ? anchor.closest(EXCLUDED_ROOTS) !== null
-      : message?.closest(EXCLUDED_ROOTS) !== null,
+    excluded: isExcludedRoot(anchor ?? message),
     hasSession: currentSessionId !== '',
   })
   if (!eligible || message === null) return null
