@@ -1,2 +1,14 @@
 packages:
   - plugins/*
+  # dsh-univer-office 是自包含 monorepo（自带 pnpm-workspace.yaml/lockfile/
+  # packageManager），按嵌套独立工作区维护，不并入根 workspace：
+  # 依赖体积巨大且上游用 insiders 锁文件，并入会让根锁膨胀且破坏上游同步。
+  # 构建/安装在该目录内单独执行（cd plugins/dsh-univer-office && pnpm install）。
+  - '!plugins/dsh-univer-office'
+
+# plugins/dsh-better-sidebar 依赖的构建脚本（node-pty 拷贝预编译二进制；
+# protobufjs 无源编译）。pnpm 10+ 默认拦截依赖构建脚本，需显式放行。
+allowBuilds:
+  esbuild: true
+  node-pty: true
+  protobufjs: true
