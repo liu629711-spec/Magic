@@ -31,6 +31,9 @@ export interface SelectionSnapshot {
   /** A live clone of the selection range (badge anchor until re-render). */
   readonly range: Range
   readonly sessionId: string
+  /** Magic local patch (2026-09-13): the selection was made inside the
+   *  side-chat panel — its quote seeds the side composer draft directly. */
+  readonly inSideChat: boolean
 }
 
 export interface SelectionState {
@@ -132,6 +135,7 @@ export function captureSelection(currentSessionId: string): SelectionSnapshot | 
     rect: { left: rect.left, top: rect.top, width: rect.width },
     range: range.cloneRange(),
     sessionId: currentSessionId,
+    inSideChat: (anchor ?? message)?.closest('[data-sidenote-sidechat]') !== null,
   }
 }
 

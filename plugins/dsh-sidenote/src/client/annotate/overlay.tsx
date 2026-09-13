@@ -163,6 +163,19 @@ function AnnotateOverlayInner({ ctx, store, controller }: OverlayProps): ReactNo
   }
 
   const askInSideChat = (snapshot: SelectionSnapshot): void => {
+    // Magic local patch (2026-09-13): a selection made INSIDE the side chat
+    // seeds that side chat's composer draft directly — the user ruled the
+    // quote must land in the side chat input box, editable there. The
+    // optional note editor stays for main-flow selections only.
+    if (snapshot.inSideChat === true) {
+      sideChatBridge.current?.askInSideChat(
+        snapshot.sessionId,
+        buildSideChatQuote(snapshot.text),
+      )
+      controller.clear()
+      window.getSelection()?.removeAllRanges()
+      return
+    }
     // WI-03 联动：先弹注解编辑器收集注解（可空），保存后经 bridge 注入侧边
     // 聊天草稿；本路径不产生主对话注释（无高亮/角标/chip）。
     const anchor = selectionBadgePoint(snapshot)
