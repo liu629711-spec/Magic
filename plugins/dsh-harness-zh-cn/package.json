@@ -1,0 +1,61 @@
+{
+  "name": "dsh-harness-zh-cn",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness 中文汉化插件：在运行时把所有系统提示词、工具描述、运行时上下文与前端 UI 文本翻译成中文（system-prompt/assemble 瀑布钩子 + client 端 locale.lookup / commands.list patch，不修改任何源码）。",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zjl1989-li/dsh-harness-zh-cn.git"
+  },
+  "homepage": "https://github.com/zjl1989-li/dsh-harness-zh-cn#readme",
+  "bugs": {
+    "url": "https://github.com/zjl1989-li/dsh-harness-zh-cn/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts",
+    "dict/**/*.json",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "license": "MIT",
+  "author": "zjl1989-li",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "chinese",
+    "zh-cn",
+    "localization",
+    "i18n",
+    "l10n"
+  ],
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "0.1.5-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6"
+  }
+}

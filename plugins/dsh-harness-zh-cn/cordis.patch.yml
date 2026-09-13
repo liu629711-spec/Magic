@@ -1,0 +1,6 @@
+# dsh-harness-zh-cn bundle patch: 中文汉化插件。
+# 通过 insert 在 profile 中挂载插件行。profile 自身的 cordis.patch.yml
+# 可在本行之后按 id 覆盖其 config（如关闭某一类翻译）。
+- insert:
+    - id: harness-zh
+      name: dsh-harness-zh-cn

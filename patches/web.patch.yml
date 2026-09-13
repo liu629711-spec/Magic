@@ -244,6 +244,45 @@
       name: ../plugins/dsh-sidenote/lib/index.js
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ── vendored 提示词优化（非 Magic 产品插件）────────────────────────────────
+#
+# oss-prompt-optimizer v1.8.1 整仓源拷贝（MIT，LICENSE 保留于插件目录；上游
+# 镜像 reference-project/seven282-oss-prompt-optimizer，GitHub
+# seven282/oss-prompt-optimizer）。2026-09-13 用户裁定引入。
+# 工具 prompt_optimize + composer ✨ 一键优化草稿 + /optimize 命令 + 自动
+# 优化钩子（/optimize 前缀触发），经 harness LLM 服务完成（默认模型）。
+# 自包含嵌套 workspace（自带 lockfile），已从根 workspace 排除；安装/构建
+# 在目录内执行。rc.2 适配（2026-09-13，tsc 干净 + vitest 562/562 全绿）：
+#   1) peer/devDeps ^0.1.0-rc.6 → ^0.1.5-rc.2（npm semver 预发布规则，
+#      univer/builtin-browser 同款问题）；dsh-client-runtime 例外——npm 上
+#      该包封顶 0.1.1-rc.2（next 线），钉精确版本；
+#   2) deepFreeze 自 0.1.5 起从 dsh-llm 移到 @deepseek-ai/dsh-util-values
+#      （新增 dependency ^0.1.5-rc.2，optimizer.ts import 同步调整）。
+
+- insert:
+    - id: prompt-optimizer
+      name: ../plugins/dsh-oss-prompt-optimizer/lib/index.js
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ── vendored 中文汉化（非 Magic 产品插件）──────────────────────────────────
+#
+# dsh-harness-zh-cn v0.2.0 整仓源拷贝（MIT，LICENSE 保留于插件目录；上游镜像
+# reference-project/zjl1989-li-dsh-harness-zh-cn，GitHub
+# zjl1989-li/dsh-harness-zh-cn）。2026-09-13 用户裁定引入。
+# 纯运行时汉化：system-prompt/assemble 瀑布钩子汉化系统提示词/工具描述，
+# client 半 patch ctx.locale.lookup 让 zh 词典生效 + 汉化命令菜单/市场描述；
+# 不改 DSH 源码，卸载即还原。lib/ 上游即入库（免构建）。
+# 自包含嵌套 workspace，已从根 workspace 排除；目录内 pnpm install 装运行时
+# 依赖（上游 pnpm-lock 钉 0.1.1-rc.2 时代闭包，已删除重解）。
+# rc.2 适配：dsh-llm 依赖 0.0.1-rc.1 → 0.1.5-rc.2（lib 用 BlockAssembler /
+# createUserMessage，rc.2 均在；import 冒烟验证通过）。peer
+# dsh-system-prompt ^0.1.0-rc.6 为类型引用（运行时零 import），不动。
+
+- insert:
+    - id: harness-zh
+      name: ../plugins/dsh-harness-zh-cn/lib/index.js
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ── vendored 第三方侧边栏工作台（非 Magic 产品插件）─────────────────────────
 #
 # dsh-better-sidebar v0.19.1 整仓源拷贝（MIT，LICENSE 保留于插件目录；
@@ -293,19 +332,15 @@
         telemetry: false
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ── vendored 外观插件：任意背景/主题色（非 Magic 产品插件）──────────────────
+# ── vendored 外观插件：任意背景/主题色——已于 2026-09-13 摘除 ───────────────
 #
-# dsh-any-background v0.2.4 整仓源拷贝（MIT，LICENSE 保留于插件目录；
-# 上游镜像 reference-project/dsh-any-background，GitHub Tkingxiao/dsh-any-background）。
-# 2026-09-13 用户裁定：整仓 vendor 进 plugins/，全功能接入。
-# 主题色（PS 风格色轮）+ 壁纸（图/视频，经 /dsh-any-background/video 路由）
-# + 主界面/设置页独立透明度与模糊，设置页内配置。已并入根 workspace
-# （lib/ 产物上游即入库，tsdown 可复现）。lib/client.js 的 peer 钉
-# ^0.1.2-alpha.2，0.1.5-rc.2 满足范围。
-
-- insert:
-    - id: dsh-any-background
-      name: ../plugins/dsh-any-background/src/index.ts
+# dsh-any-background v0.2.4（MIT，源码仍 vendor 在 plugins/dsh-any-background/，
+# 上游镜像 reference-project/dsh-any-background）曾整仓接入；2026-09-13 用户
+# 裁定摘除（「主题没什么用了」）。要恢复：把下面的 insert 行注释解开即可。
+#
+# - insert:
+#     - id: dsh-any-background
+#       name: ../plugins/dsh-any-background/src/index.ts
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ── vendored Agent 浏览器（非 Magic 产品插件）───────────────────────────────

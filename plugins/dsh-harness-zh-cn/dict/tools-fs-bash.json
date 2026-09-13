@@ -1,0 +1,206 @@
+{
+  "dsh-tool-fs:read-desc": {
+    "kind": "tool",
+    "en": "Read a UTF-8 text file and return line-numbered content.",
+    "zh": "读取一个 UTF-8 文本文件并返回带行号的内容。"
+  },
+  "dsh-tool-fs:read-param-path": {
+    "kind": "param",
+    "en": "Path to read, resolved by the filesystem backend.",
+    "zh": "要读取的路径，由文件系统后端解析。"
+  },
+  "dsh-tool-fs:read-param-offset": {
+    "kind": "param",
+    "en": "1-based first line to return. Defaults to 1.",
+    "zh": "要返回的第一行的 1 起始行号。默认为 1。"
+  },
+  "dsh-tool-fs:read-param-limit": {
+    "kind": "param",
+    "template": true,
+    "en": "^Maximum number of lines to return\\. Defaults to (\\d+)\\.$",
+    "zh": "要返回的最大行数。默认为 $1。"
+  },
+  "dsh-tool-fs:write-desc": {
+    "kind": "tool",
+    "en": "Create or fully replace a UTF-8 text file.",
+    "zh": "创建或完全替换一个 UTF-8 文本文件。"
+  },
+  "dsh-tool-fs:write-param-path": {
+    "kind": "param",
+    "en": "Path to write, resolved by the filesystem backend.",
+    "zh": "要写入的路径，由文件系统后端解析。"
+  },
+  "dsh-tool-fs:write-param-content": {
+    "kind": "param",
+    "en": "Full UTF-8 text content to write.",
+    "zh": "要写入的完整 UTF-8 文本内容。"
+  },
+  "dsh-tool-fs:edit-desc": {
+    "kind": "tool",
+    "en": "Edit an existing UTF-8 text file by replacing literal text.",
+    "zh": "通过替换字面量文本来编辑现有的 UTF-8 文本文件。"
+  },
+  "dsh-tool-fs:edit-param-path": {
+    "kind": "param",
+    "en": "Path to edit, resolved by the filesystem backend.",
+    "zh": "要编辑的路径，由文件系统后端解析。"
+  },
+  "dsh-tool-fs:edit-param-old": {
+    "kind": "param",
+    "en": "Literal text to replace. Must match exactly.",
+    "zh": "要替换的字面量文本。必须完全匹配。"
+  },
+  "dsh-tool-fs:edit-param-new": {
+    "kind": "param",
+    "en": "Literal replacement text. Use an empty string to delete the match.",
+    "zh": "字面量替换文本。使用空字符串可删除匹配项。"
+  },
+  "dsh-tool-fs:edit-param-replace-all": {
+    "kind": "param",
+    "en": "Replace all matches. Defaults to false; when false, old_string must appear exactly once.",
+    "zh": "是否替换所有匹配项。默认为 false；为 false 时 old_string 必须恰好出现一次。"
+  },
+  "dsh-tool-fs:edit-output-created": {
+    "kind": "render",
+    "template": true,
+    "en": "^(Created|Updated) file$",
+    "zh": "$1 文件"
+  },
+  "dsh-tool-fs:edit-output-ok": {
+    "kind": "render",
+    "template": true,
+    "en": "^The file (.+) has been updated successfully\\.$",
+    "zh": "文件 $1 已成功更新。"
+  },
+  "dsh-tool-fs:edit-output-ok-all": {
+    "kind": "render",
+    "template": true,
+    "en": "^The file (.+) has been updated\\. All occurrences were successfully replaced\\.$",
+    "zh": "文件 $1 已更新。所有匹配项均已成功替换。"
+  },
+  "dsh-tool-fs:read-image-desc": {
+    "kind": "tool",
+    "en": "Read a PNG/JPEG/WebP/GIF file and return the image itself. Requires the current model to accept image input.",
+    "zh": "读取一个 PNG/JPEG/WebP/GIF 文件并返回图像本身。要求当前模型支持图像输入。"
+  },
+  "dsh-tool-fs:read-image-param": {
+    "kind": "param",
+    "en": "Path to the image file, resolved by the filesystem backend.",
+    "zh": "图像文件的路径，由文件系统后端解析。"
+  },
+  "dsh-tool-fs:escalation-mode": {
+    "kind": "param",
+    "en": "The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval.",
+    "zh": "此文件操作所需的更宽沙箱模式。仅可作为对刚被沙箱拒绝的操作的一次性重试；需要提供理由并经过用户批准。"
+  },
+  "dsh-tool-fs:escalation-justification": {
+    "kind": "param",
+    "en": "Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access.",
+    "zh": "与 sandbox_permissions 一起使用：用一句话向用户说明为什么这个确切的文件操作需要更宽的访问权限。"
+  },
+  "dsh-tool-fs-search:glob-desc": {
+    "kind": "tool",
+    "template": true,
+    "en": "^Find files whose paths match a glob pattern\\. Returns matching file paths — never directories — including hidden and ignored files \\(VCS metadata directories are excluded\\)\\. Up to (\\d+) paths come back in modification-time order; (.+), says so, and reports where the complete sorted list was saved\\. This tool does not enumerate directory entries\\.$",
+    "zh": "查找路径与 glob 模式匹配的文件。返回匹配的文件路径——绝不返回目录——包括隐藏文件与被忽略的文件（VCS 元数据目录除外）。最多返回 $1 个路径，按修改时间顺序；$2，会说明这一情况，并报告完整排序列表的保存位置。此工具不枚举目录条目。"
+  },
+  "dsh-tool-fs-search:glob-param-pattern": {
+    "kind": "param",
+    "en": "Glob pattern to match file paths against (e.g. \"**/*.ts\", \"src/**/*.test.js\"). A pattern with no \"/\" matches the basename at any depth, so \"*\" and \"*.ts\" both search the whole tree; include a separator to anchor the depth.",
+    "zh": "用于匹配文件路径的 glob 模式（例如 \"**/*.ts\"、\"src/**/*.test.js\"）。不含 \"/\" 的模式会匹配任意深度的文件名，因此 \"*\" 和 \"*.ts\" 都会搜索整棵树；请包含分隔符以锚定深度。"
+  },
+  "dsh-tool-fs-search:glob-param-path": {
+    "kind": "param",
+    "en": "Directory to search in. Defaults to the session workspace; a relative path resolves against it.",
+    "zh": "要在其中搜索的目录。默认为会话工作区；相对路径将相对于它解析。"
+  },
+  "dsh-tool-fs-search:grep-desc": {
+    "kind": "tool",
+    "template": true,
+    "en": "^Search file contents with a ripgrep regular expression\\. Returns matching lines with line numbers, grouped by file\\. Returns the first (\\d+) matches inline; a capped result reports where the complete match list was saved\\. Use read on a matched file for surrounding context\\.$",
+    "zh": "使用 ripgrep 正则表达式搜索文件内容。返回带行号的匹配行，并按文件分组。最多内联返回前 $1 个匹配；超出上限的结果会报告完整匹配列表的保存位置。需要匹配文件周围的上下文时请使用 read。"
+  },
+  "dsh-tool-fs-search:grep-param-pattern": {
+    "kind": "param",
+    "en": "Regular expression to search for (ripgrep syntax).",
+    "zh": "要搜索的正则表达式（ripgrep 语法）。"
+  },
+  "dsh-tool-fs-search:grep-param-path": {
+    "kind": "param",
+    "en": "File or directory to search. Defaults to the session workspace; a relative path resolves against it.",
+    "zh": "要搜索的文件或目录。默认为会话工作区；相对路径将相对于它解析。"
+  },
+  "dsh-tool-fs-search:grep-param-include": {
+    "kind": "param",
+    "en": "One glob filter for which files to search (e.g. \"*.ts\", \"*.{js,jsx}\"). Not a list; negation is not supported.",
+    "zh": "一个用于限定搜索哪些文件的 glob 过滤器（例如 \"*.ts\"、\"*.{js,jsx}\"）。不是列表；不支持否定。"
+  },
+  "dsh-tool-bash:section": {
+    "kind": "section",
+    "en": "Check the [exit code: N] marker on every bash result; investigate failures before moving on.",
+    "zh": "检查每个 bash 结果上的 [exit code: N] 标记；在继续之前调查失败原因。"
+  },
+  "dsh-tool-bash:param-command": {
+    "kind": "param",
+    "en": "The bash command to execute.",
+    "zh": "要执行的 bash 命令。"
+  },
+  "dsh-tool-bash:param-description": {
+    "kind": "param",
+    "en": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\".",
+    "zh": "用主动语态清晰、简洁地说明此命令的作用，5-10 个词（显示在界面中）。示例：\"ls\" → \"列出当前目录中的文件\"；\"git status\" → \"显示工作树状态\"；\"npm install\" → \"安装包依赖\"。"
+  },
+  "dsh-tool-bash:param-timeout": {
+    "kind": "param",
+    "en": "Timeout in milliseconds. The executor applies its configured default and cap, and kills the command on expiry.",
+    "zh": "以毫秒为单位的超时时间。执行器应用其配置的默认值与上限，并在到期时终止命令。"
+  },
+  "dsh-tool-bash:param-workdir": {
+    "kind": "param",
+    "en": "Working directory for this command. Defaults to the session workspace; a relative path is resolved against it.",
+    "zh": "此命令的工作目录。默认为会话工作区；相对路径将相对于它解析。"
+  },
+  "dsh-tool-bash:param-background": {
+    "kind": "param",
+    "en": "Run in the background and return a job id immediately (collect with job_output, stop with job_kill). No timeout applies.",
+    "zh": "在后台运行并立即返回任务 id（用 job_output 收集，用 job_kill 停止）。不适用超时。"
+  },
+  "dsh-tool-bash:param-escalation": {
+    "kind": "param",
+    "en": "The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval.",
+    "zh": "此命令所需的更宽沙箱模式。仅可作为对刚被沙箱拒绝的命令的一次性重试；需要提供理由并经过用户批准。"
+  },
+  "dsh-tool-bash:param-escalation-justification": {
+    "kind": "param",
+    "en": "Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access.",
+    "zh": "与 sandbox_permissions 一起使用：用一句话向用户说明为什么这个确切的命令需要更宽的访问权限。"
+  },
+  "dsh-tool-bash:render-background-started": {
+    "kind": "render",
+    "template": true,
+    "en": "^started background job (.+)$",
+    "zh": "已启动后台任务 $1"
+  },
+  "dsh-tool-bash:render-stderr": {
+    "kind": "render",
+    "en": "[stderr]",
+    "zh": "[stderr]"
+  },
+  "dsh-tool-bash:render-no-output": {
+    "kind": "render",
+    "en": "(no output)",
+    "zh": "(无输出)"
+  },
+  "dsh-tool-bash:render-truncated": {
+    "kind": "render",
+    "template": true,
+    "en": "^\\[output truncated; full output: (.+)\\]$",
+    "zh": "[输出已截断；完整输出：$1]"
+  },
+  "dsh-tool-bash:render-timeout": {
+    "kind": "render",
+    "template": true,
+    "en": "^\\[timed out after (\\d+)ms\\]$",
+    "zh": "[超时：$1ms 后]"
+  }
+}

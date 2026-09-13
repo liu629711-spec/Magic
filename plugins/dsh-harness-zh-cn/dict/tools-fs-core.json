@@ -1,0 +1,1140 @@
+{
+  "dsh-tool-bash:lib/index.js": {
+    "bash": {
+      "kind": "tool",
+      "en": "Execute a bash command (`bash -c`) and return its stdout/stderr. Each call runs in a fresh shell: no state (cwd, variables, functions) persists between calls — pass `workdir` instead of using `cd`. Non-zero exits are reported as `[exit code: N]`. Current harness environment facts are exposed through managed `$DSH_*` variables; inspect them when needed. Commands may run under a file sandbox; a blocked file operation is reported as `[sandbox: file access denied under <mode> mode]` — a policy denial, not a bug in the command; do not retry another way. Long output is truncated to its tail; the full output is saved to a file whose path is reported when available. Set `run_in_background: true` for long-running commands: the call returns a job id immediately; read its output with `job_output` and stop it with `job_kill`. Attempting a command the sandbox may deny is safe and expected: run it and read the marker rather than assuming the denial. When a command is denied and a wider mode would let it succeed, escalate immediately in the same turn — the one sanctioned exception to a denial: retry the exact same command once with `sandbox_permissions` (the narrowest wider mode that suffices) plus a one-sentence `justification`. Do not detour through chat to ask permission first — the approval prompt raised by that retry is how the user consents. If the session states approval prompts are disabled, there is no exception: a denial is final — do not set `sandbox_permissions`. Never escalate speculatively: ground the request in a real denial — normally the one this command just hit; escalating up front is fine only when this session already denied the same access. A rejected escalation is final for that command — stop and explain, never work around it — but it does not forbid attempting or escalating other commands later.",
+      "zh": "执行一个 bash 命令（`bash -c`）并返回其 stdout/stderr。每次调用都在全新的 shell 中运行：调用之间不保留任何状态（cwd、变量、函数）——请传 `workdir` 而不是使用 `cd`。非零退出以 `[exit code: N]` 形式报告。当前 harness 环境事实通过受管理的 `$DSH_*` 变量暴露；需要时请检查它们。命令可能在文件沙箱下运行；被阻止的文件操作会以 `[sandbox: file access denied under <mode> mode]` 报告——这是策略拒绝，不是命令的 bug；不要换一种方式重试。长输出会被截断为尾部；完整输出会保存到文件中，可用时报告其路径。对长时间运行的命令设置 `run_in_background: true`：调用会立即返回一个任务 id；使用 `job_output` 读取其输出，使用 `job_kill` 停止它。尝试一个沙箱可能拒绝的命令是安全且符合预期的：直接运行它并读取标记，而不是假设被拒绝。当命令被拒绝且更宽的模式可以使其成功时，请在同一个回合内立即升级——这是对拒绝的唯一特批例外：使用 `sandbox_permissions`（足以胜任的最窄的更宽模式）加上一句 `justification`，一次性重试完全相同的命令。不要绕道通过聊天先请求许可——该重试触发的审批提示就是用户同意的方式。如果会话声明审批提示已禁用，则没有例外：拒绝是最终的——不要设置 `sandbox_permissions`。切勿投机性升级：把请求建立在实际拒绝之上——通常就是这条命令刚刚遇到的拒绝；仅在本次会话已经拒绝过相同访问时，才可预先升级。被拒绝的升级对该命令是最终的——停止并解释，绝不要绕过它——但这并不禁止稍后尝试或升级其他命令。"
+    },
+    "bash.description.base": {
+      "kind": "const",
+      "en": "Execute a bash command (`bash -c`) and return its stdout/stderr. Each call runs in a fresh shell: no state (cwd, variables, functions) persists between calls — pass `workdir` instead of using `cd`. Non-zero exits are reported as `[exit code: N]`. Current harness environment facts are exposed through managed `$DSH_*` variables; inspect them when needed. Commands may run under a file sandbox; a blocked file operation is reported as `[sandbox: file access denied under <mode> mode]` — a policy denial, not a bug in the command; do not retry another way. Long output is truncated to its tail; the full output is saved to a file whose path is reported when available. ",
+      "zh": "执行一个 bash 命令（`bash -c`）并返回其 stdout/stderr。每次调用都在全新的 shell 中运行：调用之间不保留任何状态（cwd、变量、函数）——请传 `workdir` 而不是使用 `cd`。非零退出以 `[exit code: N]` 形式报告。当前 harness 环境事实通过受管理的 `$DSH_*` 变量暴露；需要时请检查它们。命令可能在文件沙箱下运行；被阻止的文件操作会以 `[sandbox: file access denied under <mode> mode]` 报告——这是策略拒绝，不是命令的 bug；不要换一种方式重试。长输出会被截断为尾部；完整输出会保存到文件中，可用时报告其路径。 "
+    },
+    "bash.description.background": {
+      "kind": "const",
+      "en": "Set `run_in_background: true` for long-running commands: the call returns a job id immediately; read its output with `job_output` and stop it with `job_kill`.",
+      "zh": "对长时间运行的命令设置 `run_in_background: true`：调用会立即返回一个任务 id；使用 `job_output` 读取其输出，使用 `job_kill` 停止它。"
+    },
+    "bash.description.background-disabled": {
+      "kind": "const",
+      "en": "Background execution is not available; long-running commands must finish within the timeout.",
+      "zh": "后台执行不可用；长时间运行的命令必须在超时内完成。"
+    },
+    "bash.description.escalation": {
+      "kind": "const",
+      "en": "Attempting a command the sandbox may deny is safe and expected: run it and read the marker rather than assuming the denial. When a command is denied and a wider mode would let it succeed, escalate immediately in the same turn — the one sanctioned exception to a denial: retry the exact same command once with `sandbox_permissions` (the narrowest wider mode that suffices) plus a one-sentence `justification`. Do not detour through chat to ask permission first — the approval prompt raised by that retry is how the user consents. If the session states approval prompts are disabled, there is no exception: a denial is final — do not set `sandbox_permissions`. Never escalate speculatively: ground the request in a real denial — normally the one this command just hit; escalating up front is fine only when this session already denied the same access. A rejected escalation is final for that command — stop and explain, never work around it — but it does not forbid attempting or escalating other commands later.",
+      "zh": "尝试一个沙箱可能拒绝的命令是安全且符合预期的：直接运行它并读取标记，而不是假设被拒绝。当命令被拒绝且更宽的模式可以使其成功时，请在同一个回合内立即升级——这是对拒绝的唯一特批例外：使用 `sandbox_permissions`（足以胜任的最窄的更宽模式）加上一句 `justification`，一次性重试完全相同的命令。不要绕道通过聊天先请求许可——该重试触发的审批提示就是用户同意的方式。如果会话声明审批提示已禁用，则没有例外：拒绝是最终的——不要设置 `sandbox_permissions`。切勿投机性升级：把请求建立在实际拒绝之上——通常就是这条命令刚刚遇到的拒绝；仅在本次会话已经拒绝过相同访问时，才可预先升级。被拒绝的升级对该命令是最终的——停止并解释，绝不要绕过它——但这并不禁止稍后尝试或升级其他命令。"
+    },
+    "tool:bash": {
+      "kind": "section",
+      "en": "Check the [exit code: N] marker on every bash result; investigate failures before moving on.",
+      "zh": "检查每个 bash 结果的 [exit code: N] 标记；在继续之前先调查失败原因。"
+    },
+    "bash.command": {
+      "kind": "param",
+      "en": "The bash command to execute.",
+      "zh": "要执行的 bash 命令。"
+    },
+    "bash.description-param": {
+      "kind": "param",
+      "en": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"npm install\" → \"Install package dependencies\".",
+      "zh": "用主动语态、5-10 个词清楚简洁地描述这个命令做什么（显示在 UI 中）。示例：\"ls\" → \"列出当前目录中的文件\"；\"git status\" → \"显示工作树状态\"；\"npm install\" → \"安装包依赖\"。"
+    },
+    "bash.timeoutMs": {
+      "kind": "param",
+      "en": "Timeout in milliseconds. The executor applies its configured default and cap, and kills the command on expiry.",
+      "zh": "超时时间（毫秒）。执行器会应用其配置的默认值与上限，并在超时后终止命令。"
+    },
+    "bash.workdir": {
+      "kind": "param",
+      "en": "Working directory for this command. Defaults to the session workspace; a relative path is resolved against it.",
+      "zh": "此命令的工作目录。默认为会话工作区；相对路径将相对于它解析。"
+    },
+    "bash.run_in_background": {
+      "kind": "param",
+      "en": "Run in the background and return a job id immediately (collect with job_output, stop with job_kill). No timeout applies.",
+      "zh": "在后台运行并立即返回一个任务 id（用 job_output 收集输出，用 job_kill 停止）。不适用超时。"
+    },
+    "bash.sandbox_permissions": {
+      "kind": "param",
+      "en": "The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval.",
+      "zh": "此命令所需的更宽沙箱模式。仅可作为对刚被沙箱拒绝的命令的一次性重试；需要提供理由并经过用户批准。"
+    },
+    "bash.justification": {
+      "kind": "param",
+      "en": "Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access.",
+      "zh": "与 sandbox_permissions 一起使用：用一句话向用户说明为什么这个确切的命令需要更宽的访问权限。"
+    },
+    "render.no-output": {
+      "kind": "render",
+      "en": "(no output)",
+      "zh": "(no output)"
+    },
+    "render.stderr": {
+      "kind": "render",
+      "en": "[stderr]\n${err}",
+      "zh": "[stderr]\n${err}"
+    },
+    "render.timed-out": {
+      "kind": "render",
+      "en": "[timed out after ${result.timeoutMs}ms]",
+      "zh": "[timed out after ${result.timeoutMs}ms]"
+    },
+    "render.killed-signal": {
+      "kind": "render",
+      "en": "[killed by signal: ${result.signal}]",
+      "zh": "[killed by signal: ${result.signal}]"
+    },
+    "render.exit-code": {
+      "kind": "render",
+      "en": "[exit code: ${result.exitCode}]",
+      "zh": "[exit code: ${result.exitCode}]"
+    },
+    "render.output-truncated": {
+      "kind": "render",
+      "en": "[output truncated; full output: ${output.spillPath ?? \"(unavailable)\"}]",
+      "zh": "[输出已截断；完整输出：${output.spillPath ?? \"(unavailable)\"}]"
+    },
+    "render.lossy-read": {
+      "kind": "render",
+      "en": "[some output was dropped from memory; full output: ${paths.length > 0 ? paths.join(\", \") : \"(unavailable)\"}]",
+      "zh": "[部分输出已从内存中丢弃；完整输出：${paths.length > 0 ? paths.join(\", \") : \"(unavailable)\"}]"
+    },
+    "render.runner-failed": {
+      "kind": "render",
+      "en": "[sandbox: the sandbox runner itself failed under ${sandbox.mode} mode — the command did not run; this is a sandbox problem, not a command failure]",
+      "zh": "[sandbox: the sandbox runner itself failed under ${sandbox.mode} mode — the command did not run; this is a sandbox problem, not a command failure]"
+    },
+    "render.started-job": {
+      "kind": "render",
+      "en": "started background job ${value.jobId}",
+      "zh": "已启动后台任务 ${value.jobId}"
+    },
+    "outcome.signal-detail": {
+      "kind": "const",
+      "en": "signal: ${proc.signal}",
+      "zh": "信号：${proc.signal}"
+    },
+    "outcome.killed-before-exit": {
+      "kind": "const",
+      "en": "killed before exit",
+      "zh": "在退出前被终止"
+    },
+    "outcome.exit-detail": {
+      "kind": "const",
+      "en": "exit code: ${proc.exitCode ?? 0}",
+      "zh": "exit code: ${proc.exitCode ?? 0}"
+    }
+  },
+  "dsh-tool-pwsh:lib/index.js": {
+    "pwsh": {
+      "kind": "tool",
+      "en": "Execute a PowerShell command (`pwsh -Command`) and return its stdout/stderr. Each call runs in a fresh pwsh process: no state (cwd, variables, functions) persists between calls — pass `workdir` instead of using `cd`. Paths use native Windows form (`C:\\...`); read environment variables with `$env:NAME`. Non-zero exits are reported as `[exit code: N]`. Current harness environment facts are exposed through managed `$env:DSH_*` variables; inspect them when needed. Commands may run under a file sandbox; a blocked file operation is reported as `[sandbox: file access denied under <mode> mode]` — a policy denial, not a bug in the command; do not retry another way. Long output is truncated to its tail; the full output is saved to a file whose path is reported when available. On Windows a force-killed command settles as `[exit code: 1]` without a signal marker — treat it as an interruption, not a command failure. Set `run_in_background: true` for long-running commands: the call returns a job id immediately; read its output with `job_output` and stop it with `job_kill`. Under the Windows sandbox, read-only pwsh runs in PowerShell ConstrainedLanguage mode, while workspace-write stays in FullLanguage unless host policy says otherwise. In read-only, prefer cmdlets and core types (`[string]`, `[datetime]`, `[regex]`, `[guid]`); .NET static calls (`[System.IO.*]::`, `[math]::`), `Add-Type`, COM objects, and reflection fail with \"only core types\" errors. `-f` formatting, property access, and core cmdlets work. In both confined modes, programs cannot open named pipes, so a command that captures another program's output through piped stdio (Node.js `child_process.spawn`/`exec` with the default `stdio: 'pipe'`) fails with EPERM, while `stdio: 'inherit'` and `stdio: 'ignore'` spawns work and PowerShell's own pipelines are unaffected. That EPERM is the documented boundary: do not retry the command another way — escalate the exact command once or restructure it to avoid capturing output. Attempting a command the sandbox may deny is safe and expected: run it and read the marker rather than assuming the denial. When a command is denied and a wider mode would let it succeed, escalate immediately in the same turn — the one sanctioned exception to a denial: retry the exact same command once with `sandbox_permissions` (the narrowest wider mode that suffices) plus a one-sentence `justification`. Do not detour through chat to ask permission first — the approval prompt raised by that retry is how the user consents. If the session states approval prompts are disabled, there is no exception: a denial is final — do not set `sandbox_permissions`. Never escalate speculatively: ground the request in a real denial — normally the one this command just hit; escalating up front is fine only when this session already denied the same access. A rejected escalation is final for that command — stop and explain, never work around it — but it does not forbid attempting or escalating other commands later.",
+      "zh": "执行一个 PowerShell 命令（`pwsh -Command`）并返回其 stdout/stderr。每次调用都在全新的 pwsh 进程中运行：调用之间不保留任何状态（cwd、变量、函数）——请传 `workdir` 而不是使用 `cd`。路径使用 Windows 原生形式（`C:\\...`）；使用 `$env:NAME` 读取环境变量。非零退出以 `[exit code: N]` 形式报告。当前 harness 环境事实通过受管理的 `$env:DSH_*` 变量暴露；需要时请检查它们。命令可能在文件沙箱下运行；被阻止的文件操作会以 `[sandbox: file access denied under <mode> mode]` 报告——这是策略拒绝，不是命令的 bug；不要换一种方式重试。长输出会被截断为尾部；完整输出会保存到文件中，可用时报告其路径。在 Windows 上，被强杀的命令以 `[exit code: 1]` 结束且没有信号标记——请将其视为中断，而不是命令失败。对长时间运行的命令设置 `run_in_background: true`：调用会立即返回一个任务 id；使用 `job_output` 读取其输出，使用 `job_kill` 停止它。在 Windows 沙箱下，只读模式的 pwsh 以 PowerShell ConstrainedLanguage 模式运行，而 workspace-write 保持 FullLanguage，除非主机策略另有规定。在只读模式下，请优先使用 cmdlet 和核心类型（`[string]`、`[datetime]`、`[regex]`、`[guid]`）；.NET 静态调用（`[System.IO.*]::`、`[math]::`）、`Add-Type`、COM 对象和反射会以 \"only core types\" 错误失败。`-f` 格式化、属性访问和核心 cmdlet 可用。在两种受限模式下，程序都无法打开命名管道，因此通过管道 stdio 捕获另一程序输出的命令（使用默认 `stdio: 'pipe'` 的 Node.js `child_process.spawn`/`exec`）会以 EPERM 失败，而 `stdio: 'inherit'` 和 `stdio: 'ignore'` 的 spawn 可以工作，PowerShell 自身的管道不受影响。该 EPERM 是有文档记录的边界：不要用其他方式重试该命令——请一次性升级该确切命令，或重构它以避免捕获输出。尝试一个沙箱可能拒绝的命令是安全且符合预期的：直接运行它并读取标记，而不是假设被拒绝。当命令被拒绝且更宽的模式可以使其成功时，请在同一个回合内立即升级——这是对拒绝的唯一特批例外：使用 `sandbox_permissions`（足以胜任的最窄的更宽模式）加上一句 `justification`，一次性重试完全相同的命令。不要绕道通过聊天先请求许可——该重试触发的审批提示就是用户同意的方式。如果会话声明审批提示已禁用，则没有例外：拒绝是最终的——不要设置 `sandbox_permissions`。切勿投机性升级：把请求建立在实际拒绝之上——通常就是这条命令刚刚遇到的拒绝；仅在本次会话已经拒绝过相同访问时，才可预先升级。被拒绝的升级对该命令是最终的——停止并解释，绝不要绕过它——但这并不禁止稍后尝试或升级其他命令。"
+    },
+    "pwsh.description.base": {
+      "kind": "const",
+      "en": "Execute a PowerShell command (`pwsh -Command`) and return its stdout/stderr. Each call runs in a fresh pwsh process: no state (cwd, variables, functions) persists between calls — pass `workdir` instead of using `cd`. Paths use native Windows form (`C:\\...`); read environment variables with `$env:NAME`. Non-zero exits are reported as `[exit code: N]`. Current harness environment facts are exposed through managed `$env:DSH_*` variables; inspect them when needed. Commands may run under a file sandbox; a blocked file operation is reported as `[sandbox: file access denied under <mode> mode]` — a policy denial, not a bug in the command; do not retry another way. Long output is truncated to its tail; the full output is saved to a file whose path is reported when available. On Windows a force-killed command settles as `[exit code: 1]` without a signal marker — treat it as an interruption, not a command failure. ",
+      "zh": "执行一个 PowerShell 命令（`pwsh -Command`）并返回其 stdout/stderr。每次调用都在全新的 pwsh 进程中运行：调用之间不保留任何状态（cwd、变量、函数）——请传 `workdir` 而不是使用 `cd`。路径使用 Windows 原生形式（`C:\\...`）；使用 `$env:NAME` 读取环境变量。非零退出以 `[exit code: N]` 形式报告。当前 harness 环境事实通过受管理的 `$env:DSH_*` 变量暴露；需要时请检查它们。命令可能在文件沙箱下运行；被阻止的文件操作会以 `[sandbox: file access denied under <mode> mode]` 报告——这是策略拒绝，不是命令的 bug；不要换一种方式重试。长输出会被截断为尾部；完整输出会保存到文件中，可用时报告其路径。在 Windows 上，被强杀的命令以 `[exit code: 1]` 结束且没有信号标记——请将其视为中断，而不是命令失败。 "
+    },
+    "pwsh.description.background": {
+      "kind": "const",
+      "en": "Set `run_in_background: true` for long-running commands: the call returns a job id immediately; read its output with `job_output` and stop it with `job_kill`.",
+      "zh": "对长时间运行的命令设置 `run_in_background: true`：调用会立即返回一个任务 id；使用 `job_output` 读取其输出，使用 `job_kill` 停止它。"
+    },
+    "pwsh.description.background-disabled": {
+      "kind": "const",
+      "en": "Background execution is not available; long-running commands must finish within the timeout.",
+      "zh": "后台执行不可用；长时间运行的命令必须在超时内完成。"
+    },
+    "pwsh.description.windows-sandbox": {
+      "kind": "const",
+      "en": "Under the Windows sandbox, read-only pwsh runs in PowerShell ConstrainedLanguage mode, while workspace-write stays in FullLanguage unless host policy says otherwise. In read-only, prefer cmdlets and core types (`[string]`, `[datetime]`, `[regex]`, `[guid]`); .NET static calls (`[System.IO.*]::`, `[math]::`), `Add-Type`, COM objects, and reflection fail with \"only core types\" errors. `-f` formatting, property access, and core cmdlets work. In both confined modes, programs cannot open named pipes, so a command that captures another program's output through piped stdio (Node.js `child_process.spawn`/`exec` with the default `stdio: 'pipe'`) fails with EPERM, while `stdio: 'inherit'` and `stdio: 'ignore'` spawns work and PowerShell's own pipelines are unaffected. That EPERM is the documented boundary: do not retry the command another way — escalate the exact command once or restructure it to avoid capturing output. ",
+      "zh": "在 Windows 沙箱下，只读模式的 pwsh 以 PowerShell ConstrainedLanguage 模式运行，而 workspace-write 保持 FullLanguage，除非主机策略另有规定。在只读模式下，请优先使用 cmdlet 和核心类型（`[string]`、`[datetime]`、`[regex]`、`[guid]`）；.NET 静态调用（`[System.IO.*]::`、`[math]::`）、`Add-Type`、COM 对象和反射会以 \"only core types\" 错误失败。`-f` 格式化、属性访问和核心 cmdlet 可用。在两种受限模式下，程序都无法打开命名管道，因此通过管道 stdio 捕获另一程序输出的命令（使用默认 `stdio: 'pipe'` 的 Node.js `child_process.spawn`/`exec`）会以 EPERM 失败，而 `stdio: 'inherit'` 和 `stdio: 'ignore'` 的 spawn 可以工作，PowerShell 自身的管道不受影响。该 EPERM 是有文档记录的边界：不要用其他方式重试该命令——请一次性升级该确切命令，或重构它以避免捕获输出。 "
+    },
+    "pwsh.description.escalation": {
+      "kind": "const",
+      "en": "Attempting a command the sandbox may deny is safe and expected: run it and read the marker rather than assuming the denial. When a command is denied and a wider mode would let it succeed, escalate immediately in the same turn — the one sanctioned exception to a denial: retry the exact same command once with `sandbox_permissions` (the narrowest wider mode that suffices) plus a one-sentence `justification`. Do not detour through chat to ask permission first — the approval prompt raised by that retry is how the user consents. If the session states approval prompts are disabled, there is no exception: a denial is final — do not set `sandbox_permissions`. Never escalate speculatively: ground the request in a real denial — normally the one this command just hit; escalating up front is fine only when this session already denied the same access. A rejected escalation is final for that command — stop and explain, never work around it — but it does not forbid attempting or escalating other commands later.",
+      "zh": "尝试一个沙箱可能拒绝的命令是安全且符合预期的：直接运行它并读取标记，而不是假设被拒绝。当命令被拒绝且更宽的模式可以使其成功时，请在同一个回合内立即升级——这是对拒绝的唯一特批例外：使用 `sandbox_permissions`（足以胜任的最窄的更宽模式）加上一句 `justification`，一次性重试完全相同的命令。不要绕道通过聊天先请求许可——该重试触发的审批提示就是用户同意的方式。如果会话声明审批提示已禁用，则没有例外：拒绝是最终的——不要设置 `sandbox_permissions`。切勿投机性升级：把请求建立在实际拒绝之上——通常就是这条命令刚刚遇到的拒绝；仅在本次会话已经拒绝过相同访问时，才可预先升级。被拒绝的升级对该命令是最终的——停止并解释，绝不要绕过它——但这并不禁止稍后尝试或升级其他命令。"
+    },
+    "tool:pwsh": {
+      "kind": "section",
+      "en": "Non-zero exits are reported as `[exit code: N]` markers; investigate failures before moving on. On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure.",
+      "zh": "非零退出以 `[exit code: N]` 标记形式报告；在继续之前先调查失败原因。在 Windows 上，被终止的进程以 `[exit code: 1]` 结束且没有信号标记；请将中断后的裸 exit 1 视为终止，而不是命令失败。"
+    },
+    "pwsh.command": {
+      "kind": "param",
+      "en": "The PowerShell command to execute.",
+      "zh": "要执行的 PowerShell 命令。"
+    },
+    "pwsh.description-param": {
+      "kind": "param",
+      "en": "Clear, concise description of what this command does in active voice, 5-10 words (shown in the UI). Examples: \"ls\" → \"List files in current directory\"; \"git status\" → \"Show working tree status\"; \"Get-Process\" → \"List running processes\".",
+      "zh": "用主动语态、5-10 个词清楚简洁地描述这个命令做什么（显示在 UI 中）。示例：\"ls\" → \"列出当前目录中的文件\"；\"git status\" → \"显示工作树状态\"；\"Get-Process\" → \"列出正在运行的进程\"。"
+    },
+    "pwsh.timeoutMs": {
+      "kind": "param",
+      "en": "Timeout in milliseconds. The executor applies its configured default and cap, and kills the command on expiry.",
+      "zh": "超时时间（毫秒）。执行器会应用其配置的默认值与上限，并在超时后终止命令。"
+    },
+    "pwsh.workdir": {
+      "kind": "param",
+      "en": "Working directory for this command. Defaults to the session workspace; a relative path is resolved against it.",
+      "zh": "此命令的工作目录。默认为会话工作区；相对路径将相对于它解析。"
+    },
+    "pwsh.run_in_background": {
+      "kind": "param",
+      "en": "Run in the background and return a job id immediately (collect with job_output, stop with job_kill). No timeout applies.",
+      "zh": "在后台运行并立即返回一个任务 id（用 job_output 收集输出，用 job_kill 停止）。不适用超时。"
+    },
+    "pwsh.sandbox_permissions": {
+      "kind": "param",
+      "en": "The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval.",
+      "zh": "此命令所需的更宽沙箱模式。仅可作为对刚被沙箱拒绝的命令的一次性重试；需要提供理由并经过用户批准。"
+    },
+    "pwsh.justification": {
+      "kind": "param",
+      "en": "Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access.",
+      "zh": "与 sandbox_permissions 一起使用：用一句话向用户说明为什么这个确切的命令需要更宽的访问权限。"
+    },
+    "render.no-output": {
+      "kind": "render",
+      "en": "(no output)",
+      "zh": "(no output)"
+    },
+    "render.stderr": {
+      "kind": "render",
+      "en": "[stderr]\n${err}",
+      "zh": "[stderr]\n${err}"
+    },
+    "render.timed-out": {
+      "kind": "render",
+      "en": "[timed out after ${result.timeoutMs}ms]",
+      "zh": "[timed out after ${result.timeoutMs}ms]"
+    },
+    "render.killed-signal": {
+      "kind": "render",
+      "en": "[killed by signal: ${result.signal}]",
+      "zh": "[killed by signal: ${result.signal}]"
+    },
+    "render.exit-code": {
+      "kind": "render",
+      "en": "[exit code: ${result.exitCode}]",
+      "zh": "[exit code: ${result.exitCode}]"
+    },
+    "render.output-truncated": {
+      "kind": "render",
+      "en": "[output truncated; full output: ${output.spillPath ?? \"(unavailable)\"}]",
+      "zh": "[输出已截断；完整输出：${output.spillPath ?? \"(unavailable)\"}]"
+    },
+    "render.lossy-read": {
+      "kind": "render",
+      "en": "[some output was dropped from memory; full output: ${paths.length > 0 ? paths.join(\", \") : \"(unavailable)\"}]",
+      "zh": "[部分输出已从内存中丢弃；完整输出：${paths.length > 0 ? paths.join(\", \") : \"(unavailable)\"}]"
+    },
+    "render.runner-failed": {
+      "kind": "render",
+      "en": "[sandbox: the sandbox runner itself failed under ${sandbox.mode} mode — the command did not run; this is a sandbox problem, not a command failure]",
+      "zh": "[sandbox: the sandbox runner itself failed under ${sandbox.mode} mode — the command did not run; this is a sandbox problem, not a command failure]"
+    },
+    "render.started-job": {
+      "kind": "render",
+      "en": "started background job ${value.jobId}",
+      "zh": "已启动后台任务 ${value.jobId}"
+    },
+    "outcome.signal-detail": {
+      "kind": "const",
+      "en": "signal: ${proc.signal}",
+      "zh": "信号：${proc.signal}"
+    },
+    "outcome.killed-before-exit": {
+      "kind": "const",
+      "en": "killed before exit",
+      "zh": "在退出前被终止"
+    },
+    "outcome.exit-detail": {
+      "kind": "const",
+      "en": "exit code: ${proc.exitCode ?? 0}",
+      "zh": "exit code: ${proc.exitCode ?? 0}"
+    }
+  },
+  "dsh-tool-bash-persistent:lib/index.js": {
+    "bash.description": {
+      "kind": "tool",
+      "en": "Run commands in a persistent bash shell. State, including the current directory and exported environment variables, persists across calls for this agent.",
+      "zh": "在持久化的 bash shell 中运行命令。状态（包括当前目录和导出的环境变量）会在该代理的多次调用之间保留。"
+    },
+    "bash.command": {
+      "kind": "param",
+      "en": "The bash command to run. Relative path is preferred in the command.",
+      "zh": "要运行的 bash 命令。命令中优先使用相对路径。"
+    },
+    "const.truncated-message": {
+      "kind": "const",
+      "en": "<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>",
+      "zh": "<response clipped><NOTE>为了节省上下文，只向你展示了此文件的一部分。你应该先用 `grep -n` 在文件内搜索，找到你要找的内容的行号后再重试此工具。</NOTE>"
+    },
+    "const.lost-prefix-message": {
+      "kind": "const",
+      "en": "<response clipped><NOTE>The beginning of this command output was dropped by the terminal scrollback limit. The following text is the earliest retained output.</NOTE>\n",
+      "zh": "<response clipped><NOTE>此命令输出的开头因终端滚动缓冲区上限而被丢弃。以下文本是最早保留的输出。</NOTE>\n"
+    },
+    "const.shell-reset-message": {
+      "kind": "const",
+      "en": "The persistent bash shell was reset; the next bash call starts from the workspace with a fresh current directory and environment.",
+      "zh": "持久化 bash shell 已重置；下一次 bash 调用将从工作区开始，使用全新的当前目录和环境。"
+    },
+    "render.timeout-partial": {
+      "kind": "render",
+      "en": "Your command timed out after ${Math.round(timedOut.timeoutMs / 1e3)} seconds or experienced an OOM error. Below is partial output:",
+      "zh": "你的命令在 ${Math.round(timedOut.timeoutMs / 1e3)} 秒后超时，或遇到了 OOM 错误。以下是部分输出："
+    },
+    "render.exit-code": {
+      "kind": "render",
+      "en": "[exit code: ${output.exitCode}]",
+      "zh": "[exit code: ${output.exitCode}]"
+    },
+    "render.shell-killed": {
+      "kind": "render",
+      "en": "[shell killed by signal: ${signal}]",
+      "zh": "[shell killed by signal: ${signal}]"
+    },
+    "render.shell-exited-code": {
+      "kind": "render",
+      "en": "[shell exited: code ${exitCode}]",
+      "zh": "[shell exited: code ${exitCode}]"
+    },
+    "render.shell-exited": {
+      "kind": "render",
+      "en": "[shell exited]",
+      "zh": "[shell exited]"
+    },
+    "render.line-truncated": {
+      "kind": "render",
+      "en": " (line truncated)",
+      "zh": "（行已截断）"
+    }
+  },
+  "dsh-tool-fs:lib/index.js": {
+    "tool:read": {
+      "kind": "section",
+      "en": "Please use the read tool — not shell commands (like cat) — to inspect text files. Results include line numbers. Use offset and limit to continue reading large files.",
+      "zh": "请使用 read 工具——而非 shell 命令（如 cat）——来检查文本文件。结果包含行号。使用 offset 和 limit 继续读取大文件。"
+    },
+    "read": {
+      "kind": "tool",
+      "en": "Read a UTF-8 text file and return its content with line numbers.",
+      "zh": "读取一个 UTF-8 文本文件并返回带行号的内容。"
+    },
+    "read.file_path": {
+      "kind": "param",
+      "en": "The path to read, resolved by the filesystem backend.",
+      "zh": "要读取的路径，由文件系统后端解析。"
+    },
+    "read.offset": {
+      "kind": "param",
+      "en": "The 1-based line number of the first line to return. Defaults to 1.",
+      "zh": "要返回的第一行的 1 起始行号。默认为 1。"
+    },
+    "read.limit": {
+      "kind": "param",
+      "en": "The maximum number of lines to return. Defaults to ${caps.limit}.",
+      "zh": "要返回的最大行数。默认为 ${caps.limit}。"
+    },
+    "tool:write": {
+      "kind": "section",
+      "en": "Please use the write tool to create files or completely replace file content. Existing files are overwritten, so read the existing file first (the default fs observation policy requires this); prefer edit for targeted changes.",
+      "zh": "请使用 write 工具创建文件或完全替换文件内容。现有文件会被覆盖，因此请先读取现有文件（默认的 fs 观察策略要求如此），有针对性的修改请优先使用 edit。"
+    },
+    "write": {
+      "kind": "tool",
+      "en": "Create a new file or completely replace the content of an existing UTF-8 text file.",
+      "zh": "创建或完全替换一个 UTF-8 文本文件。"
+    },
+    "write.file_path": {
+      "kind": "param",
+      "en": "The path to write to, resolved by the filesystem backend.",
+      "zh": "要写入的路径，由文件系统后端解析。"
+    },
+    "write.content": {
+      "kind": "param",
+      "en": "The complete UTF-8 text content to write.",
+      "zh": "要写入的完整 UTF-8 文本内容。"
+    },
+    "write.sandbox_permissions": {
+      "kind": "param",
+      "en": "The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval.",
+      "zh": "此文件操作所需的更宽沙箱模式。仅可作为对刚被沙箱拒绝的操作的一次性重试；需要提供理由并经过用户批准。"
+    },
+    "write.justification": {
+      "kind": "param",
+      "en": "Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access.",
+      "zh": "与 sandbox_permissions 一起使用：用一句话向用户说明为什么这个确切的文件操作需要更宽的访问权限。"
+    },
+    "tool:edit": {
+      "kind": "section",
+      "en": "Please use the edit tool for targeted modifications to existing UTF-8 text files. It replaces the literal old_string with new_string; by default old_string must occur exactly once. If old_string occurs multiple times, provide a more specific old_string or set replace_all to true. Read the file first (the default fs observation policy requires this), unless you created or edited it earlier in this session.",
+      "zh": "请使用 edit 工具对现有 UTF-8 文本文件进行有针对性的修改。它用 new_string 替换字面量 old_string；默认情况下 old_string 必须恰好出现一次。如果 old_string 出现多次，请提供更具体的 old_string 或将 replace_all 设为 true。请先读取文件（默认的 fs 观察策略要求如此），除非你在本会话中刚刚创建或编辑过该文件。"
+    },
+    "edit": {
+      "kind": "tool",
+      "en": "Edit an existing UTF-8 text file by replacing literal text.",
+      "zh": "通过替换字面量文本来编辑现有的 UTF-8 文本文件。"
+    },
+    "edit.file_path": {
+      "kind": "param",
+      "en": "The path to edit, resolved by the filesystem backend.",
+      "zh": "要编辑的路径，由文件系统后端解析。"
+    },
+    "edit.old_string": {
+      "kind": "param",
+      "en": "The literal text to replace. Must match exactly.",
+      "zh": "要替换的字面量文本。必须完全匹配。"
+    },
+    "edit.new_string": {
+      "kind": "param",
+      "en": "The literal replacement text. Use an empty string to delete the match.",
+      "zh": "字面量替换文本。使用空字符串可删除匹配项。"
+    },
+    "edit.replace_all": {
+      "kind": "param",
+      "en": "Whether to replace all occurrences. Defaults to false; when false, old_string must occur exactly once.",
+      "zh": "是否替换所有匹配项。默认为 false；为 false 时 old_string 必须恰好出现一次。"
+    },
+    "edit.sandbox_permissions": {
+      "kind": "param",
+      "en": "The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval.",
+      "zh": "此文件操作所需的更宽沙箱模式。仅可作为对刚被沙箱拒绝的操作的一次性重试；需要提供理由并经过用户批准。"
+    },
+    "edit.justification": {
+      "kind": "param",
+      "en": "Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access.",
+      "zh": "与 sandbox_permissions 一起使用：用一句话向用户说明为什么这个确切的文件操作需要更宽的访问权限。"
+    },
+    "read_image": {
+      "kind": "tool",
+      "en": "Read a PNG/JPEG/WebP/GIF file and return the image itself. Requires the current model to support image input.",
+      "zh": "读取一个 PNG/JPEG/WebP/GIF 文件并返回图像本身。要求当前模型支持图像输入。"
+    },
+    "read_image.file_path": {
+      "kind": "param",
+      "en": "The path of the image file, resolved by the filesystem backend.",
+      "zh": "图像文件的路径，由文件系统后端解析。"
+    },
+    "render.read-capped": {
+      "kind": "render",
+      "en": "(Output capped. Showing lines ${outcome.offset}-${endLine}. Use offset=${endLine + 1} to continue.)",
+      "zh": "（输出已达上限。显示第 ${outcome.offset}-${endLine} 行。使用 offset=${endLine + 1} 继续。）"
+    },
+    "render.read-window": {
+      "kind": "render",
+      "en": "(Showing lines ${outcome.offset}-${endLine} of ${outcome.totalLines}. Use offset=${endLine + 1} to continue.)",
+      "zh": "（显示第 ${outcome.offset}-${endLine} 行，共 ${outcome.totalLines} 行。使用 offset=${endLine + 1} 继续。）"
+    },
+    "render.read-eof": {
+      "kind": "render",
+      "en": "(End of file - total ${outcome.totalLines} lines)",
+      "zh": "（文件结束 - 共 ${outcome.totalLines} 行）"
+    },
+    "render.line-truncated": {
+      "kind": "render",
+      "en": "${line.substring(0, maxLineLength)}... (line truncated to ${maxLineLength} chars)",
+      "zh": "${line.substring(0, maxLineLength)}...（行已截断至 ${maxLineLength} 个字符）"
+    },
+    "render.write-result": {
+      "kind": "render",
+      "en": "${outcome.operation === \"create\" ? \"Created\" : \"Updated\"} file",
+      "zh": "${outcome.operation === \"create\" ? \"已创建\" : \"已更新\"} 文件"
+    },
+    "render.edit-all-replaced": {
+      "kind": "render",
+      "en": "The file ${displayPath} has been updated. All occurrences were successfully replaced.",
+      "zh": "文件 ${displayPath} 已更新。所有匹配项均已成功替换。"
+    },
+    "render.edit-success": {
+      "kind": "render",
+      "en": "The file ${displayPath} has been updated successfully.",
+      "zh": "文件 ${displayPath} 已成功更新。"
+    },
+    "render.image-read": {
+      "kind": "render",
+      "en": "${image.mediaType} image, ${image.width}x${image.height} px, ${image.bytes} bytes",
+      "zh": "${image.mediaType} 图像，${image.width}x${image.height} 像素，${image.bytes} 字节"
+    },
+    "remedy.stale-version": {
+      "kind": "const",
+      "en": "re-read the file, then retry",
+      "zh": "重新读取文件，然后重试"
+    },
+    "remedy.not-observed": {
+      "kind": "const",
+      "en": "read the file, then retry",
+      "zh": "读取文件，然后重试"
+    }
+  },
+  "dsh-tool-fs-search:lib/index.js": {
+    "tool:glob.sample": {
+      "kind": "section",
+      "en": "Please use the glob tool — not the shell's find — to discover files by path pattern. Patterns without a \"/\" match filenames at any depth, so \"*\" matches every file in the tree, not just the top level. Results include only files, never directories, and include hidden and ignored files: suitable results are returned in modification-time order, while larger results are sampled across top-level entries, so they span the whole tree rather than a single subtree.",
+      "zh": "请使用 glob 工具——而非 shell 的 find——按路径模式发现文件。不含 \"/\" 的模式会匹配任意深度的文件名，因此 \"*\" 会匹配树中的每个文件而非仅顶层。结果只包含文件，绝不包含目录，且包含隐藏文件与被忽略的文件：合适的结果按修改时间顺序返回，而更大的结果则按顶层条目采样，因此会横跨整个树而非单个子树。"
+    },
+    "tool:glob.head": {
+      "kind": "section",
+      "en": "Please use the glob tool — not the shell's find — to discover files by path pattern. Patterns without a \"/\" match filenames at any depth, so \"*\" matches every file in the tree, not just the top level. Results include only files, never directories, and include hidden and ignored files: suitable results are returned in modification-time order, while larger results keep the modification-time head.",
+      "zh": "请使用 glob 工具——而非 shell 的 find——按路径模式发现文件。不含 \"/\" 的模式会匹配任意深度的文件名，因此 \"*\" 会匹配树中的每个文件而非仅顶层。结果只包含文件，绝不包含目录，且包含隐藏文件与被忽略的文件：合适的结果按修改时间顺序返回，而更大的结果则保留按修改时间排序的头部。"
+    },
+    "glob.sample": {
+      "kind": "tool",
+      "en": "Find files whose paths match a glob pattern. Returns matching file paths — never directories — including hidden and ignored files (except VCS metadata directories). Returns at most ${caps.maxResults} paths in modification-time order; larger results return ${caps.maxResults} paths sampled across top-level entries, and state this and report where the full sorted list is saved. This tool does not enumerate directory entries.",
+      "zh": "查找路径与 glob 模式匹配的文件。返回匹配的文件路径——绝不返回目录——包括隐藏文件与被忽略的文件（VCS 元数据目录除外）。最多返回 ${caps.maxResults} 个路径，按修改时间顺序；更大的结果则返回 ${caps.maxResults} 个按顶层条目采样的路径，会说明这一情况，并报告完整排序列表的保存位置。此工具不枚举目录条目。"
+    },
+    "glob.head": {
+      "kind": "tool",
+      "en": "Find files whose paths match a glob pattern. Returns matching file paths — never directories — including hidden and ignored files (except VCS metadata directories). Returns at most ${caps.maxResults} paths in modification-time order; larger results keep the first ${caps.maxResults} paths in modification-time order, and state this and report where the full sorted list is saved. This tool does not enumerate directory entries.",
+      "zh": "查找路径与 glob 模式匹配的文件。返回匹配的文件路径——绝不返回目录——包括隐藏文件与被忽略的文件（VCS 元数据目录除外）。最多返回 ${caps.maxResults} 个路径，按修改时间顺序；更大的结果则按修改时间顺序返回前 ${caps.maxResults} 个路径，会说明这一情况，并报告完整排序列表的保存位置。此工具不枚举目录条目。"
+    },
+    "glob.pattern": {
+      "kind": "param",
+      "en": "The glob pattern used to match file paths (e.g. \"**/*.ts\", \"src/**/*.test.js\"). Patterns without a \"/\" match filenames at any depth, so \"*\" and \"*.ts\" both search the whole tree; include separators to anchor depth.",
+      "zh": "用于匹配文件路径的 glob 模式（例如 \"**/*.ts\"、\"src/**/*.test.js\"）。不含 \"/\" 的模式会匹配任意深度的文件名，因此 \"*\" 和 \"*.ts\" 都会搜索整棵树；请包含分隔符以锚定深度。"
+    },
+    "glob.path": {
+      "kind": "param",
+      "en": "The directory to search in. Defaults to the session workspace; relative paths are resolved against it.",
+      "zh": "要在其中搜索的目录。默认为会话工作区；相对路径将相对于它解析。"
+    },
+    "tool:grep": {
+      "kind": "section",
+      "en": "Please use the grep tool — not the shell's grep or rg — to search file contents. When you need context around a match, read the file with read.",
+      "zh": "请使用 grep 工具——而非 shell 的 grep 或 rg——搜索文件内容。当你需要匹配文件周围的上下文时，请使用 read 读取该文件。"
+    },
+    "grep": {
+      "kind": "tool",
+      "en": "Search file contents with a ripgrep regular expression. Returns matching lines with line numbers, grouped by file. Returns at most the first ${caps.maxMatches} matches inline; larger results report where the complete match list is saved. Use read when you need context around a match.",
+      "zh": "使用 ripgrep 正则表达式搜索文件内容。返回带行号的匹配行，并按文件分组。最多内联返回前 ${caps.maxMatches} 个匹配；超出上限的结果会报告完整匹配列表的保存位置。需要匹配文件周围的上下文时请使用 read。"
+    },
+    "grep.pattern": {
+      "kind": "param",
+      "en": "The regular expression to search for (ripgrep syntax).",
+      "zh": "要搜索的正则表达式（ripgrep 语法）。"
+    },
+    "grep.path": {
+      "kind": "param",
+      "en": "The file or directory to search. Defaults to the session workspace; relative paths are resolved against it.",
+      "zh": "要搜索的文件或目录。默认为会话工作区；相对路径将相对于它解析。"
+    },
+    "grep.include": {
+      "kind": "param",
+      "en": "A glob filter limiting which files are searched (e.g. \"*.ts\", \"*.{js,jsx}\"). Not a list; negation is not supported.",
+      "zh": "一个用于限定搜索哪些文件的 glob 过滤器（例如 \"*.ts\"、\"*.{js,jsx}\"）。不是列表；不支持否定。"
+    },
+    "render.glob-no-files": {
+      "kind": "render",
+      "en": "No files found",
+      "zh": "未找到文件"
+    },
+    "render.grep-no-matches": {
+      "kind": "render",
+      "en": "No matches found",
+      "zh": "未找到匹配项"
+    },
+    "render.grep-found-partial": {
+      "kind": "render",
+      "en": "Found ${retained.kept} of ${retained.seen} matches",
+      "zh": "找到 ${retained.kept} 个（共 ${retained.seen} 个）匹配项"
+    },
+    "render.grep-found-total": {
+      "kind": "render",
+      "en": "Found ${retained.seen} ${matchNoun(retained.seen)}",
+      "zh": "找到 ${retained.seen} 个匹配项"
+    },
+    "render.grep-spill": {
+      "kind": "render",
+      "en": "Full grep result stored at: ${spillRef.locator}. ${spillRef.retrievalHint}",
+      "zh": "完整的 grep 结果已保存至：${spillRef.locator}。${spillRef.retrievalHint}"
+    },
+    "render.grep-unsaved": {
+      "kind": "render",
+      "en": "The complete result could not be saved; narrow pattern, path, or include to see more.",
+      "zh": "无法保存完整结果；请缩小 pattern、path 或 include 以查看更多。"
+    },
+    "render.glob-spill": {
+      "kind": "render",
+      "en": "Full sorted result stored at: ${spillRef.locator}. ${spillRef.retrievalHint}",
+      "zh": "完整的排序结果已保存至：${spillRef.locator}。${spillRef.retrievalHint}"
+    },
+    "render.glob-unsaved": {
+      "kind": "render",
+      "en": "The complete result could not be saved; narrow pattern or path to see more.",
+      "zh": "无法保存完整结果；请缩小 pattern 或 path 以查看更多。"
+    },
+    "render.glob-page": {
+      "kind": "render",
+      "en": "(Showing ${items.length} of ${seen} paths${basis} ${recovery})",
+      "zh": "（显示 ${items.length} 个路径中的 ${seen} 个${basis} ${recovery}）"
+    },
+    "render.glob-sampled-basis": {
+      "kind": "render",
+      "en": ", sampled across ${sample.shown} of the ${sample.total} top-level entries this pattern matched instead of taken in modification-time order.",
+      "zh": "，而是按该模式匹配到的 ${sample.total} 个顶层条目中的 ${sample.shown} 个进行采样，未按修改时间顺序取前部。"
+    },
+    "render.glob-narrow-hint": {
+      "kind": "render",
+      "en": " Narrow path to inspect a specific subtree.",
+      "zh": " 请缩小 path 以检查特定的子树。"
+    },
+    "render.line-truncated": {
+      "kind": "render",
+      "en": " (line truncated)",
+      "zh": "（行已截断）"
+    },
+    "render.stderr-truncated": {
+      "kind": "render",
+      "en": " [stderr truncated]",
+      "zh": " [stderr 已截断]"
+    },
+    "const.narrow-retry": {
+      "kind": "const",
+      "en": "narrow pattern, path, or include and retry",
+      "zh": "请缩小 pattern、path 或 include 并重试"
+    },
+    "error.invalid-pattern": {
+      "kind": "const",
+      "en": "${toolName} pattern rejected by ripgrep: ${stderr}",
+      "zh": "${toolName} 的模式被 ripgrep 拒绝：${stderr}"
+    },
+    "error.search-failed": {
+      "kind": "const",
+      "en": "${toolName} search failed (exit ${exitCode})${stderr.length > 0 ? `: ${stderr}` : \"\"}",
+      "zh": "${toolName} 搜索失败（退出码 ${exitCode}）${stderr.length > 0 ? `: ${stderr}` : \"\"}"
+    },
+    "error.raw-output-overflow": {
+      "kind": "const",
+      "en": "${toolName} produced ${inlineBytes} bytes of raw output, over the ${rawOutputMaxBytes}-byte cap; ${narrow}",
+      "zh": "${toolName} 产生了 ${inlineBytes} 字节的原始输出，超过 ${rawOutputMaxBytes} 字节上限；${narrow}"
+    },
+    "error.aborted": {
+      "kind": "const",
+      "en": "${toolName} was aborted before completion (tool timeout or caller cancellation)",
+      "zh": "${toolName} 在完成前被中止（工具超时或调用方取消）"
+    }
+  },
+  "dsh-tools:lib/index.js": {
+    "run_code.typescript": {
+      "kind": "tool",
+      "en": "Execute a TypeScript program against the available tools. Takes two required arguments: `code`, the BODY of an async function (erasable syntax only; top-level `await` and `return` work), and `description`, a short summary of what the program does. Call tools as `await tools.name(args)` per the declarations in the system prompt. Only what you print or return comes back — curate it.",
+      "zh": "针对可用工具执行一个 TypeScript 程序。需要两个必填参数：`code`——一个异步函数的函数体（仅限可擦除语法；顶层 `await` 和 `return` 可用），以及 `description`——程序所做内容的简短摘要。按照系统提示中的声明，以 `await tools.name(args)` 的方式调用工具。只有你打印或返回的内容会返回给你——请精心挑选。"
+    },
+    "run_code.typescript.code": {
+      "kind": "param",
+      "en": "The program: the body of an async TypeScript function.",
+      "zh": "程序：一个异步 TypeScript 函数的函数体。"
+    },
+    "run_code.python": {
+      "kind": "tool",
+      "en": "Execute a Python program against the available tools. Takes two required arguments: `code`, the BODY of an async function (top-level `await` and `return` work), and `description`, a short summary of what the program does. Call tools as `await tools.name(args)` per the declarations in the system prompt. Answer with `print(...)` and/or `return <value>` — only that comes back, so curate it.",
+      "zh": "针对可用工具执行一个 Python 程序。需要两个必填参数：`code`——一个异步函数的函数体（顶层 `await` 和 `return` 均可使用），以及 `description`——程序所做内容的简短摘要。按照系统提示中的声明，以 `await tools.name(args)` 的方式调用工具。用 `print(...)` 和/或 `return <value>` 给出答案——只有这些会返回给你，所以请精心挑选。"
+    },
+    "run_code.python.code": {
+      "kind": "param",
+      "en": "The program: the body of an async Python function.",
+      "zh": "程序：一个异步 Python 函数的函数体。"
+    },
+    "run_code.description-param": {
+      "kind": "param",
+      "en": "Clear, concise description of what this program does in active voice, 5-10 words (shown in the UI). Examples: \"Count TODO markers across packages\"; \"Read failing test and its fixture\"; \"Rename config key in every cordis.yml\".",
+      "zh": "用主动语态、5-10 个词清楚简洁地描述这个程序做什么（显示在 UI 中）。示例：\"统计各包中的 TODO 标记\"；\"读取失败的测试及其 fixture\"；\"重命名每个 cordis.yml 中的配置键\"。"
+    },
+    "const.code-only-instruction": {
+      "kind": "const",
+      "en": "`${RUN_CODE_NAME}` is the only tool you can call directly — a tool call naming any other tool fails. Reach every tool the SDK declares below from inside the program.",
+      "zh": "`${RUN_CODE_NAME}` 是你唯一可以直接调用的工具——调用任何其他工具都会失败。请在程序内部调用下方 SDK 声明的所有工具。"
+    },
+    "section.sdk-instructions-typescript": {
+      "kind": "section",
+      "en": "## Writing code for run_code\n\n`run_code` takes two required arguments: `code` — the body of an async TypeScript function (erasable syntax only — no `enum` or namespaces; type annotations are advisory, the code runs type-stripped) — and `description`, a short summary of what the program does. Inside the program:\n\n- Call tools as `await tools.name(args)` — quoted access for exotic names: `tools[\"my-tool\"](args)`. Every call resolves to the tool's typed canonical JSON value. Tool arguments must be lossless JSON.\n- A FAILED tool call rejects with `ToolCallError`, whose `toolName` identifies the failed tool and whose `message` is human-readable — `try/catch` it to handle and continue.\n- Independent read-only calls MAY overlap under `Promise.all` (safe calls run concurrently; mutating calls run alone, in submission order). Sequence dependent work with `await`.\n- Emit results with `return` and/or `console.log(...)`. ONLY what you print or return comes back to you — intermediate tool results never enter the conversation, so extract just what you need.\n\nThe available tools:",
+      "zh": "## 为 run_code 编写代码\n\n`run_code` 需要两个必填参数：`code`——一个异步 TypeScript 函数的函数体（仅限可擦除语法——不能使用 `enum` 或命名空间；类型注解仅供参考，代码会去除类型后运行）——以及 `description`——程序所做内容的简短摘要。在程序内部：\n\n- 以 `await tools.name(args)` 的方式调用工具——对特殊名称使用方括号访问：`tools[\"my-tool\"](args)`。每次调用都会解析为该工具带类型的规范 JSON 值。工具参数必须是无损 JSON。\n- 失败的 tool 调用会以 `ToolCallError` 拒绝，其 `toolName` 标识失败的工具，其 `message` 是人类可读的——用 `try/catch` 捕获以处理并继续。\n- 独立的只读调用可以在 `Promise.all` 下重叠执行（安全调用并发运行；变更类调用单独按提交顺序运行）。依赖性的工作用 `await` 排序。\n- 用 `return` 和/或 `console.log(...)` 输出结果。只有你打印或返回的内容会返回给你——中间的工具结果永远不会进入对话，所以只提取你需要的内容。\n\n可用工具："
+    },
+    "section.sdk-instructions-python": {
+      "kind": "section",
+      "en": "## Writing code for run_code\n\n`run_code` takes two required arguments: `code` — the body of an async Python function (top-level `await` and `return` both work) — and `description`, a short summary of what the program does. At run time exactly two of the names declared below are bound: `tools` and `ToolCallError`. Everything else is a STATIC STUB describing argument and return types — in particular the `TypedDict` classes do NOT exist at run time, so build arguments as plain `dict`/`list` JSON values: `await tools.name({\"field\": 1})`, never `FooArgs(field=1)`, which raises `NameError`. Inside the program:\n\n- Call tools as `await tools.name(args)` — subscript access for exotic, reserved, or underscore-leading names: `await tools[\"my-tool\"](args)`. Every call resolves to the tool's typed canonical JSON value (each method's return type below). Tool arguments must be lossless JSON.\n- A FAILED tool call raises `ToolCallError`, whose `toolName` identifies the failed tool and whose message is human-readable — wrap in `try/except` to handle and continue.\n- Independent read-only calls MAY overlap under `asyncio.gather` (safe calls run concurrently; mutating calls run alone, in submission order). Sequence dependent work with `await`.\n- Emit the run's answer with `print(...)` and/or a top-level `return <value>`; the returned value must be lossless JSON. ONLY what you print and the returned value come back — intermediate tool results never enter the conversation, so extract just what you need.\n\nThe available tools:",
+      "zh": "## 为 run_code 编写代码\n\n`run_code` 需要两个必填参数：`code`——一个异步 Python 函数的函数体（顶层 `await` 和 `return` 均可使用）——以及 `description`——程序所做内容的简短摘要。运行时只会绑定下方声明的两个名字：`tools` 和 `ToolCallError`。其他一切都是描述参数与返回类型的静态桩——尤其是 `TypedDict` 类在运行时并不存在，因此请以普通 `dict`/`list` JSON 值构造参数：`await tools.name({\"field\": 1})`，绝不要写 `FooArgs(field=1)`，那会抛出 `NameError`。在程序内部：\n\n- 以 `await tools.name(args)` 的方式调用工具——对特殊、保留或以下划线开头的名称使用下标访问：`await tools[\"my-tool\"](args)`。每次调用都会解析为该工具带类型的规范 JSON 值（即下方每个方法的返回类型）。工具参数必须是无损 JSON。\n- 失败的 tool 调用会抛出 `ToolCallError`，其 `toolName` 标识失败的工具，其 message 是人类可读的——用 `try/except` 包裹以处理并继续。\n- 独立的只读调用可以在 `asyncio.gather` 下重叠执行（安全调用并发运行；变更类调用单独按提交顺序运行）。依赖性的工作用 `await` 排序。\n- 用 `print(...)` 和/或顶层 `return <value>` 输出本次运行的答案；返回的值必须是无损 JSON。只有你打印的内容和返回的值会返回给你——中间的工具结果永远不会进入对话，所以只提取你需要的内容。\n\n可用工具："
+    },
+    "render.run-code-no-output": {
+      "kind": "render",
+      "en": "(run_code completed with no output)",
+      "zh": "（run_code 执行完成，无输出）"
+    },
+    "render.error-message": {
+      "kind": "render",
+      "en": "Error: ${message}",
+      "zh": "错误：${message}"
+    },
+    "render.error-denial": {
+      "kind": "render",
+      "en": "Error: ${denialReason}",
+      "zh": "错误：${denialReason}"
+    },
+    "render.error-aborted": {
+      "kind": "render",
+      "en": "Error: tool call aborted",
+      "zh": "错误：工具调用已中止"
+    },
+    "render.error-aborted-before-dispatch": {
+      "kind": "render",
+      "en": "Error: tool call aborted before dispatch",
+      "zh": "错误：工具调用在调度前已中止"
+    }
+  },
+  "dsh-tool-cordis:lib/index.js": {
+    "tool:cordis": {
+      "kind": "section",
+      "en": "# Dynamic Cordis Plugins\n\nDynamic Cordis plugins temporarily extend the current DSH process. A Plugin uses apply(ctx) to consume Services, listen to Events, provide Services, register model Tools, or register browser UI in Slots.\n\n- Plugin and Package definitions exist only in the current process. define itself does not modify repository source, configuration, or disk, and definitions do not survive a process restart.\n- The restricted execution environment prevents accidental misuse; it is not a security boundary for malicious code. Services obtained by dynamic code connect to the real runtime.\n\n## Make the user-facing plan clear first\n\n- Dynamic Cordis Plugins are one available implementation mechanism, not the default for every request. Consider whether one could help only when the user intends to design or create something, or when a temporary interface could materially aid the current work. The presence of these instructions or Tools, and discussion of Cordis itself, do not make a request a dynamic-Plugin task.\n- When Cordis is a plausible fit, infer the intended work target and lifetime from the request and conversation. Use it only when the outcome belongs to the current running harness and should be delivered as a temporary runtime extension. If that distinction is materially ambiguous, ask at most one concise question about the intended result or lifetime. Otherwise proceed with the matching workflow; do not require the user to know or choose Cordis as an implementation mechanism.\n- Once a dynamic Plugin is appropriate, decide whether the task creates a new Plugin or modifies the Plugin named by the user with @pluginId. Proceed directly when the goal is clear; do not ask for repeated confirmation.\n- Choose Host, Client, or both from the requested outcome. Do not propose a Client/browser UI when the task does not need visible page behavior, and do not avoid Client when the requested outcome is visual, interactive, or depends on page state. Host versus Client is an implementation choice; do not make the user choose it.\n- When a design direction or a potentially useful interface would materially affect the result, ask at most one concise outcome or creative-preference question and offer a few candidate directions. Otherwise proceed directly; do not conduct a multi-round interview or a complex questionnaire.\n- cordis_define only defines and presents code; it does not run it. After definition, explain the pluginId and packageId returned by the Host and whether the next step is a run or update.\n- cordis_run may require user approval. When it returns awaiting-approval, explain that the user must allow or reject it in the UI. Do not wait, retry, or claim that it is running.\n- When it returns starting, explain that the request has entered the asynchronous flow and the Client is still activating. starting does not mean success. Wait for the system to report the final result through steering context.\n- Do not request approval again after the user rejects it. After a technical failure, fix the same Plugin from its diagnostics; do not silently create a replacement Plugin.\n\n## Recommended workflow and Tools\n\nBefore creating, modifying, or repairing a Plugin, load the cordis-plugin-development Skill. The Skill provides requirement navigation, capability composition, complete examples, and troubleshooting. Treat Inspect Provider results as the source of truth for exact APIs.\n\n1. cordis_inspect_list: discover the current Host and Client Providers and their read-only query methods.\n2. cordis_inspect_query: use the returned platform, provider, method, and schema to query exact Service, Event, Builtin, Slot, Theme token, or Tool information.\n3. cordis_inspect_self: inspect the current Session's Plugins, Packages, version pointers, source, and diagnostics. Source is returned only when both pluginId and packageId are specified.\n4. cordis_define: create the first Package for a new Plugin or append an immutable Package to an existing Plugin. It defines code but does not run it.\n5. cordis_run: activate an exact Package. Use run for the first activation, restarting current, or rollback; use update to switch versions.\n6. cordis_stop: remove the current Run and pending approval request while retaining definitions, grants, and version pointers.\n7. cordis_undefine: permanently stop and delete a Plugin and all of its Packages. Use it only after confirming that the user no longer needs them.\n\n- Inspect and Catalog data only confirm capabilities, names, signatures, types, and registration protocols before code is written; they do not replace business APIs.\n- Query Service.listService and Event.listEvents without input to choose from their compact signature directories, then query the exact service or event before using it. Exact queries return the structured contract and only its referenced types.\n- At runtime, a Plugin must call real Services or listen to real Events. Do not cache, display, or depend on Inspect results as business data.\n\n## Identity, versions, and approval\n\n- pluginId identifies a Plugin that can be modified over time. For a new Plugin, submit only a semantic idPrefix of 3–6 lowercase English letters; the Host allocates the final ID.\n- packageId identifies one immutable Host/Client source version under a Plugin. To change code, define a new Package; never overwrite an old version.\n- pluginRunId identifies one activation attempt and connects its approval, Host/Client loading, private RPC, Run card, and errors.\n- currentPackageId is the most recent fully successful Package. Stopping, starting an update, or failing an update does not clear it.\n- nextPackageId is the target awaiting approval, being attempted, awaiting Client activation, or most recently failed.\n- A single check mark authorizes only the current Package; double check marks authorize future versions of the same Plugin. A grant remains in effect after a technical failure.\n- An update stops the old Run before starting the target Package. Failure does not automatically restart the old version; retry next with update or roll back to current with run.\n\nWhen the user enters @pluginId, the system injects identity, the default base Package, version pointers, and runtime status, but not source code:\n\n1. Call cordis_inspect_self(pluginId, packageId) to read the target source.\n2. Use cordis_define in existing mode to append a Package to the same Plugin.\n3. Call cordis_run in run or update mode according to the version relationship.\n\nNever silently create another Plugin for @pluginId. If the reference is unavailable because it was removed, belongs to another Session, or was lost on process restart, tell the user directly.\n\n## High-frequency errors that must be avoided\n\n### Services: ctx.get and inject\n\n- Read an optional Service with ctx.get('serviceName') by default and handle undefined.\n- Declare inject: ['serviceName'] on the returned Plugin object only when the Service is a hard dependency and the Plugin must enter waiting until Cordis reactivates it after the Service appears.\n- Read ctx.serviceName only after declaring that Service in inject. Never access an undeclared Service as a ctx property.\n\n```js\nreturn {\n  inject: ['requiredService'],\n  apply(ctx) {\n    ctx.requiredService.someMethod()\n    const optionalService = ctx.get('optionalService')\n    if (optionalService !== undefined) optionalService.someMethod()\n  },\n}\n```\n\n### Code: use plain JavaScript only\n\n- Host and Client code is not transformed by TypeScript, JSX, or a bundler.\n- Do not use TypeScript types, as, decorators, import, require, or JSX.\n- Client React code must use React.createElement(...); never write <Component />.\n- Do not assume that process, Buffer, window, document, fetch, native timers, or any other global is available. Query the corresponding platform's Builtins and Services first.\n\n### Data: do not serialize live data\n\n- Services, Events, Slots, Sessions, and their derived Cordis/DSH objects are internal live data, not ordinary JSON that can be dumped.\n- Do not apply JSON.stringify, structuredClone, recursive enumeration, full copying, or whole-object display to live data.\n- Read only the leaf fields required by the task, then construct the smallest owned data object without Host references.\n\n### Lifecycle: every side effect must be reversible\n\n- Services, Events, Tools, handlers, timers, Slots, styles, and theme overrides must all belong to the current Fiber.\n- Use ctx.effect(), ctx.on(), or official APIs that return a disposer so stop, update, or undefine removes every side effect.\n- The cordis-plugin-development Skill contains complete timer, Waterfall, Slot, theme, Tool, RPC, and React examples and troubleshooting guidance.\n\n## Host and Client\n\n- Host runs in the DSH Node.js process and is appropriate for files, networking, commands, Agent/Session access, Host Events, Services, model Tools, and JSON methods callable by the Client.\n- Client runs in the browser page and is appropriate for themes, layout, current page state, Tool cards, and Slot UI.\n- Host and Client communicate through Package-private JSON methods: Host uses harness.handle(method, handler), and Client uses host.call(method, args). The direction is Client→Host, and only lossless JSON may cross it.\n- Client UI must be registered in a queried Slot; apply() cannot directly return a React Element. Query Slots.listSubTree without root to choose from the compact purpose/topology tree, then query the exact root for its full registration contract and props before writing code.\n- See the Skill and Inspect Providers for Run-specific panels and exact Slot registration patterns.\n\n## Asynchronous results and recovery\n\n- Do not wait inside a Tool for approval or browser work that can happen only after the current turn ends.\n- Asynchronous success, rejection, and runtime errors update Run state and notify you through steering context.\n- After a technical failure, use cordis_inspect_self to read the exact Package source and its message/stack. Define a corrected Package under the same Plugin and retry autonomously.\n- Use the cordis-plugin-development Skill for other failure causes, repair procedures, and complete extension patterns.",
+      "zh": "# 动态 Cordis 插件\n\n动态 Cordis 插件临时扩展当前 DSH 进程。插件通过 apply(ctx) 消费服务（Service）、监听事件（Event）、提供服务、注册模型工具（Tool），或在槽位（Slot）中注册浏览器 UI。\n\n- 插件与包（Package）的定义仅存在于当前进程中。define 本身不会修改仓库源码、配置或磁盘，定义也不会在进程重启后保留。\n- 受限的执行环境可防止意外滥用；它不是针对恶意代码的安全边界。动态代码获取到的服务会连接到真实运行时。\n\n## 先明确面向用户的方案\n\n- 动态 Cordis 插件是一种可用的实现机制，而不是每个请求的默认选项。只有当用户打算设计或创建某种东西，或临时界面能实质性帮助当前工作时，才考虑它是否适用。这些指令或工具的存在，以及对 Cordis 本身的讨论，都不构成把请求当作动态插件任务的理由。\n- 当 Cordis 可能是合适方案时，从请求和对话中推断预期的工作目标与生命周期。只有当成果属于当前正在运行的 harness 且应以临时运行时扩展的形式交付时，才使用它。如果这一区分存在实质性的模糊，最多就预期结果或生命周期问一个简洁的问题。否则按匹配的工作流程进行；不要要求用户了解或选择 Cordis 作为实现机制。\n- 一旦确定需要动态插件，判断任务是创建新插件，还是修改用户以 @pluginId 指名的插件。目标明确时直接进行；不要反复请求确认。\n- 根据所请求的成果选择 Host、Client 或两者。当任务不需要可见的页面行为时，不要提议 Client/浏览器 UI；当所请求的成果是可视化、交互式或依赖页面状态时，也不要回避 Client。Host 与 Client 是实现选择；不要让用户来做这个选择。\n- 当设计方向或潜在有用的界面会实质性影响结果时，最多问一个简洁的成果或创意偏好问题，并提供几个候选方向。否则直接进行；不要进行多轮访谈或复杂问卷。\n- cordis_define 只定义并展示代码；它不会运行代码。定义之后，说明 Host 返回的 pluginId 和 packageId，以及下一步是 run 还是 update。\n- cordis_run 可能需要用户审批。当它返回 awaiting-approval 时，说明用户必须在 UI 中允许或拒绝。不要等待、重试或声称它正在运行。\n- 当它返回 starting 时，说明请求已进入异步流程，Client 仍在激活中。starting 并不表示成功。等待系统通过 steering context 报告最终结果。\n- 用户拒绝后不要再请求审批。技术性失败后，根据诊断修复同一个插件；不要悄悄创建替代插件。\n\n## 推荐的工作流程与工具\n\n在创建、修改或修复插件之前，先加载 cordis-plugin-development 技能（Skill）。该技能提供需求导航、能力组合、完整示例和故障排查。将 Inspect Provider 的结果视为精确 API 的唯一事实来源。\n\n1. cordis_inspect_list：发现当前的 Host 与 Client Providers 及其只读查询方法。\n2. cordis_inspect_query：使用返回的 platform、provider、method 和 schema 查询精确的 Service、Event、Builtin、Slot、Theme token 或 Tool 信息。\n3. cordis_inspect_self：检查当前会话的插件、包、版本指针、源码与诊断信息。只有同时指定 pluginId 和 packageId 时才返回源码。\n4. cordis_define：为新插件创建第一个包，或向现有插件追加一个不可变包。它定义代码但不会运行代码。\n5. cordis_run：激活一个确切的包。首次激活、重启 current 或回滚时使用 run；切换版本时使用 update。\n6. cordis_stop：移除当前 Run 和待处理的审批请求，同时保留定义、授权与版本指针。\n7. cordis_undefine：永久停止并删除一个插件及其所有包。仅在确认用户不再需要它们之后使用。\n\n- Inspect 与 Catalog 数据只用于在编写代码前确认能力、名称、签名、类型与注册协议；它们不能替代业务 API。\n- 不带输入查询 Service.listService 和 Event.listEvents，从其精简签名目录中选择，然后在使用前查询确切的服务或事件。精确查询返回结构化契约及其引用的类型。\n- 运行时，插件必须调用真实的 Service 或监听真实 Event。不要将 Inspect 结果作为业务数据进行缓存、展示或依赖。\n\n## 身份、版本与审批\n\n- pluginId 标识一个可随时间修改的插件。对于新插件，只提交 3–6 个小写英文字母的语义 idPrefix；最终 ID 由 Host 分配。\n- packageId 标识插件下的一个不可变 Host/Client 源码版本。要更改代码，请定义新包；绝不要覆盖旧版本。\n- pluginRunId 标识一次激活尝试，并关联其审批、Host/Client 加载、私有 RPC、Run 卡片与错误。\n- currentPackageId 是最近一次完全成功的包。停止、启动更新或更新失败都不会清除它。\n- nextPackageId 是待审批、尝试中、等待 Client 激活或最近失败的目标。\n- 单个对勾只授权当前包；双对勾授权同一插件的未来版本。技术性失败后授权仍然有效。\n- 更新会先停止旧 Run 再启动目标包。失败不会自动重启旧版本；下一步用 update 重试，或用 run 回滚到 current。\n\n当用户输入 @pluginId 时，系统会注入身份、默认基础包、版本指针与运行时状态，但不注入源码：\n\n1. 调用 cordis_inspect_self(pluginId, packageId) 读取目标源码。\n2. 使用 existing 模式的 cordis_define 向同一插件追加包。\n3. 根据版本关系以 run 或 update 模式调用 cordis_run。\n\n绝不要为 @pluginId 悄悄创建另一个插件。如果引用不可用（已被移除、属于另一个会话，或因进程重启而丢失），请直接告诉用户。\n\n## 必须避免的高频错误\n\n### Services：ctx.get 与 inject\n\n- 默认使用 ctx.get('serviceName') 读取可选服务并处理 undefined。\n- 仅当 Service 是硬依赖且插件必须进入等待、直到 Cordis 在服务出现后重新激活它时，才在返回的插件对象上声明 inject: ['serviceName']。\n- 只有在 inject 中声明了该 Service 之后，才能读取 ctx.serviceName。绝不要将未声明的服务作为 ctx 属性访问。\n\n```js\nreturn {\n  inject: ['requiredService'],\n  apply(ctx) {\n    ctx.requiredService.someMethod()\n    const optionalService = ctx.get('optionalService')\n    if (optionalService !== undefined) optionalService.someMethod()\n  },\n}\n```\n\n### 代码：只使用纯 JavaScript\n\n- Host 与 Client 代码不会被 TypeScript、JSX 或打包器转换。\n- 不要使用 TypeScript 类型、as、装饰器、import、require 或 JSX。\n- Client 的 React 代码必须使用 React.createElement(...)；绝不要写 <Component />。\n- 不要假设 process、Buffer、window、document、fetch、原生定时器或任何其他全局对象可用。先查询对应平台的 Builtins 与 Services。\n\n### 数据：不要序列化实时数据\n\n- Services、Events、Slots、Sessions 及其派生的 Cordis/DSH 对象是内部实时数据，不是可以转储的普通 JSON。\n- 不要对实时数据应用 JSON.stringify、structuredClone、递归枚举、完整复制或整体对象展示。\n- 只读取任务所需的叶子字段，然后构造不携带 Host 引用的最小自有数据对象。\n\n### 生命周期：每个副作用都必须可逆\n\n- Services、Events、Tools、处理器、定时器、Slots、样式与主题覆盖都必须属于当前 Fiber。\n- 使用 ctx.effect()、ctx.on() 或返回 disposer 的官方 API，以便 stop、update 或 undefine 移除每个副作用。\n- cordis-plugin-development 技能包含完整的定时器、Waterfall、Slot、主题、Tool、RPC 与 React 示例及故障排查指南。\n\n## Host 与 Client\n\n- Host 运行在 DSH 的 Node.js 进程中，适用于文件、网络、命令、Agent/Session 访问、Host Events、Services、模型工具以及 Client 可调用的 JSON 方法。\n- Client 运行在浏览器页面中，适用于主题、布局、当前页面状态、工具卡片与 Slot UI。\n- Host 与 Client 通过包私有 JSON 方法通信：Host 使用 harness.handle(method, handler)，Client 使用 host.call(method, args)。方向为 Client→Host，且只有无损 JSON 可以跨越。\n- Client UI 必须在查询到的 Slot 中注册；apply() 不能直接返回 React 元素。不指定 root 查询 Slots.listSubTree，从其精简用途/拓扑树中选择，然后在编写代码前查询确切 root 的完整注册契约与 props。\n- 有关 Run 专属面板和精确的 Slot 注册模式，请参阅 Skill 与 Inspect Providers。\n\n## 异步结果与恢复\n\n- 不要在 Tool 内等待只能在当前回合结束后发生的审批或浏览器工作。\n- 异步成功、拒绝与运行时错误会更新 Run 状态，并通过 steering context 通知你。\n- 技术性失败后，使用 cordis_inspect_self 读取确切包的源码及其 message/stack。在同一个插件下定义修正后的包并自主重试。\n- 其他失败原因、修复流程与完整扩展模式，请使用 cordis-plugin-development 技能。"
+    },
+    "cordis_inspect_list": {
+      "kind": "tool",
+      "en": "List every Cordis Inspect Provider currently known to the Host, including local Host Providers and the latest manifests synchronized from the Client. Each entry includes its platform, purpose, read-only methods, and input/output schemas. Call this Tool before creating or modifying a Package, then select the provider and method for cordis_inspect_query from its result. Do not guess names or treat an Inspect method as a business Service that Plugin code can call.",
+      "zh": "列出 Host 当前已知的每个 Cordis Inspect Provider，包括本地 Host Providers 以及从 Client 同步的最新清单。每个条目都包含其平台、用途、只读方法与输入/输出 schema。在创建或修改包之前先调用此工具，然后从结果中为 cordis_inspect_query 选择 provider 与 method。不要猜测名称，也不要将 Inspect 方法当作插件代码可以调用的业务 Service。"
+    },
+    "cordis_inspect_query": {
+      "kind": "tool",
+      "en": "Run a read-only query explicitly declared by an Inspect Provider. platform, provider, and method must come from cordis_inspect_list, and input must satisfy that method's schema. Use this Tool before cordis_define to read exact Service methods, Event modes, Builtin signatures, Tool schemas, theme tokens, or live Slot trees and props. Host queries run locally. A Client query waits for the first valid page response and remains pending until a page answers or the Tool is cancelled. This Tool cannot invoke business Service methods or modify the runtime. For Service.listService and Event.listEvents, query without input to navigate the compact signature directory, then query the exact service or event for its structured contract and referenced types. For Slots.listSubTree, query without root to navigate the compact tree, then query the exact root for its complete registration contract and props.",
+      "zh": "运行一个由 Inspect Provider 显式声明的只读查询。platform、provider 和 method 必须来自 cordis_inspect_list，input 必须满足该 method 的 schema。在 cordis_define 之前使用此工具，以读取精确的 Service 方法、Event 模式、Builtin 签名、Tool schema、主题 token，或实时的 Slot 树与 props。Host 查询在本地运行。Client 查询会等待第一个有效的页面响应，并保持挂起状态，直到某个页面应答或工具被取消。此工具不能调用业务 Service 方法，也不能修改运行时。对于 Service.listService 和 Event.listEvents，不带 input 查询以浏览精简签名目录，然后再查询确切的服务或事件以获取其结构化契约与引用类型。对于 Slots.listSubTree，不指定 root 查询以浏览精简树，然后再查询确切 root 以获取其完整注册契约与 props。"
+    },
+    "cordis_inspect_query.platform": {
+      "kind": "param",
+      "en": "Runtime platform that owns the Provider.",
+      "zh": "拥有该 Provider 的运行时平台。"
+    },
+    "cordis_inspect_query.provider": {
+      "kind": "param",
+      "en": "Exact Provider ID returned by cordis_inspect_list.",
+      "zh": "cordis_inspect_list 返回的确切 Provider ID。"
+    },
+    "cordis_inspect_query.method": {
+      "kind": "param",
+      "en": "Exact method name declared by the Provider manifest.",
+      "zh": "Provider 清单声明的确切方法名。"
+    },
+    "cordis_inspect_query.input": {
+      "kind": "param",
+      "en": "Optional query input; it must satisfy the method input schema.",
+      "zh": "可选的查询输入；它必须满足该方法的输入 schema。"
+    },
+    "cordis_inspect_self": {
+      "kind": "tool",
+      "en": "Inspect dynamic Cordis objects owned by the current Session at increasing levels of detail. With no IDs, list only Plugin summaries. With pluginId alone, return version pointers, the latest Run, and every Package summary. Only pluginId plus packageId returns that immutable Package's Host/Client source and runtime diagnostics. packageId cannot be supplied alone. Query an exact Package before handling @pluginId, repairing an asynchronous failure, or defining an updated version. This Tool is read-only: it neither executes code nor changes version pointers.",
+      "zh": "以逐级增加的细节检查当前会话拥有的动态 Cordis 对象。不提供 ID 时，只列出插件摘要。仅提供 pluginId 时，返回版本指针、最新 Run 与每个包的摘要。只有同时提供 pluginId 和 packageId 才会返回该不可变包的 Host/Client 源码与运行时诊断。packageId 不能单独提供。在处理 @pluginId、修复异步失败或定义更新版本之前，先查询确切的包。此工具是只读的：它既不执行代码，也不更改版本指针。"
+    },
+    "cordis_inspect_self.pluginId": {
+      "kind": "param",
+      "en": "Stable Plugin ID returned by cordis_define or injected by @pluginId; omit it to list every current Plugin.",
+      "zh": "cordis_define 返回或由 @pluginId 注入的稳定 Plugin ID；省略它可列出每个当前插件。"
+    },
+    "cordis_inspect_self.packageId": {
+      "kind": "param",
+      "en": "Exact immutable Package ID owned by pluginId; when specified, source and diagnostics are returned.",
+      "zh": "pluginId 拥有的确切不可变 Package ID；指定时返回源码与诊断。"
+    },
+    "cordis_define": {
+      "kind": "tool",
+      "en": "Define an immutable Cordis Package. For a new Plugin, use kind:\"new\" and provide only a semantic prefix of 3–6 lowercase English letters; the Host returns the final pluginId and packageId. To modify an existing Plugin, use kind:\"existing\" with its exact pluginId to append a Package without overwriting older versions. Provide at least one of code.host and code.client. Each value is a plain JavaScript function body that returns a Cordis Plugin; no TypeScript, JSX, or import transformation occurs. Query Inspect before depending on a Service, Event, Builtin, Slot, or token. Define only validates parameters and syntax and records source: it does not request approval, execute apply, or change currentPackageId. On success, call cordis_run with the returned IDs.",
+      "zh": "定义一个不可变的 Cordis 包。对于新插件，使用 kind:\"new\" 并只提供 3–6 个小写英文字母的语义前缀；Host 会返回最终的 pluginId 和 packageId。要修改现有插件，使用 kind:\"existing\" 并提供其确切 pluginId 以追加包，而不覆盖旧版本。至少提供 code.host 和 code.client 中的一项。每个值都是一个返回 Cordis 插件的纯 JavaScript 函数体；不进行 TypeScript、JSX 或 import 转换。在依赖某个 Service、Event、Builtin、Slot 或 token 之前，先查询 Inspect。define 只验证参数与语法并记录源码：它不会请求审批、执行 apply，也不会更改 currentPackageId。成功后，使用返回的 ID 调用 cordis_run。"
+    },
+    "cordis_define.idPrefix": {
+      "kind": "param",
+      "en": "Suggested semantic prefix of 3–6 lowercase English letters; the Host adds a unique numeric suffix.",
+      "zh": "建议的 3–6 个小写英文字母语义前缀；Host 会添加唯一数字后缀。"
+    },
+    "cordis_define.pluginId": {
+      "kind": "param",
+      "en": "Exact ID of an existing Plugin; the new Package is appended to that instance.",
+      "zh": "现有插件的确切 ID；新包将追加到该实例。"
+    },
+    "cordis_define.name": {
+      "kind": "param",
+      "en": "Short, readable Package name.",
+      "zh": "简短、易读的包名称。"
+    },
+    "cordis_define.purpose": {
+      "kind": "param",
+      "en": "One-sentence, user-facing description of the Package purpose.",
+      "zh": "对包用途的一句话、面向用户的描述。"
+    },
+    "cordis_define.code.host": {
+      "kind": "param",
+      "en": "Plain JavaScript function body that returns the Host-half Cordis Plugin.",
+      "zh": "返回 Host 半边 Cordis 插件的纯 JavaScript 函数体。"
+    },
+    "cordis_define.code.client": {
+      "kind": "param",
+      "en": "Plain JavaScript function body that returns the browser Client-half Cordis Plugin.",
+      "zh": "返回浏览器 Client 半边 Cordis 插件的纯 JavaScript 函数体。"
+    },
+    "cordis_run": {
+      "kind": "tool",
+      "en": "Activate one exact Package of a dynamic Plugin. Use mode:\"run\" for the first activation, restarting currentPackageId, or rollback. When current exists, use mode:\"update\" to switch to a different Package, even if the Plugin is currently stopped. An unauthorized Client Package creates an approval request and returns awaiting-approval; an authorized Package returns starting and continues asynchronously in the browser. Neither result waits for the final outcome inside the Tool. currentPackageId changes only after complete success; on failure, the old current and target next remain. Asynchronous success, rejection, or technical failure is reported through state and steering. After a technical failure, read diagnostics with cordis_inspect_self, correct the same Plugin, and retry autonomously. Do not request approval again after the user rejects it.",
+      "zh": "激活一个动态插件的确切包。首次激活、重启 currentPackageId 或回滚时使用 mode:\"run\"。当 current 存在时，使用 mode:\"update\" 切换到不同的包，即使插件当前已停止。未经授权的 Client 包会创建审批请求并返回 awaiting-approval；已授权的包返回 starting 并在浏览器中异步继续。这两种结果都不会在工具内等待最终结果。currentPackageId 只在完全成功后更改；失败时，旧 current 与目标 next 保持不变。异步成功、拒绝或技术性失败会通过 state 与 steering 报告。技术性失败后，用 cordis_inspect_self 读取诊断，修正同一个插件并自主重试。用户拒绝后不要再请求审批。"
+    },
+    "cordis_run.pluginId": {
+      "kind": "param",
+      "en": "Stable Plugin ID returned by cordis_define.",
+      "zh": "cordis_define 返回的稳定 Plugin ID。"
+    },
+    "cordis_run.packageId": {
+      "kind": "param",
+      "en": "Exact immutable Package ID to activate under that Plugin.",
+      "zh": "要在该插件下激活的确切不可变 Package ID。"
+    },
+    "cordis_run.mode": {
+      "kind": "param",
+      "en": "Use run for the first activation, restarting current, or rollback; use update to switch from current to a different Package.",
+      "zh": "首次激活、重启 current 或回滚时使用 run；从 current 切换到不同包时使用 update。"
+    },
+    "cordis_stop": {
+      "kind": "tool",
+      "en": "Stop the current Run of a dynamic Plugin and cancel unfinished approval or activation requests. Retain the Plugin, every immutable Package, grants, currentPackageId, and nextPackageId so it can later run or update directly. Stopping an already stopped Plugin succeeds idempotently. Use this Tool to disable effects temporarily; use cordis_undefine for permanent removal.",
+      "zh": "停止动态插件的当前 Run，并取消未完成的审批或激活请求。保留插件、每个不可变包、授权、currentPackageId 与 nextPackageId，以便之后可以直接 run 或 update。停止已停止的插件会幂等地成功。使用此工具临时禁用效果；永久移除请使用 cordis_undefine。"
+    },
+    "cordis_stop.pluginId": {
+      "kind": "param",
+      "en": "Stable dynamic Plugin ID to stop.",
+      "zh": "要停止的稳定动态 Plugin ID。"
+    },
+    "cordis_undefine": {
+      "kind": "tool",
+      "en": "Permanently remove a dynamic Plugin owned by the current Session. If it is running or awaiting approval, first stop it and cancel the request, then delete every Package, grant, and version pointer. After this returns, its pluginId, packageIds, @ reference, and Package business views are invalid; historical cards retain only a \"Plugin removed\" record. Do not call this Tool when versions must remain available for restart or rollback; use cordis_stop instead.",
+      "zh": "永久移除当前会话拥有的动态插件。如果它正在运行或等待审批，先停止它并取消请求，然后删除每个包、授权与版本指针。此调用返回后，其 pluginId、packageIds、@ 引用与包的业务视图均失效；历史卡片只保留一条 \"Plugin removed\" 记录。当版本必须保留以用于重启或回滚时，不要调用此工具；请改用 cordis_stop。"
+    },
+    "cordis_undefine.pluginId": {
+      "kind": "param",
+      "en": "Stable dynamic Plugin ID to remove permanently.",
+      "zh": "要永久移除的稳定动态 Plugin ID。"
+    },
+    "render.define": {
+      "kind": "render",
+      "en": "Defined ${value.pluginId}/${value.packageId} (${value.name}); it is not running yet. Use cordis_run to activate this Package.",
+      "zh": "已定义 ${value.pluginId}/${value.packageId}（${value.name}）；它尚未运行。请使用 cordis_run 激活此包。"
+    },
+    "render.run-awaiting-approval": {
+      "kind": "render",
+      "en": "${pluginId}/${packageId} is awaiting user approval (${pluginRunId}).",
+      "zh": "${pluginId}/${packageId} 正在等待用户审批（${pluginRunId}）。"
+    },
+    "render.run-starting": {
+      "kind": "render",
+      "en": "${pluginId}/${packageId} is starting asynchronously (${pluginRunId}).",
+      "zh": "${pluginId}/${packageId} 正在异步启动（${pluginRunId}）。"
+    },
+    "render.run-running": {
+      "kind": "render",
+      "en": "${pluginId}/${packageId} is running (${pluginRunId}).",
+      "zh": "${pluginId}/${packageId} 正在运行（${pluginRunId}）。"
+    },
+    "render.stop": {
+      "kind": "render",
+      "en": "Dynamic Plugin ${value.pluginId} is stopped; its definition and versions remain.",
+      "zh": "动态插件 ${value.pluginId} 已停止；其定义与版本仍然保留。"
+    },
+    "render.undefine": {
+      "kind": "render",
+      "en": "Removed dynamic Plugin ${value.pluginId} and all of its Packages.",
+      "zh": "已移除动态插件 ${value.pluginId} 及其所有包。"
+    },
+    "render.reference-base": {
+      "kind": "render",
+      "en": "The user explicitly referenced @${reference.pluginId}. Use Package ${reference.packageId} as the base for this modification.",
+      "zh": "用户明确引用了 @${reference.pluginId}。请以包 ${reference.packageId} 作为本次修改的基础。"
+    },
+    "render.reference-inspect": {
+      "kind": "render",
+      "en": "Before modifying it, call cordis_inspect_self with pluginId=\"${reference.pluginId}\" and packageId=\"${reference.packageId}\" to read the exact metadata and source.",
+      "zh": "修改之前，请以 pluginId=\"${reference.pluginId}\" 和 packageId=\"${reference.packageId}\" 调用 cordis_inspect_self，读取确切的元数据与源码。"
+    },
+    "render.reference-define": {
+      "kind": "render",
+      "en": "Use cordis_define with plugin.kind=\"existing\" and the original pluginId=\"${reference.pluginId}\" to append an immutable Package.",
+      "zh": "请使用 plugin.kind=\"existing\" 和原始 pluginId=\"${reference.pluginId}\" 调用 cordis_define，以追加一个不可变包。"
+    },
+    "render.reference-run": {
+      "kind": "render",
+      "en": "Do not create a new Plugin for this request. After cordis_define succeeds, call cordis_run mode=\"${mode}\" with the returned packageId.",
+      "zh": "不要为此请求创建新插件。cordis_define 成功后，请使用返回的 packageId 以 mode=\"${mode}\" 调用 cordis_run。"
+    },
+    "render.reference-unavailable": {
+      "kind": "render",
+      "en": "The user explicitly referenced @${id}, but this Plugin is unavailable in the current Session.",
+      "zh": "用户明确引用了 @${id}，但此插件在当前会话中不可用。"
+    },
+    "render.reference-unavailable-reason": {
+      "kind": "render",
+      "en": "It may have been removed, belong to another Session, or have been lost when the DSH process restarted.",
+      "zh": "它可能已被移除、属于另一个会话，或在 DSH 进程重启时丢失。"
+    },
+    "render.reference-unavailable-advice": {
+      "kind": "render",
+      "en": "Do not claim that it was updated or silently create a replacement Plugin. Tell the user that the reference is currently unavailable.",
+      "zh": "不要声称它已更新，也不要悄悄创建替代插件。请告诉用户该引用当前不可用。"
+    }
+  },
+  "dsh-sandbox-policy:lib/index.js": {
+    "sandbox:policy.read-only": {
+      "kind": "context",
+      "en": "Current DSH file policy: read-only. Any available operation enforced by the DSH file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.",
+      "zh": "当前 DSH 文件策略：read-only。DSH 文件沙箱强制执行的任何可用操作都不得在当前模式下修改文件。不要仅凭此策略拒绝必需的修改：请正常尝试可用的工具，并遵循其返回的任何拒绝与升级指引。"
+    },
+    "sandbox:policy.workspace-write": {
+      "kind": "context",
+      "en": "Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: ${JSON.stringify(policy.workspaceRoot)}. Some platform temporary areas may also be writable.",
+      "zh": "当前 DSH 文件策略：workspace-write。DSH 文件沙箱强制执行的任何可用操作都可以修改会话工作区下的文件：${JSON.stringify(policy.workspaceRoot)}。某些平台临时区域也可能可写。"
+    },
+    "sandbox:policy.danger-full-access": {
+      "kind": "context",
+      "en": "Current DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.",
+      "zh": "当前 DSH 文件策略：danger-full-access。DSH 文件沙箱不限制可用操作对文件的修改。"
+    }
+  },
+  "dsh-user-approval:lib/index.js": {
+    "approval:policy.never": {
+      "kind": "context",
+      "en": "Approval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).",
+      "zh": "本会话已禁用审批提示：需要审批的操作会被自动拒绝——请勿请求沙箱升级（不要设置 `sandbox_permissions`）。"
+    },
+    "approval:policy.ask": {
+      "kind": "context",
+      "en": "Approval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+      "zh": "审批策略：ask。需要审批的操作可通过已配置的应答器询问；如果没有可用的应答器，请求将默认失败（fail closed）。"
+    },
+    "policy-changed-message": {
+      "kind": "const",
+      "en": "The approval policy changed from \"${previous}\" to \"${policy}\" (changed by the user).",
+      "zh": "审批策略已从 \"${previous}\" 更改为 \"${policy}\"（由用户更改）。"
+    }
+  },
+  "dsh-plan-mode:lib/index.js": {
+    "exit_plan_mode": {
+      "kind": "tool",
+      "en": "Use only in plan mode. Present your plan for the user's review and, on approval, leave plan mode. Send the COMPLETE plan as markdown, starting with a # heading that names it. The user may approve (carry out the plan from your next step) or keep planning — their feedback comes back in the tool result; revise and present again.",
+      "zh": "仅在计划模式中使用。将你的计划提交给用户审阅，并在获得批准后退出计划模式。以 Markdown 形式发送完整的计划，并以一个命名它的 # 标题开头。用户可以选择批准（从你的下一步开始执行计划）或继续规划——他们的反馈会通过工具结果返回；请修改后再次提交。"
+    },
+    "exit_plan_mode.plan": {
+      "kind": "param",
+      "en": "The complete plan, as markdown, starting with a # heading that names it.",
+      "zh": "完整的计划，以 Markdown 形式，以一个命名它的 # 标题开头。"
+    },
+    "render.approved": {
+      "kind": "render",
+      "en": "Plan approved — plan mode exited; carry out the plan starting with your next step.",
+      "zh": "计划已批准——已退出计划模式；从你的下一步开始执行计划。"
+    },
+    "narration.entered": {
+      "kind": "const",
+      "en": "The user switched this session to plan mode.",
+      "zh": "用户已将此会话切换到计划模式。"
+    },
+    "narration.left": {
+      "kind": "const",
+      "en": "The user switched this session back to the default mode.",
+      "zh": "用户已将此会话切回默认模式。"
+    },
+    "command.plan.description": {
+      "kind": "command",
+      "en": "Enter or leave plan mode",
+      "zh": "进入或离开计划模式"
+    },
+    "command.plan.hint": {
+      "kind": "command",
+      "en": "[off|message]",
+      "zh": "[off|message]"
+    },
+    "command.plan.off": {
+      "kind": "command",
+      "en": "Plan mode off.",
+      "zh": "计划模式已关闭。"
+    },
+    "command.plan.leaving": {
+      "kind": "command",
+      "en": "Leaving plan mode (applies from the next step).",
+      "zh": "正在离开计划模式（从下一步开始生效）。"
+    },
+    "command.plan.entry-cancelled": {
+      "kind": "command",
+      "en": "Plan mode entry cancelled.",
+      "zh": "进入计划模式已取消。"
+    },
+    "command.plan.already-inactive": {
+      "kind": "command",
+      "en": "Plan mode is already inactive.",
+      "zh": "计划模式已处于非活动状态。"
+    },
+    "command.plan.on": {
+      "kind": "command",
+      "en": "Plan mode on. Use /plan off to leave.",
+      "zh": "计划模式已开启。使用 /plan off 离开。"
+    },
+    "command.plan.entering": {
+      "kind": "command",
+      "en": "Entering plan mode (applies from the next step). Use /plan off to leave.",
+      "zh": "正在进入计划模式（从下一步开始生效）。使用 /plan off 离开。"
+    },
+    "review.question": {
+      "kind": "const",
+      "en": "Approve this plan and leave plan mode?",
+      "zh": "批准此计划并退出计划模式？"
+    },
+    "review.header": {
+      "kind": "const",
+      "en": "Plan review",
+      "zh": "计划审阅"
+    },
+    "review.approve-label": {
+      "kind": "const",
+      "en": "Approve",
+      "zh": "批准"
+    },
+    "review.keep-planning-label": {
+      "kind": "const",
+      "en": "Keep planning",
+      "zh": "继续规划"
+    },
+    "review.approve-desc": {
+      "kind": "const",
+      "en": "Leave plan mode; the plan is carried out from the next step.",
+      "zh": "退出计划模式；计划从下一步开始执行。"
+    },
+    "review.keep-planning-desc": {
+      "kind": "const",
+      "en": "Stay in plan mode; feedback goes back to the model.",
+      "zh": "保持计划模式；反馈将返回给模型。"
+    },
+    "error.keep-planning": {
+      "kind": "const",
+      "en": "The user chose to keep planning; revise the plan and present it again.",
+      "zh": "用户选择继续规划；请修改计划并再次提交。"
+    },
+    "error.keep-planning-feedback": {
+      "kind": "const",
+      "en": "The user chose to keep planning; their feedback: ${feedback}",
+      "zh": "用户选择继续规划；他们的反馈：${feedback}"
+    },
+    "error.dismissed": {
+      "kind": "const",
+      "en": "The user dismissed the plan review to speak instead; stay in plan mode, stop here, and wait for their message.",
+      "zh": "用户关闭了计划审阅以便直接发言；请保持计划模式，停在这里，等待他们的消息。"
+    }
+  },
+  "dsh-agent-loop:lib/index.js": {
+    "CLEARED": {
+      "kind": "const",
+      "en": "Current runtime context: none. Earlier runtime-context snapshots no longer apply.",
+      "zh": "当前运行时上下文：无。更早的运行时上下文快照不再适用。"
+    },
+    "render.aborted-before-dispatch": {
+      "kind": "render",
+      "en": "Error: tool call aborted before dispatch",
+      "zh": "错误：工具调用在调度前已中止"
+    }
+  },
+  "dsh-system-prompt:lib/index.js": {
+    "harness:identity": {
+      "kind": "section",
+      "en": "You are an AI agent powered by DeepSeek Harness.",
+      "zh": "你是一个由 DeepSeek Harness 驱动的 AI 智能体。"
+    },
+    "joinContextSections.snapshot-intro": {
+      "kind": "context",
+      "en": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.",
+      "zh": "当前运行时上下文。此快照取代更早的运行时上下文快照。"
+    }
+  },
+  "dsh-app-boot:lib/index.js": {
+    "harness:source": {
+      "kind": "section",
+      "en": "The DeepSeek Harness implementation code checkout is located at ${sourceRoot}. The checkout location and the current working directory are two different values that may not coincide; never infer the working directory from that path. Use pwd to determine the current working directory. That checkout is only for inspecting or extending DSH itself.",
+      "zh": "DeepSeek Harness 的实现代码检出目录位于 ${sourceRoot}。检出位置与当前工作目录是两个不同的值，可能不一致；切勿根据该路径推断工作目录。请使用 pwd 来确定当前工作目录。该检出目录仅用于检查或扩展 DSH 本身。"
+    }
+  },
+  "dsh-agent-instructions:lib/index.js": {
+    "WORKSPACE_CONTEXT_INTRO": {
+      "kind": "const",
+      "en": "The following workspace instructions may be relevant to your work. Treat them as guidance when applicable. More specific instructions take precedence over more general ones. They do not override direct instructions from the system, developer, or user.",
+      "zh": "以下工作区指令可能与你的工作相关。在适用时将它们作为指导。更具体的指令优先于更宽泛的指令。它们不会覆盖系统、开发者或用户的直接指令。"
+    },
+    "REPLACEMENT_WORKSPACE_CONTEXT_INTRO": {
+      "kind": "const",
+      "en": "This complete workspace-instruction baseline supersedes all earlier workspace-instruction baselines. The following workspace instructions may be relevant to your work. Treat them as guidance when applicable. More specific instructions take precedence over more general ones. They do not override direct instructions from the system, developer, or user.",
+      "zh": "此完整的工作区指令基线取代了所有更早的工作区指令基线。以下工作区指令可能与你的工作相关。在适用时将它们作为指导。更具体的指令优先于更宽泛的指令。它们不会覆盖系统、开发者或用户的直接指令。"
+    },
+    "EMPTY_REPLACEMENT_WORKSPACE_CONTEXT_INTRO": {
+      "kind": "const",
+      "en": "This complete workspace-instruction baseline supersedes all earlier workspace-instruction baselines. There are no workspace instructions currently in effect.",
+      "zh": "此完整的工作区指令基线取代了所有更早的工作区指令基线。当前没有生效的工作区指令。"
+    },
+    "COMPACT_WORKSPACE_CONTEXT_INTRO": {
+      "kind": "const",
+      "en": "Workspace instructions were omitted or truncated because they exceed the configured byte budget.",
+      "zh": "工作区指令因超出配置的字节预算而被省略或截断。"
+    },
+    "sectionText": {
+      "kind": "const",
+      "en": "Instructions from the following file: ${file.displayPath}\n\n${file.content}",
+      "zh": "来自以下文件的指令：${file.displayPath}\n\n${file.content}"
+    },
+    "additionalSectionText.heading": {
+      "kind": "const",
+      "en": "Additional instructions from the following file: ${file.displayPath}",
+      "zh": "来自以下文件的附加指令：${file.displayPath}"
+    },
+    "additionalSectionText.body": {
+      "kind": "const",
+      "en": "These instructions apply to work under `${scope}`. Treat them as guidance when relevant; more specific instructions take precedence. They do not override direct instructions from the system, developer, or user.",
+      "zh": "这些指令适用于 `${scope}` 下的工作。在相关时将它们作为指导；更具体的指令优先。它们不会覆盖系统、开发者或用户的直接指令。"
+    },
+    "changedSectionText.removed": {
+      "kind": "const",
+      "en": "Instructions removed: ${change.path}\n\nInstructions previously loaded from this file no longer apply.",
+      "zh": "已移除指令：${change.path}\n\n此前从该文件加载的指令不再适用。"
+    },
+    "changedSectionText.updated-heading": {
+      "kind": "const",
+      "en": "Updated instructions from the following file: ${change.path}",
+      "zh": "已更新来自以下文件的指令：${change.path}"
+    },
+    "changedSectionText.updated-body": {
+      "kind": "const",
+      "en": "This file changed after it was loaded. Use the following content instead of the instructions previously loaded from this file.",
+      "zh": "此文件在加载后发生了变化。请使用以下内容，而不是此前从该文件加载的指令。"
+    },
+    "markerText.prefix": {
+      "kind": "const",
+      "en": "Workspace instruction budget of ${maxBytes} bytes: ${parts.join(\"; \")}",
+      "zh": "工作区指令预算 ${maxBytes} 字节：${parts.join(\"; \")}"
+    },
+    "markerText.omitted": {
+      "kind": "const",
+      "en": "omitted ${omitted.map((file) => file.displayPath).join(\", \")}",
+      "zh": "已省略 ${omitted.map((file) => file.displayPath).join(\", \")}"
+    },
+    "markerText.truncated": {
+      "kind": "const",
+      "en": "truncated ${truncated.map((item) => `${item.displayPath} from ${item.originalBytes} bytes to ${item.includedBytes} bytes`).join(\", \")}",
+      "zh": "已截断 ${truncated.map((item) => `${item.displayPath} 从 ${item.originalBytes} 字节到 ${item.includedBytes} 字节`).join(\", \")}"
+    }
+  },
+  "dsh-subagent:lib/types/child-agent.js": {
+    "SUBAGENT_DELEGATION_CONTEXT": {
+      "kind": "context",
+      "en": "You are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it.",
+      "zh": "你是一个被委托的子代理：你的权限范围在启动时已被固定，无法在本会话内扩大——需要审批的操作会被自动拒绝。当任务需要超出该范围的访问权限时，不要重试被拒绝的操作；请在回复中说明该限制，以便委托方代理处理。"
+    }
+  },
+  "dsh-web-app:lib/index.js": {
+    "app:web-surface": {
+      "kind": "section",
+      "en": "You are interacting with the user through the DeepSeek Harness Web GUI at ${webUrl}. When the user refers to \"this page\", \"this GUI\", or \"this app\" without naming another target, they mean this GUI. The browser provides no implicit DOM, route, or screenshot context. The client-plugin HMR receiver is active, but client-plugin changes reload without a refresh only while `pnpm run dev:web` is also running from this same checkout to rebuild their bundles; verify that watcher before promising automatic updates. Every other change — the apps/web shell and plain packages — requires rebuilding the affected Web artifacts and verifying this existing URL after a page refresh. Starting another server does not update this GUI. The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.",
+      "zh": "你正在通过 DeepSeek Harness Web GUI（${webUrl}）与用户交互。当用户在没有指明其他目标的情况下提到\"此页面\"、\"此 GUI\"或\"此应用\"时，指的就是这个 GUI。浏览器不提供隐式的 DOM、路由或截图上下文。客户端插件的 HMR 接收器处于活动状态，但客户端插件的更改只有在 `pnpm run dev:web` 也在同一检出中运行以重建其 bundle 时才无需刷新即可生效；在承诺自动更新之前，请先验证该 watcher。其他所有更改——apps/web shell 与普通包——都需要重建受影响的 Web 产物，并在刷新页面后验证此现有 URL。启动另一个服务器不会更新此 GUI。apps/web 的 Vite 入口会构建 shell，但它不是独立应用，因为只有 dsh web 会注入 window.__DSH_BOOT__。除非用户要求，否则不要启动替代服务器；如果需要，请使用受管理的后台任务并验证其确切 URL。"
+    }
+  },
+  "dsh-persona:lib/index.js": {}
+}

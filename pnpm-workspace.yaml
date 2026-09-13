@@ -8,6 +8,10 @@ packages:
   # dsh-sidenote 同理：自带 workspace/lockfile（react/tsdown 工具链），
   # 嵌套独立维护，安装/构建在目录内执行（pnpm install && pnpm build）。
   - '!plugins/dsh-sidenote'
+  # oss-prompt-optimizer / dsh-harness-zh-cn 同理（各自自带 lockfile，
+  # 嵌套独立维护；前者目录内构建，后者 lib 上游入库免构建）。
+  - '!plugins/dsh-oss-prompt-optimizer'
+  - '!plugins/dsh-harness-zh-cn'
 
 # plugins/dsh-better-sidebar 依赖的构建脚本（node-pty 拷贝预编译二进制；
 # protobufjs 无源编译）。pnpm 10+ 默认拦截依赖构建脚本，需显式放行。
