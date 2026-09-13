@@ -157,6 +157,53 @@
 #         lazyTools: true
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ── vendored Agent 共享浏览器（PRD-02 §18 定稿基线，非 Magic 产品插件）───────
+#
+# dsh-builtin-browser v0.1.21 整仓源拷贝（MIT，LICENSE 保留于插件目录；
+# 上游镜像 reference-project/wqty123-dsh-browser，GitHub wqty123/dsh-browser）。
+# 2026-09-13 用户裁定：以它为浏览器能力基线。
+#
+# 形态＝「共享真实浏览器」：一只可见的原生浏览器窗口，agent 经 CDP 在与用户
+# 所见完全一致的同一页面里干活（DOM/无障碍快照 + 截图当眼睛，结构化定位
+# css/text/xpath，非盲点坐标），用户随时亲手接管，agent 感知变化继续。
+# 人机验证（Cloudflare/reCAPTCHA/hCaptcha/Turnstile）由 browser_challenge
+# 识别后停下请人在同一窗口完成，不硬刚。33 个 browser_* 工具；任务级
+# 会话隔离；cookie 持久化（browser_auth）；下载限定受控目录。
+#
+# 组合面＝上游 cordis.patch.yml 的三行，本文件按路径逐条挂载：
+#   browser          = ctx.browser 服务缝（seam）；
+#   browser-electron = Electron CDP provider。本 profile 无桌面外壳
+#       （electronViewHost 缺省）→ 走自托管分支：插件自行拉起 Electron
+#       子进程（host-main.js），本机 TCP JSON-RPC + 随机 token（stdin +
+#       环境变量双通道）驱动；崩溃自动重启。未来桌面端把 electronViewHost
+#       接上即变成产品内嵌面板，语义不变。
+#   tool-browser     = 模型可见的 browser_* 工具。
+# downloadDir 收敛到 DSH home 下 browser-downloads（产物卡绝对路径可预览）。
+#
+# 版本适配（2026-09-13，未改 src）：electron 由上游 `>= 30.0.0` 钉为
+# `>= 40.0.0 < 44.0.0`（README 建议 ≥40、33.x 合成器缺陷、44+ 的包不再随
+# 安装下载二进制；pnpm 11 实测跳过其 postinstall，二进制用
+# `node install.js` 手动补拉一次即可）；dsh peer 由 `^0.1.1-rc.2` 升
+# `^0.1.5-rc.2`（npm semver 预发布规则下 ^0.1.1-rc.2 不覆盖 0.1.5-rc.2，
+# univer 同款问题）。vendor 副本 tsc 编译 + 26 项 node --test 全绿
+# （2026-09-13）。
+
+- insert:
+    - id: browser
+      name: ../plugins/dsh-builtin-browser/lib/browser/runtime.js
+
+- insert:
+    - id: browser-electron
+      name: ../plugins/dsh-builtin-browser/lib/browser-electron/entry.js
+      config:
+        viewHost: !!js ctx.get('electronViewHost')
+        downloadDir: !!js dshHomePath('browser-downloads')
+
+- insert:
+    - id: tool-browser
+      name: ../plugins/dsh-builtin-browser/lib/tool-browser/index.js
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ── vendored 第三方侧边栏工作台（非 Magic 产品插件）─────────────────────────
 #
 # dsh-better-sidebar v0.19.1 整仓源拷贝（MIT，LICENSE 保留于插件目录；

@@ -8,7 +8,11 @@ packages:
 
 # plugins/dsh-better-sidebar 依赖的构建脚本（node-pty 拷贝预编译二进制；
 # protobufjs 无源编译）。pnpm 10+ 默认拦截依赖构建脚本，需显式放行。
+# electron：plugins/dsh-builtin-browser 的自托管浏览器子进程运行时；
+# 钉在 <44（44+ 的包不再随安装下载二进制，README 建议版本线 ≥40，
+# 33.x 有合成器缺陷），放行 postinstall 以便安装时拉取二进制（~100MB）。
 allowBuilds:
   esbuild: true
+  electron: true
   node-pty: true
   protobufjs: true

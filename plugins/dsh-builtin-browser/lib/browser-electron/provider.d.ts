@@ -1,0 +1,386 @@
+/**
+ * Electron-backed browser provider: `WebContentsView` sessions driven over
+ * `webContents.debugger` (CDP). The provider itself does not import Electron — it operates through the {@link ElectronBrowserViewHost} seam, which the
+ * desktop shell implements with real Electron objects. That keeps this
+ * package testable under plain Node and leaves the Electron dependency to the
+ * shell that owns the `BrowserWindow`.
+ * @module dsh-browser/browser-electron
+ */
+import type { BrowserA11yRequest, BrowserA11yResult, BrowserChallenge, BrowserCheckRequest, BrowserClearRequest, BrowserClickRequest, BrowserContentRequest, BrowserContentResult, BrowserElementTarget, BrowserExecuteRequest, BrowserExecuteResult, BrowserFillRequest, BrowserFillResult, BrowserGetValueRequest, BrowserGetValueResult, BrowserHistoryEntry, BrowserOpenRequest, BrowserProvider, BrowserScrapeRequest, BrowserScrapeResult, BrowserScreenshotRequest, BrowserSelectRequest, BrowserSelectResult, BrowserSessionId, BrowserSetValueRequest, BrowserSetValueResult, BrowserSnapshotResult, BrowserTab, BrowserTypeRequest, BrowserWaitRequest, BrowserWaitResult, BrowserScrollRequest, BrowserKeyRequest, ExportedCookie } from '../browser/types.js';
+/** Stable provider id registered with `ctx.browser`. */
+export declare const ELECTRON_BROWSER_PROVIDER_ID = "electron";
+/**
+ * The minimal Electron surface this provider needs. Implemented by the
+ * desktop shell with a real `WebContentsView`; a fake implements it in tests.
+ */
+export interface ElectronBrowserViewHost {
+    /**
+     * Create a new browser view and return a handle to its webContents-like
+     * surface. The host owns windowing (adding the view to the window, sizing,
+     * removal); the provider owns CDP-driven behavior.
+     */
+    createView(): ElectronViewHandle;
+    /**
+     * Destroy a view created by this host. Called on session close; idempotent
+     * for an already-destroyed view.
+     * @param handle - the handle returned by {@link createView}.
+     */
+    destroyView(handle: ElectronViewHandle): void;
+    /**
+     * Show one view as the session's visible surface. The host keeps exactly
+     * one visible; switching tabs reorders visibility without losing state.
+     * Optional: a host without visible-tab switching treats every view as
+     * always present (acceptable for headless/probe hosts).
+     * @param handle - the handle to make visible.
+     * @param label - human-readable session/task label, when the provider knows
+     * one; the host may surface it (e.g. in the window title) so a human can
+     * tell which task's page is currently visible.
+     */
+    showView?(handle: ElectronViewHandle, label?: string): void;
+    /**
+     * Optional cheap usability probe (no network): whether the host can back
+     * views at all right now. The self-hosted host checks for a usable Electron
+     * binary; a host without the probe is assumed usable. Lets the seam's
+     * provider selection (BROWSER_PROVIDER_UNAVAILABLE etc.) be real instead
+     * of failing only at first use.
+     */
+    available?(): boolean;
+    /**
+     * Optional: associate a view with a window group. Views grouped under the
+     * same `windowId` share one window (one window per browser session); a host
+     * without this keeps a single shared window. Called right after
+     * `createView`, so the host may route the view to its own window even
+     * before the first command materializes it.
+     * @param handle - the view to group.
+     * @param windowId - the group (session) key.
+     * @param label - human-readable label for the window title.
+     */
+    groupView?(handle: ElectronViewHandle, windowId: string, label?: string): void;
+    /**
+     * Optional: receive user-initiated browser actions from the host's own UI
+     * (e.g. a toolbar address bar, back/forward buttons, tab strip). The
+     * provider routes them into the session model so the agent and the human
+     * always see the same tabs and navigation state.
+     * @param handler - called for every user action; must not throw.
+     */
+    onUserAction?(handler: (action: BrowserUserAction) => void): void;
+}
+/**
+ * A user-initiated browser action from the host's own UI (toolbar). The
+ * `windowId` is the session id the view was grouped under, so the provider
+ * can route the action to the right session.
+ */
+export type BrowserUserAction = {
+    readonly type: 'navigate';
+    readonly windowId: string;
+    readonly url: string;
+} | {
+    readonly type: 'newTab';
+    readonly windowId: string;
+    readonly url?: string;
+} | {
+    readonly type: 'activateTab';
+    readonly windowId: string;
+    readonly viewId: string;
+} | {
+    readonly type: 'closeTab';
+    readonly windowId: string;
+    readonly viewId: string;
+} | {
+    readonly type: 'back';
+    readonly windowId: string;
+} | {
+    readonly type: 'forward';
+    readonly windowId: string;
+} | {
+    readonly type: 'reload';
+    readonly windowId: string;
+};
+/**
+ * A CDP-capable view handle. This is the subset of Electron's
+ * `WebContents`/`WebContentsView` the provider drives; the shell's real
+ * implementation adapts `webContents.debugger` to it.
+ */
+export interface ElectronViewHandle {
+    /** Unique id of the backing view, used for diagnostics. */
+    readonly id: string;
+    /**
+     * Send one CDP command and resolve with its result. Rejects when the
+     * debugger is not attached or the command fails.
+     * @param method - CDP method, e.g. `Page.navigate`.
+     * @param params - CDP command parameters.
+     * @returns the CDP `result` object.
+     */
+    sendCommand(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
+}
+/** Provider config: navigation admission defaults and snapshot caps. */
+export interface ElectronBrowserProviderConfig {
+    /** Allow navigation only to HTTP(S) URLs; reject anything else. Default true. */
+    readonly httpOnly?: boolean;
+    /** Maximum snapshot elements before truncation. Default 60. */
+    readonly snapshotMaxElements?: number;
+    /** Maximum content characters before truncation when no maxChars is given. Default 100_000. */
+    readonly contentMaxChars?: number;
+    /**
+     * Directory `browser_download` save paths must resolve inside (prevents a
+     * prompt-injected agent from writing arbitrary machine paths). Default:
+     * `~/Downloads`. NOTE: this default is a convenience, not a security
+     * boundary — on Windows it may resolve to OneDrive/redirected paths;
+     * a production deployment should set an explicit, verified path.
+     */
+    readonly downloadDir?: string;
+}
+/**
+ * CDP method/params for `Page.navigate`, as sent to {@link ElectronViewHandle.sendCommand}.
+ */
+export interface CdpNavigateParams {
+    readonly url: string;
+}
+/**
+ * CDP method/params for `Input.dispatchMouseEvent` (a click press+release pair).
+ */
+export interface CdpMouseParams {
+    readonly type: 'mousePressed' | 'mouseReleased';
+    readonly x: number;
+    readonly y: number;
+    readonly button: 'left';
+    readonly clickCount: number;
+}
+/** CDP method/params for `Input.insertText`. */
+export interface CdpInsertTextParams {
+    readonly text: string;
+}
+/** CDP method/params for `Runtime.evaluate`. */
+export interface CdpEvaluateParams {
+    readonly expression: string;
+    readonly returnByValue: boolean;
+    readonly awaitPromise?: boolean;
+}
+/** CDP method for a full-page screenshot capture. */
+export declare const CDP_PAGE_CAPTURE_SCREENSHOT = "Page.captureScreenshot";
+/** Native capture options the self-hosted view handle understands. */
+export interface ScreenshotOptions {
+    readonly format?: 'png' | 'jpeg';
+    readonly quality?: number;
+    readonly maxWidth?: number;
+    readonly maxHeight?: number;
+}
+/** CDP method for runtime evaluation (the execute path). */
+export declare const CDP_RUNTIME_EVALUATE = "Runtime.evaluate";
+/** CDP method for navigation. */
+export declare const CDP_PAGE_NAVIGATE = "Page.navigate";
+/** Supported key names, exported for the tool's enum and error messages. */
+export declare const BROWSER_KEY_NAMES: readonly string[];
+/**
+ * Browser provider over Electron views. Sessions hold an ordered list of
+ * tabs; each tab is one view created by the host. The active tab receives
+ * every operation; switching tabs calls the host's optional `showView` and
+ * never loses state. Navigation is admitted only for HTTP(S) targets unless
+ * {@link ElectronBrowserProviderConfig.httpOnly} is disabled.
+ */
+export declare class ElectronBrowserProvider implements BrowserProvider {
+    private readonly host;
+    readonly id = "electron";
+    private readonly sessions;
+    private readonly httpOnly;
+    private readonly snapshotMaxElements;
+    private readonly contentMaxChars;
+    private readonly downloadDir;
+    constructor(host: ElectronBrowserViewHost, config?: ElectronBrowserProviderConfig);
+    /**
+     * Usable when the host says it can back views (the self-hosted host probes
+     * for a usable Electron binary; the desktop shell is assumed usable).
+     */
+    available(): boolean;
+    /**
+     * Open a NEW browser session with its own view. Every call mints a fresh
+     * session id and backing view; per-task reuse is owned by the caller (the
+     * tool layer caches one session per DSH task). Sessions are isolated from
+     * each other: each keeps its own tabs, active tab, and history, and only
+     * the active tab of a session is made visible.
+     * @param label - optional human-readable label (e.g. the DSH task id) shown
+     * in the window title so a human can tell which task's page is visible.
+     */
+    open(label?: string): Promise<BrowserSessionId>;
+    /** Open a URL in the active tab (default) or a new tab. */
+    openUrl(session: BrowserSessionId, request: BrowserOpenRequest, signal?: AbortSignal): Promise<void>;
+    /** List the session's tabs with their titles. */
+    listTabs(session: BrowserSessionId): Promise<readonly BrowserTab[]>;
+    /** Switch to a tab by id, making its view visible. */
+    switchTab(session: BrowserSessionId, tabId: string): Promise<void>;
+    /** Close one tab; closing the active tab activates the next. */
+    closeTab(session: BrowserSessionId, tabId: string): Promise<void>;
+    /**
+     * Find a tab by id, preferring the calling session. Tab ids are globally
+     * unique UUIDs, so when the calling session does not hold the tab (the tool
+     * layer's session resolution can drift from the session that opened it),
+     * fall back to locating it in any other session instead of failing — the
+     * caller explicitly named a tab, so acting on it is what they want. Throws
+     * BROWSER_TAB_UNKNOWN with the session's actual tabs when the id exists
+     * nowhere.
+     */
+    private locateTab;
+    /** Close every tab and reset to one blank tab. */
+    reset(session: BrowserSessionId): Promise<void>;
+    /** Navigate the active tab's view to a URL, honoring HTTP(S)-only admission. */
+    navigate(session: BrowserSessionId, request: {
+        readonly url: string;
+    }, signal?: AbortSignal): Promise<void>;
+    /** Execute JS in the active tab's page context. */
+    execute(session: BrowserSessionId, request: BrowserExecuteRequest, signal?: AbortSignal): Promise<BrowserExecuteResult>;
+    /**
+     * Poll until the active tab's page is ready (and optional URL/selector
+     * match), or the budget runs out. Returns a verdict instead of throwing on
+     * timeout — the caller (model) decides what a miss means. Polling evaluates
+     * in the CURRENT document, so after a navigation the old document may
+     * briefly answer; pass the expected `url` to disambiguate.
+     */
+    waitFor(session: BrowserSessionId, request: BrowserWaitRequest, signal?: AbortSignal): Promise<BrowserWaitResult>;
+    /** Produce an AI-friendly snapshot of the active tab. */
+    snapshot(session: BrowserSessionId, signal?: AbortSignal): Promise<BrowserSnapshotResult>;
+    /**
+     * Read the active tab's accessibility tree: semantic roles/names/states for
+     * every interactive node (Chrome's `computedRole`/`computedName` when
+     * available, tag/attribute inference otherwise). Pierces same-origin
+     * iframes and shadow roots like the snapshot; cross-origin frames stay
+     * opaque. Coordinates are top-document viewport-relative, so a node can
+     * also be driven by click/type.
+     */
+    a11y(session: BrowserSessionId, request: BrowserA11yRequest, signal?: AbortSignal): Promise<BrowserA11yResult>;
+    /** Check whether a human-verification challenge is blocking the active tab. */
+    detectChallenge(session: BrowserSessionId, signal?: AbortSignal): Promise<BrowserChallenge>;
+    /** Fetch page content in a requested format. */
+    content(session: BrowserSessionId, request: BrowserContentRequest, signal?: AbortSignal): Promise<BrowserContentResult>;
+    /**
+     * Click at viewport coordinates, or at a located element's center when a
+     * `target` (css/text/xpath) is given. CDP mousePressed + mouseReleased.
+     */
+    click(session: BrowserSessionId, request: BrowserClickRequest | {
+        readonly target: BrowserElementTarget;
+    }, signal?: AbortSignal): Promise<void>;
+    /**
+     * Type into the focused element, or focus a located element (css/text/xpath)
+     * first and then insert the text.
+     */
+    type(session: BrowserSessionId, request: BrowserTypeRequest | {
+        readonly target: BrowserElementTarget;
+    }, signal?: AbortSignal): Promise<void>;
+    /** Scroll the page: by deltas, to a selector, or to top/bottom. */
+    scroll(session: BrowserSessionId, request: BrowserScrollRequest, signal?: AbortSignal): Promise<void>;
+    /** Go back (-1) or forward (+1) in the active tab's navigation history. */
+    private historyStep;
+    /** Go back in the active tab's history. */
+    back(session: BrowserSessionId, signal?: AbortSignal): Promise<void>;
+    /** Go forward in the active tab's history. */
+    forward(session: BrowserSessionId, signal?: AbortSignal): Promise<void>;
+    /** Reload the active tab. */
+    reload(session: BrowserSessionId, signal?: AbortSignal): Promise<void>;
+    /** Press one named key (Enter/Tab/arrows/…) via CDP key events. */
+    key(session: BrowserSessionId, request: BrowserKeyRequest, signal?: AbortSignal): Promise<void>;
+    /**
+     * Fill a form's fields in one batch. Runs one page-context script that
+     * resolves each field (selector, or name/label/placeholder among visible
+     * controls), sets its value with the native prototype setter (React/Vue
+     * controlled inputs included) plus input/change events, handles
+     * select/checkbox/radio/contenteditable, and optionally submits the form.
+     */
+    fillForm(session: BrowserSessionId, request: BrowserFillRequest, signal?: AbortSignal): Promise<BrowserFillResult>;
+    /**
+     * Build an in-page async IIFE that locates ONE element by css/text/xpath
+     * (polling until it appears or the budget runs out) and then runs `body`
+     * with `el` in scope. Shared by the target-based tools: click/type (②),
+     * setValue/check/select/clear/getValue (③), and the scrape item wait.
+     */
+    private buildTargetScript;
+    /**
+     * Shared evaluate wrapper for the target-based tools. Runs the in-page
+     * script and returns its result object; throws a typed BrowserError on
+     * evaluation failure or an in-page `{ ok: false, error }` verdict.
+     */
+    private runTargetScript;
+    /** Set one element's value (native setter + input/change, React-friendly). */
+    setValue(session: BrowserSessionId, request: BrowserSetValueRequest, signal?: AbortSignal): Promise<BrowserSetValueResult>;
+    /** Check or uncheck one checkbox/radio. */
+    check(session: BrowserSessionId, request: BrowserCheckRequest, signal?: AbortSignal): Promise<{
+        readonly checked: boolean;
+    }>;
+    /** Select one option of a <select>, by value, visible text, or index. */
+    selectOption(session: BrowserSessionId, request: BrowserSelectRequest, signal?: AbortSignal): Promise<BrowserSelectResult>;
+    /** Clear one input/textarea/contenteditable (or uncheck a checkbox/radio). */
+    clearField(session: BrowserSessionId, request: BrowserClearRequest, signal?: AbortSignal): Promise<{
+        readonly cleared: boolean;
+    }>;
+    /** Read one element's current value (for verification). */
+    getValue(session: BrowserSessionId, request: BrowserGetValueRequest, signal?: AbortSignal): Promise<BrowserGetValueResult>;
+    /**
+     * Extract structured data from repeated DOM items (static CSS, CSP-safe —
+     * no arbitrary code runs). Waits for the item selector, then maps each item
+     * through the field selectors; `selector@attr` reads an attribute instead
+     * of text (`a@href` yields an absolute URL).
+     */
+    scrape(session: BrowserSessionId, request: BrowserScrapeRequest, signal?: AbortSignal): Promise<BrowserScrapeResult>;
+    /**
+     * Download a URL to a local file, keeping the session's cookies/login.
+     * Requires the self-hosted host (which implements view-level download); the
+     * desktop shell's embedded views delegate downloads to the real browser UI.
+     * Admission: only HTTP(S) targets (the in-page fetch cannot meaningfully
+     * fetch anything else), and the save path must be absolute — confined to
+     * `downloadDir` when one is configured, so a prompt-injected agent cannot
+     * write arbitrary machine paths.
+     */
+    download(session: BrowserSessionId, request: {
+        readonly url: string;
+        readonly savePath: string;
+    }, signal?: AbortSignal): Promise<{
+        readonly path: string;
+    }>;
+    /**
+     * Export the session's cookies (login state) as serializable objects.
+     * Self-hosted only; the desktop shell's embedded views use the real profile.
+     */
+    flushAuth(session: BrowserSessionId): Promise<readonly ExportedCookie[]>;
+    /** Import cookies into the session (restore login state). Self-hosted only. */
+    restoreAuth(session: BrowserSessionId, cookies: readonly ExportedCookie[]): Promise<number>;
+    /** Capture the current page, optionally full-page, PNG or JPEG, scalable. */
+    screenshot(session: BrowserSessionId, request?: BrowserScreenshotRequest, signal?: AbortSignal): Promise<{
+        readonly dataUrl: string;
+        readonly path?: string;
+    }>;
+    /** Build the data URL and optionally write the image to disk. */
+    private saveScreenshot;
+    /** Append one operation to the session's history. */
+    private record;
+    /** Return the session's chronological operation log (newest last). */
+    history(session: BrowserSessionId): Promise<readonly BrowserHistoryEntry[]>;
+    /**
+     * Replay one recorded operation by sequence number. Navigate/click/type are
+     * re-issued against the current page; execute re-runs its script. The
+     * replayed step is appended to history as a new entry.
+     * @param session - the session id.
+     * @param seq - the recorded entry's sequence number to replay.
+     */
+    replay(session: BrowserSessionId, seq: number): Promise<void>;
+    /** Close the session and destroy all its views. Idempotent. */
+    close(session: BrowserSessionId): Promise<void>;
+    /** Look up a session or throw the unknown-session error. */
+    private session;
+    /** The active tab of a session. */
+    private activeTab;
+    /** Append a fresh tab and make it active. */
+    private newTab;
+    /** Find a session's tab by its backing view id (toolbar actions carry view ids). */
+    private tabByViewId;
+    /**
+     * Route a user-initiated action from the host's UI into the session model.
+     * Fire-and-forget by design: a user action failing (e.g. an unreachable
+     * URL typed into the address bar) must never crash the host UI loop — it
+     * is reported to the host (toolbar) when the host supports it, else logged.
+     */
+    private handleUserAction;
+    /** Report a failed user action to the host UI (toolbar), when supported. */
+    private notifyUserActionError;
+    /** Ask the host to show the active tab's view, carrying the session label. */
+    private showActive;
+    /** Read the current URL of a view through CDP. */
+    private currentUrl;
+}
