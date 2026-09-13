@@ -136,32 +136,25 @@
       name: ../plugins/magic-browser/src/index.ts
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ── Tencent BrowserSkill 桥接（人机共享的真实浏览器，PRD-02 §18 实现选型）────
+# ── Tencent BrowserSkill 桥接：已于 2026-09-13 摘除 ─────────────────────────
 #
-# @wxg-prc-cpg/browser-skill-dsh-plugin v0.2.1（MIT，腾讯 Tencent/BrowserSkill
-# 官方 DSH 桥接；npm 依赖装在 profiles/web，源码研究镜像
-# reference-project/tencent-browserskill）。2026-09-13 用户裁定选型。
+# @wxg-prc-cpg/browser-skill-dsh-plugin 0.2.1（npm 依赖曾装在 profiles/web，
+# 源码研究镜像 reference-project/tencent-browserskill）曾按 2026-09-13 上午
+# 裁定挂载；同日用户改裁定：形态不符——要求装商店扩展、控制的是用户自己的
+# 日常浏览器，浏览器基线改定 dsh-builtin-browser（见下节）。npm 依赖已从
+# profiles/web/package.json 移除；要恢复：还原该依赖 + 下面注释的 insert 块。
 #
-# 形态：browser_* 复合工具（session/page/inspect/interact/tabs/assist）经
-# bsk 守护进程 + Chrome/Edge 官方商店扩展，驱动用户真实浏览器里的可见
-# Agent Window——人与 agent 同页操作，登录态直接复用，验证码/登录由
-# request-help 交人工。前提三件套：bsk CLI（已装 ~/.local/bin/bsk.exe）+
-# 浏览器扩展（用户从商店安装）+ 本插件。
-#
-# lazyTools: true = 工具在 /browser-skill skill 被调用后才注入（省 token）；
-# observationEnabled = DSH web UI 实时视图。
-
-- insert:
-    - id: browserskill
-      name: ../profiles/web/node_modules/@wxg-prc-cpg/browser-skill-dsh-plugin/lib/index.mjs
-      config:
-        bskPath: C:/Users/22830/.local/bin/bsk.exe
-        defaultTimeoutMs: 120000
-        maxSessions: 5
-        observationEnabled: true
-        thumbnailIntervalMs: 1500
-        idleIntervalMs: 8000
-        lazyTools: true
+# - insert:
+#     - id: browserskill
+#       name: ../profiles/web/node_modules/@wxg-prc-cpg/browser-skill-dsh-plugin/lib/index.mjs
+#       config:
+#         bskPath: C:/Users/22830/.local/bin/bsk.exe
+#         defaultTimeoutMs: 120000
+#         maxSessions: 5
+#         observationEnabled: true
+#         thumbnailIntervalMs: 1500
+#         idleIntervalMs: 8000
+#         lazyTools: true
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ── vendored 第三方侧边栏工作台（非 Magic 产品插件）─────────────────────────
