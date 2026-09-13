@@ -34,10 +34,12 @@ plugins/magic-consult        unified on-demand retrieval plugin
 plugins/magic-devtools       developer tools plugin
 plugins/magic-export         deliverable export plugin
 plugins/magic-engineering    engineering plugin (deferred, not loaded)
+plugins/magic-browser        retired first-cut agent browser (Playwright + live canvas) — UNMOUNTED 2026-09-13; retro in docs/02-实现/08-自研浏览器插件.md
 plugins/dsh-better-sidebar   vendored community sidebar workbench (MIT; upstream omdsh-dev/DSH-better-sidebar)
 plugins/dsh-univer-office    vendored Univer Office integration (Apache-2.0; upstream dream-num/dsh-univer-office; standalone nested workspace — install/build inside its dir)
 plugins/dsh-any-background   vendored appearance plugin: theme color / wallpaper / opacity (MIT; upstream Tkingxiao/dsh-any-background)
-plugins/dsh-ego-browser      vendored agent browser (MIT; upstream Fisfzy/ego-browser) — UNMOUNTED 2026-09-13, superseded by plugins/magic-browser; re-mount via patches/web.patch.yml
+plugins/dsh-ego-browser      vendored agent browser (MIT; upstream Fisfzy/ego-browser) — UNMOUNTED 2026-09-13, superseded by plugins/dsh-builtin-browser; re-mount via patches/web.patch.yml
+plugins/dsh-builtin-browser  vendored shared real browser (MIT; upstream wqty123/dsh-browser) — PRD-02 §18 baseline: visible window, agent drives over CDP on the same page, human takeover, browser_challenge for CAPTCHAs
 patches/web.patch.yml        DSH web overlay (official agent-team layer + Magic plugins)
 docs/01-产品                 canonical PRDs
 docs/02-实现                 implementation constraints and AgentCore capability map
@@ -62,21 +64,24 @@ From this repository with the local DSH checkout:
 pnpm --dir reference-project/deepseek-harness dsh web --patch "$PWD/patches/web.patch.yml" --no-open
 ```
 
-Or use the launcher, which runs the agent browser (PRD-02 §18) **headless** by default — no OS window, the sidebar watch panel is the only view (pass `--headed` for the visible full-frame-rate window):
+Or use the launcher:
 
 ```sh
-node scripts/start-web.mjs            # headless agent browser
-node scripts/start-web.mjs --headed   # visible window, full frame rate
+node scripts/start-web.mjs            # DSH web with the Magic overlay
+node scripts/start-web.mjs --headed   # legacy magic-browser flag; currently a no-op
 ```
+
+The agent browser (PRD-02 §18) is the vendored shared real browser (`dsh-builtin-browser`): the first `browser_*` tool call in a session self-hosts a visible Electron window that the human shares with the agent — there is no headless/headed launcher switch anymore.
 
 Open `http://127.0.0.1:3080`, pick a workspace, then use the composer-left work-mode control or run `/mode` in a session. `/mode once ceo` applies only to the current input.
 
-Community UI plugins such as Codex-style sidebar replacements can be added with `dsh plugin` and stacked on the same web profile. They are not Magic product plugins. Three of them are vendored under `plugins/` and mounted by `patches/web.patch.yml` (2026-09-13 ruling):
+Community UI plugins such as Codex-style sidebar replacements can be added with `dsh plugin` and stacked on the same web profile. They are not Magic product plugins. Several of them are vendored under `plugins/` and mounted by `patches/web.patch.yml` (2026-09-13 rulings):
 
 - `dsh-better-sidebar` (v0.19.1, MIT) — native right-sidebar tabs (editor / file changes / tasks / side chat / terminal / browser) that coexist with the CEO member-workspace tab; takes over the built-in files page and text preview.
 - `dsh-univer-office` (v0.2.14, Apache-2.0) — Univer spreadsheets / docs / slides with bundled collaboration Gateway and Viewer. Upstream declares DSH `0.1.1-rc.2` / `0.1.2-rc.1` only; vendored copy is retargeted to Magic's `0.1.5-rc.2` (peer range `^0.1.5-rc.1`, devDependencies at `0.1.5-rc.2`, full typecheck green against rc.2 types, 2026-09-13). Telemetry is disabled via the mount row's `config.telemetry: false`. It is a standalone nested workspace: install and build inside `plugins/dsh-univer-office` (`pnpm install && pnpm build`); root workspace tooling skips it.
 - `dsh-any-background` (v0.2.4, MIT) — custom theme color (PS-style color wheel), wallpaper (image/video), per-surface opacity and blur, configured in the settings page.
-- `dsh-ego-browser` (v0.8.3, MIT) — community agent browser that introduced PRD-02 §18. **Unmounted 2026-09-13**: once `magic-browser` (M1) passed live acceptance, the duplicate tool surface made the model pick randomly between two browser tool sets, and ego's auto-activating watch panel crowded out the page the user was reading. Vendored source stays under `plugins/dsh-ego-browser/`; re-mount by restoring its insert row in `patches/web.patch.yml`.
+- `dsh-ego-browser` (v0.8.3, MIT) — community agent browser that introduced PRD-02 §18. **Unmounted 2026-09-13**: the duplicate tool surface made the model pick randomly between two browser tool sets, and ego's auto-activating watch panel crowded out the page the user was reading. Vendored source stays under `plugins/dsh-ego-browser/`; re-mount by restoring its insert row in `patches/web.patch.yml`.
+- `dsh-builtin-browser` (v0.1.21, MIT) — shared real browser, the PRD-02 §18 baseline (2026-09-13 ruling): a visible native browser window the agent drives over CDP on the same page the human sees; the human takes over at any time; `browser_challenge` pauses on CAPTCHAs instead of retrying blindly; per-task session isolation; cookie persistence (`browser_auth`). In the web profile there is no desktop shell, so it self-hosts an Electron window. Version adaptation (no src changes): `electron` pinned `>=40 <44` (44+ no longer ships the binary on install; pnpm 11 skips its postinstall — pull it once with `node node_modules/.pnpm/electron@43*/node_modules/electron/install.js`), dsh peers raised to `^0.1.5-rc.2` (upstream declared `^0.1.1-rc.2`, which npm prerelease rules narrow to the 0.1.1 line). tsc + 26 tests green on the vendored copy; downloads converge to `<dsh-home>/browser-downloads`.
 
 Sync upstream changes from the mirrors under `reference-project/`.
 
