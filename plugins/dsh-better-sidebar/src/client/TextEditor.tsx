@@ -30,7 +30,9 @@ import { isDarkScheme, subscribeColorScheme } from './theme.ts'
 import { SandboxStatusBar } from './SandboxStatusBar.tsx'
 import { appendToDraft } from './conversation-draft.ts'
 import { useSelectionPopup, type FileSelectionPayload } from './selection-popup.ts'
-import { mountFileCommentCards, sidenoteFileNotes, type FileNoteItem } from './file-comment-cards.ts'
+import { mountFileCommentCards, sidenoteFileNotes } from './file-comment-cards.ts'
+import { buildCommentCardDom, buildCommentEditorDom, fileCommentExtensions, hideCommentEditorWidget, setCommentCardWidgets, showCommentEditorWidget } from './file-comment-widgets.ts'
+import { relativeTo } from './paths.ts'
 import { buildSelectionInsert, headerOf, linesOfSelection } from './selection-payload.ts'
 import { analyzeMarkdownHtml } from './markdown-html.ts'
 import { LazyMermaidMarkdown, MarkdownDocument, type MarkdownHtmlMedia } from './MarkdownHtml.tsx'
@@ -108,6 +110,32 @@ export function TextEditor(props: FileViewerProps) {
   // sidenote file-notes bridge (snippet/comment chips instead of a draft
   // dump; legacy fallback when dsh-sidenote is not loaded).
   const [commentEditor, setCommentEditor] = useState<{ left: number; top: number; payload: FileSelectionPayload; sessionId: string } | null>(null)
+  // Magic local patch: re-anchor the CodeMirror comment-card widgets from the
+  // store (single source of truth; called after add/remove/view creation).
+  const syncFileCommentCardWidgets = (): void => {
+    const view = viewRef.current
+    const notes = sidenoteFileNotes()
+    if (view === null || notes === null) return
+    const rel = scope.cwd !== undefined ? relativeTo(scope.cwd, path) : path
+    const items: { pos: number; dom: HTMLElement; id: number }[] = []
+    for (const note of notes.list(scope.sessionId)) {
+      if (note.kind !== 'comment') continue
+      const file = note.header.includes(':') ? note.header.slice(0, note.header.indexOf(':')) : note.header
+      if (file !== rel) continue
+      const lineMatch = /:(\d+)/.exec(note.header)
+      const line = lineMatch !== null ? Number(lineMatch[1]) : 1
+      const pos = view.state.doc.line(Math.min(Math.max(line, 1), view.state.doc.lines)).to
+      items.push({
+        pos,
+        id: note.id,
+        dom: buildCommentCardDom(line, note.note ?? '', () => {
+          notes.remove(scope.sessionId, note.id)
+          syncFileCommentCardWidgets()
+        }),
+      })
+    }
+    setCommentCardWidgets(view, items)
+  }
   // Magic local patch (2026-09-13): in-file comment cards (preview only) —
   // comments render under their anchored block and are deletable in place.
   useEffect(() => {
@@ -121,17 +149,14 @@ export function TextEditor(props: FileViewerProps) {
       getSurface: () => (markdown && mode === 'preview' ? mdRef.current : null),
     })
   }, [markdown, mode, path, content])
-  // Magic local patch (2026-09-13): edit-mode comment list — the preview card
-  // layer idles on CodeMirror surfaces, so comments stay visible/deletable
-  // here (session-wide; each card carries its file:line header).
-  const [fileComments, setFileComments] = useState<FileNoteItem[]>([])
+  // Magic local patch (2026-09-13): store changes re-anchor the CodeMirror
+  // comment-card widgets (add/remove from any surface, incl. the sidenote
+  // chip panel).
   useEffect(() => {
     const notes = sidenoteFileNotes()
     if (notes === null) return
-    const sync = (): void => { setFileComments([...notes.list(scope.sessionId)]) }
-    sync()
-    return notes.subscribe(sync)
-  }, [scope.sessionId])
+    return notes.subscribe(() => { syncFileCommentCardWidgets() })
+  }, [scope.sessionId, path])
   const [commentText, setCommentText] = useState('')
   const saveFileComment = (): void => {
     const editor = commentEditor
@@ -163,6 +188,34 @@ export function TextEditor(props: FileViewerProps) {
       appendToDraft(ctx, scope.sessionId, insert)
     },
     onComment: (payload) => {
+      // Magic local patch (2026-09-13): edit mode opens the comment editor as
+      // an in-flow CodeMirror line widget (Codex-style); preview mode keeps
+      // the viewport-anchored editor.
+      const view = viewRef.current
+      if (mode === 'edit' && view !== null) {
+        setCommentText('')
+        setCommentEditor(null)
+        showCommentEditorWidget(
+          view,
+          payload.lines?.end ?? 1,
+          buildCommentEditorDom(
+            headerOf(payload.path, payload.cwd, payload.lines),
+            (note) => {
+              sidenoteFileNotes()?.add(scope.sessionId, {
+                kind: 'comment',
+                header: headerOf(payload.path, payload.cwd, payload.lines),
+                quote: payload.selected,
+                note,
+              })
+              hideCommentEditorWidget(view)
+              syncFileCommentCardWidgets()
+            },
+            () => { hideCommentEditorWidget(view); syncFileCommentCardWidgets() },
+          ),
+        )
+        selectionPopup.hide()
+        return
+      }
       setCommentText('')
       setCommentEditor({ left: selectionPopup.popup?.left ?? 0, top: selectionPopup.popup?.top ?? 0, payload, sessionId: scope.sessionId })
       selectionPopup.hide()
@@ -217,6 +270,10 @@ export function TextEditor(props: FileViewerProps) {
         CodeMirrorView.contentAttributes.of({ spellcheck: 'false' }),
         cmSurfaceTheme,
         themeComp.of(dark),
+        // Magic local patch (2026-09-13): in-flow comment modules (Codex-style
+        // line widgets — the input editor and saved comment cards live in the
+        // document, not floating above it).
+        ...fileCommentExtensions(),
         ...(language !== null ? [language] : []),
         CodeMirrorView.updateListener.of((update) => {
           if (update.docChanged) {
@@ -283,6 +340,7 @@ export function TextEditor(props: FileViewerProps) {
     })
     const view = new CodeMirrorView({ state, parent: host })
     viewRef.current = view
+    syncFileCommentCardWidgets()
     return () => {
       view.destroy()
       viewRef.current = null
@@ -559,24 +617,6 @@ export function TextEditor(props: FileViewerProps) {
             className={clsx(css.editorCm, (markdown || html) && mode === 'preview' && css.editorCmHidden)}
             ref={hostRef}
           />
-          {mode === 'edit' && fileComments.length > 0 && (
-            <div style={{ padding: '4px 8px 10px' }}>
-              {fileComments.map(note => (
-                <div key={note.id} style={{ border: '1px solid rgba(127,127,127,.4)', borderLeft: '3px solid #2563eb', borderRadius: 8, padding: '6px 8px', margin: '6px 0', fontSize: 12, lineHeight: 1.5 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, opacity: 0.72 }}>
-                    <span>{note.kind === 'comment' ? '评论' : '片段'} · {note.header}</span>
-                    <button
-                      type="button"
-                      style={{ border: 'none', background: 'transparent', color: 'inherit', opacity: 0.6, cursor: 'pointer', fontSize: 12, padding: 0 }}
-                      onClick={() => { sidenoteFileNotes()?.remove(scope.sessionId, note.id) }}
-                    >{t('delete')}</button>
-                  </div>
-                  <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: 3 }}>{note.quote}</div>
-                  {note.note !== undefined && <div style={{ marginTop: 3, whiteSpace: 'pre-wrap' }}>💬 {note.note}</div>}
-                </div>
-              ))}
-            </div>
-          )}
         </>
       )}
       {markdown && mode === 'preview' && (
