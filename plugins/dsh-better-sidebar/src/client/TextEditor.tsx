@@ -187,6 +187,7 @@ export function TextEditor(props: FileViewerProps) {
   /** Magic local patch: open the comment editor for one selection — the
    *  edit-mode line-widget path or the preview in-flow module. */
   const openCommentEditor = (payload: FileSelectionPayload): void => {
+    ;(window as unknown as Record<string, unknown[]>).__magDebug = [...(((window as unknown as Record<string, unknown[]>).__magDebug as unknown[]) ?? []), { at: 'open', mode, hasView: viewRef.current !== null, hasBridge: sidenoteFileNotes() !== null }]
     // Magic local patch (2026-09-13): edit mode opens the comment editor as
     // an in-flow CodeMirror line widget (Codex-style); preview mode keeps
     // the viewport-anchored editor.
@@ -544,6 +545,7 @@ export function TextEditor(props: FileViewerProps) {
       lines: lines ?? undefined,
       selected: text,
     }
+    ;(window as unknown as Record<string, unknown[]>).__magDebug = [...(((window as unknown as Record<string, unknown[]>).__magDebug as unknown[]) ?? []), { at: 'preview-show', hasPayload: payload !== undefined, lines: payload.lines }]
     selectionPopup.show(
       buildSelectionInsert(payload.path, payload.cwd, payload.lines, payload.selected),
       rect.left + rect.width / 2,
@@ -735,7 +737,8 @@ export function TextEditor(props: FileViewerProps) {
               onMouseDown={(event) => { event.preventDefault() }}
               onClick={() => {
                 const popup = selectionPopup.popup
-                if (popup?.payload === undefined) return
+                if (popup?.payload === undefined) { ;(window as unknown as Record<string, unknown[]>).__magDebug = [...(((window as unknown as Record<string, unknown[]>).__magDebug as unknown[]) ?? []), { at: 'btn-no-payload' }]; return }
+                ;(window as unknown as Record<string, unknown[]>).__magDebug = [...(((window as unknown as Record<string, unknown[]>).__magDebug as unknown[]) ?? []), { at: 'btn-click' }]
                 openCommentEditor(popup.payload)
               }}
             >
