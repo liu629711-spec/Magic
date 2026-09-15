@@ -86,9 +86,9 @@ describe('built-in tab registrations', () => {
     expect(service.getTab('git')?.settings).toBeUndefined()
   })
 
-  it('only diff is hidden from the + menu; editor is the visible files window (order 10)', () => {
+  it('only sidechat and diff are hidden from the + menu; editor is the visible files window (order 10)', () => {
     const { service } = setup()
-    expect(service.getTabs().filter(t => t.hidden).map(t => t.id)).toEqual(['diff'])
+    expect(service.getTabs().filter(t => t.hidden).map(t => t.id)).toEqual(['sidechat', 'diff'])
     const editor = service.getTab('editor')
     expect(editor?.hidden).toBe(false)
     expect(editor?.order).toBe(10)
@@ -105,7 +105,7 @@ describe('built-in tab registrations', () => {
     const { service } = setup()
     const sidechat = service.getTab('sidechat')
     expect(sidechat?.order).toBe(35)
-    expect(sidechat?.hidden).not.toBe(true)
+    expect(sidechat?.hidden).toBe(true)
   })
 
   it('side chat mints one tab per thread (Codex-style multi-instance)', () => {

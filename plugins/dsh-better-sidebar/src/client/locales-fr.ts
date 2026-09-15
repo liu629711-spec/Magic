@@ -197,6 +197,7 @@ export const fr: Record<string, string> = {
   gitDetail: 'Voir le détail des modifications',
   referenceFile: '@fichier',
   addToConversation: 'Ajouter à la discussion',
+  fileComment: 'Commentaire',
   copyRelative: 'Copier le chemin relatif',
   copyAbsolute: 'Copier le chemin absolu',
   rename: 'Renommer',

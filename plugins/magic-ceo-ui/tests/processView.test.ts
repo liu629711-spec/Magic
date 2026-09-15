@@ -8,6 +8,8 @@ import {
   searchResultCount,
   toolDisplayName,
   toolIconKind,
+  pathFromToolResult,
+  pathHintFromArgs,
   toolQueryDetail,
   toolQueryFull,
 } from '../src/processView.ts'
@@ -144,4 +146,23 @@ test('failed search peeks a product line instead of the API key error', () => {
     'MISSING_KEY',
   )
   assert.equal(searchFailurePeek('timeout talking to search'), 'timeout talking to search')
+})
+
+test('write rows recover a path from truncated JSON or the DSH result envelope', () => {
+  assert.equal(
+    pathHintFromArgs('{"content":"# long","file_path":"海外端游市场调研.md","extra":'),
+    '海外端游市场调研.md',
+  )
+  assert.equal(
+    pathFromToolResult('<path>C:\\tmp\\海外端游市场调研.md</path>\n<type>file</type>\n<content>\nCreated file\n</content>'),
+    'C:\\tmp\\海外端游市场调研.md',
+  )
+  assert.equal(
+    toolQueryDetail('write', '{"file_path":"notes.md","content":"x"}'),
+    'notes.md',
+  )
+  assert.equal(
+    toolQueryDetail('write', '{"content":"# ' + 'x'.repeat(80), '<path>海外端游市场调研.md</path>'),
+    '海外端游市场调研.md',
+  )
 })

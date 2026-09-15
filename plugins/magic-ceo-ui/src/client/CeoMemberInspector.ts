@@ -7,14 +7,18 @@ import {
   presentCeoMember,
   presentCeoMemberReport,
   reportTextFromProcess,
+  type CeoActivityPhase,
+  type CeoContextChannelView,
   type CeoMemberReport,
   type CeoMemberViewStatus,
   type CeoTeamMember,
+  type CeoTokenUsageView,
 } from '../team.ts'
 import { CeoProcessTimeline } from './CeoProcessTimeline.ts'
 import { MemberFailureCard } from './FailureCard.ts'
 import { failureCardOf, type CeoFailureCard } from '../failure-card.ts'
 import { formatElapsed, useElapsedSeconds } from './elapsed.ts'
+import { producedFileName, producedFilesFromProcess } from '../produced-files.ts'
 import { ink, line, surface, wrap } from './theme.ts'
 
 const TASK_COLLAPSE_H = 144
@@ -33,6 +37,12 @@ export interface CeoMemberInspectorProps {
   t: (key: string, params?: Record<string, unknown>) => string
   /** Per-member intervention: ask the CEO to halt / redirect / resume / retry / replan this node. */
   onIntervene?: (action: 'halt' | 'redirect' | 'resume' | 'retry' | 'replan', note: string) => void
+  /** 退回团队总览。tab 条已经有成员名，正文不再重复画头像和名字。 */
+  onBack?: () => void
+  /** 点关系里的上游/后续成员，切到那个人的详情。 */
+  onSelectMember?: (member: CeoTeamMember) => void
+  /** 打开这个人成功改过的文件（侧栏编辑器）。 */
+  onOpenFile?: (path: string) => void
 }
 
 const REPORT_FIELDS: Array<{ key: keyof CeoMemberReport; label: string }> = [
@@ -96,6 +106,274 @@ function section(label: string, body: ReactNode, tone?: 'danger' | 'warn'): Reac
         whiteSpace: 'pre-wrap',
       },
     }, body),
+  )
+}
+
+const CONTEXT_CHANNEL_LABEL: Record<string, string> = {
+  task: '你的任务',
+  team_brief: '团队共识',
+  steer: '中途指示',
+  request: '原始请求',
+  workspace: '工作区',
+  deliverable: '交付物规格',
+}
+
+function contextChannelLabel(channel: string): string {
+  if (CONTEXT_CHANNEL_LABEL[channel] !== undefined) return CONTEXT_CHANNEL_LABEL[channel]
+  if (channel.startsWith('dependency:')) {
+    const role = channel.slice('dependency:'.length).trim()
+    return role === '' ? '前置结果' : `前置结果 · ${role}`
+  }
+  return channel
+}
+
+function formatChars(chars: number): string {
+  if (chars >= 10000) return `${(chars / 1000).toFixed(1)}k 字`
+  return `${String(chars)} 字`
+}
+
+function activityLabel(
+  activity: { phase: CeoActivityPhase; toolName?: string } | undefined,
+  t: CeoMemberInspectorProps['t'],
+): string | undefined {
+  if (activity === undefined) return undefined
+  if (activity.phase === 'thinking') return t('activity.thinking')
+  if (activity.phase === 'waiting') return t('activity.waiting')
+  if (activity.phase === 'winding_down') return t('activity.winding')
+  if (activity.toolName !== undefined && activity.toolName.trim() !== '') return activity.toolName
+  return t('activity.tool')
+}
+
+function metricRow(label: string, value: string): ReactNode {
+  return h('div', {
+    style: {
+      display: 'flex',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+  },
+    h('span', { style: { flex: 'none', fontSize: 12, color: MUTED } }, label),
+    h('span', {
+      style: {
+        ...wrap,
+        textAlign: 'right',
+        fontSize: 12,
+        fontVariantNumeric: 'tabular-nums',
+        color: PRIMARY,
+      },
+    }, value),
+  )
+}
+
+function RelationRow({
+  member,
+  roster,
+  onSelect,
+}: {
+  member: CeoTeamMember
+  roster: readonly CeoTeamMember[]
+  onSelect?: (member: CeoTeamMember) => void
+}): ReactNode {
+  const title = displayCeoSeat(member, roster)
+  const preview = member.task.trim()
+  const clickable = onSelect !== undefined
+  return h(clickable ? 'button' : 'div', {
+    type: clickable ? 'button' : undefined,
+    onClick: clickable ? () => { onSelect(member) } : undefined,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      width: '100%',
+      padding: 0,
+      border: 0,
+      background: 'transparent',
+      color: PRIMARY,
+      textAlign: 'left',
+      cursor: clickable ? 'pointer' : 'default',
+    },
+  },
+    h('span', {
+      style: {
+        ...wrap,
+        flex: '1 1 0',
+        minWidth: 0,
+        overflow: 'hidden',
+        fontSize: 13,
+        lineHeight: '18px',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      },
+    }, title),
+    preview === ''
+      ? null
+      : h('span', {
+        style: {
+          ...wrap,
+          flex: '1 1 0',
+          minWidth: 0,
+          overflow: 'hidden',
+          fontSize: 12,
+          lineHeight: '18px',
+          color: MUTED,
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        },
+      }, preview),
+  )
+}
+
+function RelationSection({
+  title,
+  members,
+  roster,
+  onSelect,
+}: {
+  title: string
+  members: readonly CeoTeamMember[]
+  roster: readonly CeoTeamMember[]
+  onSelect?: (member: CeoTeamMember) => void
+}): ReactNode {
+  if (members.length === 0) return null
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+    h('div', { style: { fontSize: 12, color: MUTED } }, title),
+    ...members.map(item => h(RelationRow, {
+      key: item.callId,
+      member: item,
+      roster,
+      onSelect,
+    })),
+  )
+}
+
+function ResourceSection({
+  usage,
+  t,
+}: {
+  usage: CeoTokenUsageView
+  t: CeoMemberInspectorProps['t']
+}): ReactNode {
+  const [open, setOpen] = useState(true)
+  const total = usage.totalTokens ?? usage.inputTokens + usage.outputTokens
+  return h('section', {
+    'data-magic-ceo-usage': true,
+    style: { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, marginBottom: 16 },
+  },
+    h('button', {
+      type: 'button',
+      onClick: () => { setOpen(current => !current) },
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        width: '100%',
+        padding: 0,
+        border: 0,
+        background: 'transparent',
+        color: MUTED,
+        cursor: 'pointer',
+        textAlign: 'left',
+      },
+    },
+      h('span', { style: { fontSize: 12, fontWeight: 510 } }, t('tokens.title')),
+      h('span', {
+        style: {
+          marginLeft: 'auto',
+          fontSize: 12,
+          fontVariantNumeric: 'tabular-nums',
+        },
+      }, t('tokens.badge', { tokens: formatTokenCount(total) })),
+    ),
+    open
+      ? h('div', {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          padding: 12,
+          borderRadius: 10,
+          background: surface.layer2,
+        },
+      },
+        metricRow(t('tokens.inputLabel'), formatTokenCount(usage.inputTokens)),
+        metricRow(t('tokens.outputLabel'), formatTokenCount(usage.outputTokens)),
+        usage.reasoningTokens === undefined
+          ? null
+          : metricRow(t('tokens.reasoning'), formatTokenCount(usage.reasoningTokens)),
+        usage.cacheReadTokens === undefined
+          ? null
+          : metricRow(t('tokens.cacheLabel'), formatTokenCount(usage.cacheReadTokens)),
+      )
+      : null,
+  )
+}
+
+function ContextSection({
+  channels,
+  t,
+}: {
+  channels: readonly CeoContextChannelView[]
+  t: CeoMemberInspectorProps['t']
+}): ReactNode {
+  const [open, setOpen] = useState(false)
+  return h('section', {
+    'data-magic-ceo-context': true,
+    style: { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, marginBottom: 16 },
+  },
+    h('button', {
+      type: 'button',
+      onClick: () => { setOpen(current => !current) },
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        width: '100%',
+        padding: 0,
+        border: 0,
+        background: 'transparent',
+        color: MUTED,
+        cursor: 'pointer',
+        textAlign: 'left',
+      },
+    },
+      h('span', { style: { fontSize: 12, fontWeight: 510 } }, t('context.title')),
+      h('span', {
+        style: {
+          marginLeft: 'auto',
+          fontSize: 12,
+          fontVariantNumeric: 'tabular-nums',
+        },
+      }, t('context.segments', { count: channels.length })),
+    ),
+    open
+      ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+        ...channels.map((channel, index) => h('div', {
+          key: `${channel.channel}-${String(index)}`,
+          style: {
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '8px 10px',
+            borderRadius: 10,
+            background: surface.layer2,
+          },
+        },
+          h('span', {
+            style: { ...wrap, fontSize: 13, lineHeight: '18px', color: PRIMARY },
+          }, contextChannelLabel(channel.channel)),
+          h('span', {
+            style: {
+              flex: 'none',
+              fontSize: 12,
+              fontVariantNumeric: 'tabular-nums',
+              color: MUTED,
+            },
+          }, `${formatChars(channel.chars)}${channel.truncated ? t('context.truncated') : ''}`),
+        )),
+      )
+      : null,
   )
 }
 
@@ -432,14 +710,89 @@ function resumeMessageFor(runId: string): string {
   return `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.`
 }
 
-/** 「正在处理 Ns」叶子组件：每秒自转，不牵动整个成员详情重渲染。 */
+/** 「Ns」叶子组件：每秒自转，不牵动整个成员详情重渲染。 */
 function LiveElapsedBadge({ t }: { t: (key: string, params?: Record<string, unknown>) => string }): ReactNode {
   const elapsed = useElapsedSeconds(true)
-  return h('span', { 'data-magic-ceo-elapsed': true, style: { fontVariantNumeric: 'tabular-nums', opacity: 0.75 } },
-    ` · ${t('inspector.processing', { duration: formatElapsed(elapsed) })}`)
+  return h('span', {
+    'data-magic-ceo-elapsed': true,
+    style: { flex: 'none', fontSize: 12, fontVariantNumeric: 'tabular-nums', color: MUTED },
+  }, formatElapsed(elapsed))
 }
 
-export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoMemberInspectorProps) {
+const PRODUCED_SHOWN_LIMIT = 6
+
+function ProducedFilesSection({
+  paths,
+  onOpenFile,
+  t,
+}: {
+  paths: readonly string[]
+  onOpenFile?: (path: string) => void
+  t: CeoMemberInspectorProps['t']
+}): ReactNode {
+  if (paths.length === 0) return null
+  const shown = paths.slice(0, PRODUCED_SHOWN_LIMIT)
+  const hidden = paths.length - shown.length
+  return h('section', {
+    'data-magic-ceo-produced': true,
+    style: { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, marginBottom: 16 },
+  },
+    h('div', {
+      style: { display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 },
+    },
+      sectionTitle(t('produced.label')),
+      h('span', {
+        style: { fontSize: 12, color: MUTED, fontVariantNumeric: 'tabular-nums' },
+      }, t('produced.count', { count: String(paths.length) })),
+    ),
+    h('div', {
+      'data-produced-files-row': true,
+      style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 },
+    },
+      ...shown.map(path => h('button', {
+        key: path,
+        type: 'button',
+        title: path,
+        'aria-label': t('produced.open', { name: path }),
+        disabled: onOpenFile === undefined,
+        onClick: onOpenFile === undefined ? undefined : () => { onOpenFile(path) },
+        style: {
+          boxSizing: 'border-box',
+          display: 'inline-flex',
+          alignItems: 'center',
+          maxWidth: '100%',
+          margin: 0,
+          padding: 0,
+          border: 0,
+          borderRadius: 4,
+          background: 'transparent',
+          color: 'var(--dsw-alias-link, #7aa2ff)',
+          cursor: onOpenFile === undefined ? 'default' : 'pointer',
+          fontSize: 13,
+          fontWeight: 500,
+          lineHeight: '22px',
+          textAlign: 'left',
+        },
+      },
+        h('span', {
+          style: {
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          },
+        }, producedFileName(path)),
+      )),
+      hidden > 0
+        ? h('span', {
+          style: { flex: 'none', fontSize: 12, color: MUTED, whiteSpace: 'nowrap' },
+        }, t(hidden === 1 ? 'produced.moreOne' : 'produced.more', { count: String(hidden) }))
+        : null,
+    ),
+  )
+}
+
+export function CeoMemberInspector({ member, roster = [], onIntervene, onBack, onSelectMember, onOpenFile, t }: CeoMemberInspectorProps) {
   const process = member.process ?? []
   const report = presentCeoMemberReport(member)
   const presentation = presentCeoMember({ ...member, report })
@@ -467,6 +820,33 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
     }))
   const showDebrief = summary !== '' || debriefDetails.length > 0
   const showEmpty = filled.length === 0 && !member.lastMessage && process.length === 0 && !live
+  const livePhase = live ? activityLabel(member.activity, t) : undefined
+  const upstream = roster.filter(item =>
+    member.dependsOn.includes(item.callId)
+    || (item.runId !== undefined && member.dependsOn.includes(item.runId))
+    || (item.rawId !== undefined && member.dependsOn.includes(item.rawId))
+    || (item.memberId !== undefined && member.dependsOn.includes(item.memberId))
+    || member.dependsOn.includes(item.role),
+  )
+  const downstream = roster.filter(item =>
+    item.callId !== member.callId
+    && (
+      item.dependsOn.includes(member.callId)
+      || (member.runId !== undefined && item.dependsOn.includes(member.runId))
+      || (member.rawId !== undefined && item.dependsOn.includes(member.rawId))
+      || (member.memberId !== undefined && item.dependsOn.includes(member.memberId))
+    ),
+  )
+  const unresolvedDepends = member.dependsOn.filter(dep =>
+    upstream.some(item =>
+      item.callId === dep
+      || item.runId === dep
+      || item.rawId === dep
+      || item.memberId === dep
+      || item.role === dep,
+    ) === false,
+  )
+  const showRelations = upstream.length > 0 || downstream.length > 0 || unresolvedDepends.length > 0
 
   return h('aside', {
     'data-magic-ceo-inspector': member.callId,
@@ -481,24 +861,40 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
     },
   },
   h('header', {
-    style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, marginBottom: 16 },
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      minWidth: 0,
+      marginBottom: 12,
+    },
   },
     h('span', {
-      style: {
-        ...wrap,
-        flex: 1,
-        overflow: 'hidden',
-        fontSize: 14,
-        fontWeight: 500,
-        lineHeight: '20px',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        color: PRIMARY,
-      },
-    }, displayCeoSeat(member, roster)),
-    h('span', {
       style: badgeStyle(presentation.viewStatus),
-    }, t(`status.${presentation.viewStatus}`)),
+    }, livePhase ?? t(`status.${presentation.viewStatus}`)),
+    live ? h(LiveElapsedBadge, { t }) : null,
+    member.halted === true
+      ? h('span', { style: badgeStyle('unverified') }, t('halted.badge'))
+      : null,
+    onBack === undefined
+      ? null
+      : h('button', {
+        type: 'button',
+        'aria-label': t('inspector.close'),
+        onClick: onBack,
+        style: {
+          marginLeft: 'auto',
+          width: 28,
+          height: 28,
+          border: 0,
+          borderRadius: 99,
+          background: 'transparent',
+          color: MUTED,
+          cursor: 'pointer',
+          fontSize: 16,
+          lineHeight: '28px',
+        },
+      }, '×'),
   ),
   failureCard !== undefined
     ? h(MemberFailureCard, {
@@ -524,53 +920,21 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
         lineHeight: '20px',
         color: PRIMARY,
       },
-    }, t('inspector.live'), h(LiveElapsedBadge, { t }))
+    }, t('inspector.live'))
     : null,
-  h(CollapsibleTask, { text: member.task, t }),
-  member.dependsOn.length > 0
-    ? section(t('depends.on'), member.dependsOn.join(', '))
-    : null,
-  member.usage !== undefined
+  member.halted === true
     ? h('div', {
-      'data-magic-ceo-usage': true,
       style: {
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 6,
         marginBottom: 16,
-        fontVariantNumeric: 'tabular-nums',
-        fontSize: 12,
-        color: MUTED,
+        padding: '10px 12px',
+        borderRadius: 12,
+        border: `0.5px solid ${WARN}`,
+        background: 'color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 8%, transparent)',
+        fontSize: 13,
+        lineHeight: '20px',
+        color: WARN,
       },
-    },
-      h('span', {
-        style: {
-          padding: '2px 8px',
-          borderRadius: 99,
-          background: surface.layer2,
-        },
-      }, t('tokens.badge', {
-        tokens: formatTokenCount(
-          member.usage.totalTokens ?? member.usage.inputTokens + member.usage.outputTokens,
-        ),
-      })),
-      h('span', null, t('tokens.input', { tokens: formatTokenCount(member.usage.inputTokens) })),
-      h('span', null, t('tokens.output', { tokens: formatTokenCount(member.usage.outputTokens) })),
-      member.usage.cacheReadTokens !== undefined
-        ? h('span', null, t('tokens.cache', { tokens: formatTokenCount(member.usage.cacheReadTokens) }))
-        : null,
-    )
-    : null,
-  member.contextChannels !== undefined && member.contextChannels.length > 0
-    ? section(
-      t('context.title'),
-      member.contextChannels.map(channel =>
-        `${channel.channel}: ${String(channel.chars)}${channel.truncated ? '（已截断）' : ''}`,
-      ).join('\n'),
-    )
-    : null,
-  member.redirectedNote !== undefined
-    ? section(t('intervene.redirected'), member.redirectedNote, 'warn')
+    }, t('halted.hint'))
     : null,
   onIntervene !== undefined && (member.status === 'running' || presentation.viewStatus === 'unknown_after_restart')
     ? h(InterveneControls, {
@@ -579,16 +943,29 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
       t,
     })
     : null,
+  h(CollapsibleTask, { text: member.task, t }),
+  member.contextChannels !== undefined && member.contextChannels.length > 0
+    ? h(ContextSection, { channels: member.contextChannels, t })
+    : null,
+  member.redirectedNote !== undefined
+    ? section(t('intervene.redirected'), member.redirectedNote, 'warn')
+    : null,
   process.length > 0 || live
     ? h('div', { style: { marginBottom: 16 } },
       h(CeoProcessTimeline, {
         steps: process,
         live,
         hideReportContent: true,
+        collapseProcessSteps: false,
         t,
       }),
     )
     : null,
+  h(ProducedFilesSection, {
+    paths: producedFilesFromProcess(process),
+    onOpenFile,
+    t,
+  }),
   presentation.viewStatus === 'unknown_after_restart'
     ? h('div', {
       style: { marginBottom: 16, fontSize: 12, color: MUTED },
@@ -626,6 +1003,33 @@ export function CeoMemberInspector({ member, roster = [], onIntervene, t }: CeoM
     : null,
   member.answeredDecision
     ? section(t('decision.sent'), member.answeredDecision)
+    : null,
+  showRelations
+    ? section(
+      t('relations.title'),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+        h(RelationSection, {
+          title: t('relations.depends'),
+          members: upstream,
+          roster,
+          onSelect: onSelectMember,
+        }),
+        unresolvedDepends.length > 0
+          ? h('div', {
+            style: { ...wrap, fontSize: 12, lineHeight: '18px', color: MUTED },
+          }, unresolvedDepends.join(', '))
+          : null,
+        h(RelationSection, {
+          title: t('relations.downstream'),
+          members: downstream,
+          roster,
+          onSelect: onSelectMember,
+        }),
+      ),
+    )
+    : null,
+  member.usage !== undefined
+    ? h(ResourceSection, { usage: member.usage, t })
     : null,
   )
 }

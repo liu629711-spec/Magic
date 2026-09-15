@@ -170,7 +170,9 @@ describe('pty helpers', () => {
 
   it('uses explicit shell args verbatim and keeps platform defaults when none are configured', () => {
     expect(shellSpawnArgs(['--noprofile', '--no-rc'])).toEqual(['--noprofile', '--no-rc'])
-    expect(shellSpawnArgs([])).toEqual(process.platform === 'win32' ? [] : ['-l'])
+    // Windows adds -NoLogo: the 5.1 startup banner (the yellow "Install the
+    // latest PowerShell" line) is noise in a reused terminal tab.
+    expect(shellSpawnArgs([])).toEqual(process.platform === 'win32' ? ['-NoLogo'] : ['-l'])
   })
 
   it('restores the spawn-helper executable bit idempotently', () => {

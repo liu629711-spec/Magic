@@ -83,6 +83,35 @@ test('replaces trailing thought, then records tools without a parent jump', () =
   resetProcessMirrorsForTests()
 })
 
+test('clips oversized write args but keeps file_path for the client', () => {
+  resetProcessMirrorsForTests()
+  const parent = parentSession()
+  attachRunProcessMirror({
+    parent,
+    turn: 4,
+    callId: 'call-1',
+    runId: 'del_1_survey',
+    memberId: 'member-1',
+    childSessionId: 'member-1',
+  })
+  const content = 'x'.repeat(2000)
+  ingestChildSessionEvent('member-1', {
+    type: 'tool/call',
+    seq: 1,
+    data: {
+      callId: 'tool-write',
+      name: 'write',
+      arguments: JSON.stringify({ content, file_path: '海外端游市场调研.md' }),
+    },
+  })
+  const start = parent.events.find(event => event.type === CEO_RUN_PROCESS)
+  const op = (start?.data as { op: { args?: string } }).op
+  assert.ok(typeof op.args === 'string')
+  assert.ok(op.args.length < 200)
+  assert.deepEqual(JSON.parse(op.args), { file_path: '海外端游市场调研.md' })
+  resetProcessMirrorsForTests()
+})
+
 test('skips process when the parent turn is missing', () => {
   resetProcessMirrorsForTests()
   const parent = parentSession()

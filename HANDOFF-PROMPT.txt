@@ -1,0 +1,156 @@
+你是 Magic 仓库的实现 agent。先读源码和文档，再回答或改代码。用户只问时只核实；没有明确要求不要改文件。不确定的事先问用户，不要替用户做产品决定。
+
+# 仓库与提交
+
+- 仓：https://github.com/liu629711-spec/Magic.git
+- 分支：main
+- 当前远端提交：67a320fd7c7785cad2b8a8f0cb5338022199c716
+  信息：feat: persist CEO ledger, memory, and DSH 0.1.5 baseline
+- 旧桌面实现在 old-design 分支，不是当前实现
+- reference-project/ 不进 git。本机没有 DSH 就不能当完整运行环境
+
+# 必须遵守（AGENTS.md）
+
+1. 任何 Magic / DSH / AgentCore 技术结论必须查真实源码，给出项目名、路径、行号。禁止凭记忆、PRD、README、.ai_context 或项目名推断。
+2. CodeGraph 只用于定位；实现依据是源码。没找到就写「未核实 / 待技术核查」。
+3. 用户方向错了要纠正，不要只服从。
+4. 产品语义只以 docs/01-产品/PRD-01 至 PRD-05 为准。不要新建平行 PRD。产品变更先改对应既有 PRD。
+5. main 是 DSH 插件工作区。Magic 以 Cordis 插件叠在 DSH 上，不复制 DSH 的 session / tool / agent-loop，也不把 DSH 改成独立桌面应用再反向接插件。
+6. CEO 模式 ≠ 建立工程。工程必须用户明确确认。PRD-03 暂缓。
+
+# 先读（按这个顺序）
+
+1. AGENTS.md
+2. docs/02-实现/00-当前基线-DSH-0.1.5.md
+3. docs/README.md
+4. patches/web.patch.yml
+5. docs/02-实现/04-官方agent-team集成方案.md
+6. 再按任务读 PRD-01 / PRD-02 / PRD-04 / PRD-05，以及相关插件源码
+
+# 当前架构（事实，不是愿望）
+
+Magic 产品层挂在官方 DSH web profile 上。overlay 是 patches/web.patch.yml，分两层：
+
+官方 Agent Teams 层（形态 A'，路径挂载）：
+- agent-team → ../reference-project/deepseek-harness/packages/experimental/agent-team/lib/index.js
+- ui-agent-team → ../reference-project/deepseek-harness/packages/experimental/client-ui-agent-team/lib/index.js
+- 不挂 tool-agent-team
+- 不用官方 agent-team-profile / agent-team-web-profile（它们会 insert 工具）
+
+Magic 产品层（已挂）：
+- plugins/magic-work-mode
+- plugins/magic-ledger
+- plugins/magic-memory
+- plugins/magic-ceo
+- plugins/magic-ceo-ui
+
+有意不挂：
+- plugins/magic-engineering（仓里有，不进 patch）
+- 没有 plugins/magic-consult
+
+对齐底座：
+- DSH 路径：reference-project/deepseek-harness
+- 远程：https://github.com/deepseek-ai/deepseek-harness.git
+- 应对齐：origin/master c291e7961a515f6d7af9304e7fd1d257929aef26
+- 包版本：0.1.5-rc.2，tag dsh-v0.1.5-rc.2
+- 不要再用已删除的残副本 reference-project/deepseek-harness-0.1.5
+
+路径挂载原因（已核实）：experimental 虽已 npm 公开，但 CLI 只把它们放在 devDependencies；profileDependencyNames 只扫 dependencies + peerDependencies（DSH/packages/boot/app-boot/src/profile.ts:460-461）。--patch 不产生 bundle 层，按包名挂会在运行期 Cannot find package。--dump-config 不 import 包，查不出这件事。相对路径由 anchorInsertedPluginNames 转成 file://。
+
+# 新设备开机（必须先做完再谈「能跑」）
+
+在 Magic 仓库根目录执行：
+
+git clone https://github.com/liu629711-spec/Magic.git
+cd Magic
+git checkout 67a320fd7c7785cad2b8a8f0cb5338022199c716
+# 或 git pull 后确认 HEAD 就是这颗提交
+
+mkdir -p reference-project
+git clone --filter=blob:none https://github.com/deepseek-ai/deepseek-harness.git reference-project/deepseek-harness
+cd reference-project/deepseek-harness
+git checkout c291e7961a515f6d7af9304e7fd1d257929aef26
+# 如需完整历史：git fetch --unshallow
+
+# Node: ^22.19 || >=24；Magic packageManager 是 pnpm@11.7.0
+pnpm install
+pnpm run build
+# 关键产物（被 gitignore，必须本机构建）：
+#   packages/experimental/agent-team/lib/index.js
+#   packages/experimental/client-ui-agent-team/lib/index.js
+# apps/cli/lib 可以没有。启动走官方脚本：
+#   pnpm dsh  →  node --import tsx/esm apps/cli/src/bin.ts
+
+cd ../..
+pnpm test
+node tools/contract-smoke/check.mjs
+
+启动（patch 路径必须绝对路径；--patch 必须在 web-app 参数前面）：
+
+pnpm --dir reference-project/deepseek-harness dsh web --patch "$PWD/patches/web.patch.yml" --no-open
+
+打开 http://127.0.0.1:3080 ，选工作区，用 composer 左侧工作方式或会话里 /mode、/mode ceo、/mode once ceo。
+
+Windows 注意：DSH 的 apps/cli/node_modules 可能 Filename too long，与跟踪源码是否齐全无关。不要据此判断官方仓缺文件。
+
+本机还要：DSH / 模型凭证（Magic 仓没有 .credentials.yaml，禁止打印其中密钥）。需要 CodeGraph 时分别给 Magic 根和 DSH checkout 建索引；官方仓索引大约 5600+ files。
+
+# 活契约（不要读成已经修好）
+
+1. 成员检查器是当前最大活问题。
+   - magic-ceo-ui 假定 layout.openDetails / closeDetails，并 inject 槽位 details
+   - 证据：plugins/magic-ceo-ui/src/client/register.ts:254、:283、:300-308；CeoTeamGraph.ts 点击约 990/995/1107
+   - 官方 0.1.5 ILayout 只有 selectPanel / beginNavigation / toggleSidebar / openRightbar / closeRightbar
+     DSH/packages/client/ui-layout/src/client/service.ts:28-51
+   - 根槽位 sidebar / main / rightbar / shell.overlay，没有 details
+     DSH/packages/client/ui-layout/src/client/index.ts:151-155
+   - CodeGraph 生产符号 openDetails = 0
+   - 后果：CEO 画布能画，点节点打开成员工作区会打空 API
+   - 上一会话建议：做成画布内面板，不要迁到官方 rightbar。用户还没确认，禁止改交互代码
+
+2. CEO 派活仍走 ctx.subagents.startContinuable（plugins/magic-ceo/src/index.ts:965），不是 ctx.agentTeams.spawnTeammate。
+   - readAgentTeams 只探测 spawnTeammate + sendMessage 是不是函数（约 711-718）
+   - AgentTeamsPort.sendMessage 仍声明 delivery: 'quiet'|'wakeup'，官方已删除
+     官方：DSH/packages/experimental/agent-team/src/types.ts:159-163
+   - 探测仍可能报 available；生产路径没用它
+   - 改道 spawnTeammate 会改产品语义（官方成员创建后 name/description/context 不可变）。未授权不要改
+
+鸭子类型仍然有效的部分：
+- PromptAssembleContext.agent.session.id 对得上 AssembleContext.agent（DSH dispatch 仍注入 agent）
+- Magic 没有 inject ctx.agent 服务；官方 Context.agent 已改成 Context.agents，打不中当前插件
+- ctx.subagents.startContinuable 仍在；官方 spawnAdmitted 自己也调用它
+
+# 明确禁止（直到用户书面确认）
+
+- 不挂 tool-agent-team，不改用官方 agent-team-profile
+  原因：无 parent 的顶层会话默认是 lead（agent-team/src/roster.ts:92-115），工具安装门槛是 tryMembership 有定义就装（tool-agent-team/src/index.ts:397-399）。两者相乘 ⇒ 每个普通会话都看到 Team 工具
+- 不把 CEO 派活迁到 spawnTeammate / 官方 mailbox
+- 不把检查器迁到 rightbar，也不先做画布内面板，除非用户选定
+- 不挂 magic-engineering
+- 不做 Python 波次 CHECKPOINT / SCOPE / lease
+- 子代理不要 ask_user
+- 不要 NoteWall / debate / playbooks
+- 不要在 live loop 被源码证明之前做 PRD-02 §15.3 确认页
+- 不要用 iframe 加载不信任 HTML
+- 不要打印 .credentials.yaml 里的密钥
+- 不要在 Magic 里复制 DSH session/tool/agent-loop
+
+# 上一会话建议、尚未授权的下一步
+
+优先项：把成员检查器改成画布内面板，替换 layout.openDetails 和 details 槽。
+不要做：迁到官方 rightbar；挂官方工具；改道 spawnTeammate。
+
+两件未决（必须用户选，agent 只给建议和源码证据）：
+1. 检查器：画布内面板 vs 官方 rightbar（建议前者）
+2. 派活：继续 subagents vs 改道官方 mailbox（先要映射 replan / 重定向 / 不可变成员）
+
+# 新会话开机后的动作
+
+1. 核对 Magic HEAD = 67a320f，工作区干净。
+2. 核对 DSH HEAD = c291e7961a，且两个 experimental lib/index.js 存在。
+3. 用 CodeGraph + 源码复核 patch 加载列表、ceo_delegate 仍走 subagents、检查器仍依赖 openDetails。
+4. 跑 pnpm test 和 node tools/contract-smoke/check.mjs。
+5. 向用户用中文汇报：环境是否能跑、检查器是否仍坏、有没有新的契约漂移。
+6. 停在这里。没有用户确认，不要改检查器、不要改派活、不要改 PRD。
+
+用户之后如果只问「接下来做什么」，重复上面那条建议，仍不要擅自写代码。

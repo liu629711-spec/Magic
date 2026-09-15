@@ -553,12 +553,12 @@ export class AgentPtyRegistry {
     // Fast path: already exited, or the needle is already in the transcript
     // (a `terminal_send` may have produced the expected output before this
     // call even started).
-    if (handle.exited) {
-      return { kind: 'exited', needle, exitCode: handle.exitCode ?? null, exitSignal: signalNameOf(handle.exitSignal) }
-    }
     const firstHit = locateNeedle(handle.transcript, needle, re)
     if (firstHit !== undefined) {
       return { kind: 'found', needle, line: firstHit.line, column: firstHit.column, match: firstHit.match, elapsedMs: Date.now() - start }
+    }
+    if (handle.exited) {
+      return { kind: 'exited', needle, exitCode: handle.exitCode ?? null, exitSignal: signalNameOf(handle.exitSignal) }
     }
     // Register the active wait so the sidebar can show the wait banner (the
     // snapshot's `waiting` field rides the agent-terminals push). Registered
@@ -578,15 +578,15 @@ export class AgentPtyRegistry {
       // implementation-deviation record).
       while (true) {
         if (signal?.aborted) signal.throwIfAborted()
+        const hit = locateNeedle(handle.transcript, needle, re)
+        if (hit !== undefined) {
+          return { kind: 'found', needle, line: hit.line, column: hit.column, match: hit.match, elapsedMs: Date.now() - start }
+        }
         if (handle.exited) {
           return { kind: 'exited', needle, exitCode: handle.exitCode ?? null, exitSignal: signalNameOf(handle.exitSignal) }
         }
         if (record.skipped) {
           return { kind: 'skipped', needle }
-        }
-        const hit = locateNeedle(handle.transcript, needle, re)
-        if (hit !== undefined) {
-          return { kind: 'found', needle, line: hit.line, column: hit.column, match: hit.match, elapsedMs: Date.now() - start }
         }
         if (Date.now() >= deadline) {
           return { kind: 'timeout', needle, timeoutMs: timeout, totalLines: handle.transcript.split('\n').length }

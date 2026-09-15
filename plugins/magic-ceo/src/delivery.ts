@@ -14,11 +14,31 @@ export function declaredResultStatus(output: string): DeclaredResultStatus | und
   return match?.[1]?.toLowerCase() as DeclaredResultStatus | undefined
 }
 
-const EMPTY_DECISION = /^(none|n\/a|na|null|nil|empty|-|无|没有|暂无|无需|不需要|空|\[\]|\{\}|\[\s*\]|\{\s*\})$/i
+const EMPTY_DECISION = /^(none|n\/a|na|null|nil|empty|-|无|没有|暂无|无需|不需要|空|（空）|\(空\)|（无）|\(无\)|（暂无）|\[\]|\{\}|\[\s*\]|\{\s*\})$/i
+
+// A negation word optionally followed by a parenthetical explanation, then at
+// most a trailing clause — e.g. 「无（未遇到需要用户决策的分叉点）」 or
+// 「没有，各区域数据已可交叉验证」. The explanation states WHY no decision is
+// needed; it is not itself a question. Only a negation followed by real
+// decision content (no leading negation, no enclosing brackets) counts.
+const NEGATION_PREFIX = /^(?:none|n\/a|na|no|nothing|无|没有|暂无|无需|不需要|没有?\s*需要|没什么)\s*[（(]?[^（）()]*[)）]?\s*[，。：:、\s]?/i
 
 function meaningfulDecision(text: string): string | undefined {
-  const value = text.trim().replace(/[。.\s]+$/u, '').trim()
+  let value = text.trim().replace(/[。.\s]+$/u, '').trim()
   if (value === '' || EMPTY_DECISION.test(value)) return undefined
+  // 双重标签（user_decisions: 用户决策：…）在拼接输出里出现过，先剥掉。
+  for (;;) {
+    const stripped = value.replace(/^\s*(?:user_decisions|用户决策|待用户决策)\s*[:：]\s*/i, '')
+    if (stripped === value) break
+    value = stripped.trim()
+  }
+  // 「无（解释）」：剥掉否定词和括注后没有剩余内容 → 不是决策。
+  const negationStripped = value.replace(NEGATION_PREFIX, '').trim()
+  if (negationStripped === '') return undefined
+  // 剩余部分若整体被括号包裹（如「无（未遇到…分叉点）」剥词后余
+  // 「未遇到…分叉点」之外还有正文），仅当剩余文本仍以否定/无需开头或为空时
+  // 才视为无决策；真实问题（「选 A 还是 B」）会通过。
+  if (/^(?:无|没有|暂无|无需|不需要|none|no)\b/i.test(negationStripped)) return undefined
   return text.trim()
 }
 
@@ -38,13 +58,17 @@ export function hasResearchEvidenceGap(spec: Pick<RunSpec, 'role' | 'task'>, out
   if (!/research|survey|market|compare|competitive|调研|研究|市场|比较|竞品|多来源|多视角/i.test(`${spec.role} ${spec.task}`)) {
     return false
   }
-  return /无法联网|无法核验|联网失败|网络不可用|HTTP\s*405|出站网络|仅.*估计|未经核验|待联网|no internet|unable to verify|unverified/i.test(output)
+  return /无法联网|无法核验|联网失败|网络不可[用达]|(?:web_)?search[^\n。]{0,12}不可[用达]|HTTP\s*405|出站网络|仅.*估计|未经核验|待联网|no internet|unable to verify|unverified/i.test(output)
 }
 
 /**
- * Map a worker stop + output onto a run phase and an honest delivery status.
+ * Map a worker stop + output onto an honest delivery status.
  * A completed stop without a structured result is unverified, not completed.
  * Declared completed/partial with a non-completed stop is unverified, not success.
+ *
+ * 研究证据缺口（无法联网/无法核验等）只在成员结构化交付（partial/completed）且
+ * user_decisions 判定无真实问题时降级为 partial——缺口是成员已知并自行消化的
+ * 局限，不挂起打扰用户。成员自称 blocked、无结构化结果、或真需要拍板时仍阻塞。
  */
 export function classifyWorkerDelivery(
   spec: Pick<RunSpec, 'role' | 'task'>,
@@ -56,7 +80,8 @@ export function classifyWorkerDelivery(
   if (decisions !== undefined) {
     return { phase: 'blocked', status: 'blocked', error: decisions }
   }
-  if (declared === 'blocked' || hasResearchEvidenceGap(spec, output)) {
+  const evidenceGap = hasResearchEvidenceGap(spec, output)
+  if (declared === 'blocked' || (evidenceGap && declared === undefined)) {
     return { phase: 'failed', status: 'blocked', error: 'worker result blocked by evidence gap' }
   }
   if (declared === 'failed') {
@@ -68,6 +93,10 @@ export function classifyWorkerDelivery(
       status: 'unverified',
       error: `worker did not complete: ${stopReason}`,
     }
+  }
+  if (evidenceGap && (declared === 'partial' || declared === 'completed')) {
+    // 成员带着已知数据局限交付且无需用户拍板 → partial，流程继续不挂起。
+    return { phase: 'completed', status: 'partial', error: 'worker delivered with a known evidence gap' }
   }
   if (declared === 'partial') return { phase: 'completed', status: 'partial' }
   if (declared === 'completed') return { phase: 'completed', status: 'completed' }

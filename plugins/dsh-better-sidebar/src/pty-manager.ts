@@ -481,14 +481,17 @@ export function shellDisplayName(shell: string): string {
 /**
  * Spawn arguments that make the shell behave like a terminal-emulator tab:
  * POSIX shells start as login shells (`-l`) so they read the profile files
- * (`~/.profile`, `~/.zprofile`); Windows PowerShell takes no login flag.
+ * (`~/.profile`, `~/.zprofile`); Windows PowerShell starts with `-NoLogo` —
+ * the 5.1 banner (its "Install the latest PowerShell" line draws yellow in
+ * the classic console) is noise in a reused tab, and PowerShell 7 prints
+ * nothing extra either way.
  *
  * When explicit `configured` args are supplied they REPLACE the platform
  * defaults entirely, giving deployments full control over shell startup.
  */
 export function shellSpawnArgs(configured: string[] = []): string[] {
   if (configured.length > 0) return [...configured]
-  return process.platform === 'win32' ? [] : ['-l']
+  return process.platform === 'win32' ? ['-NoLogo'] : ['-l']
 }
 
 /**

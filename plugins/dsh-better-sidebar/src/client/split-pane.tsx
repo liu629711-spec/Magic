@@ -115,35 +115,6 @@ function zoneAt(event: React.DragEvent, pane: HTMLElement): DropZone {
   return 'center'
 }
 
-/** The icon of one openable type card (mirror of the + menu options). */
-/**
- * An empty pane's welcome cards: the openable types as cards, clicked to
- * open (instead of a bare "this pane is empty" message).
- */
-function PaneEmptyCards(props: {
-  newTabOptions: NewTabOption[]
-  onNewTab: (optionId: string) => void
-}) {
-  const { newTabOptions, onNewTab } = props
-  return (
-    <div className={css.paneEmptyCards}>
-      {newTabOptions.map(option => (
-        <button
-          key={option.id}
-          type="button"
-          className={css.paneCard}
-          disabled={option.disabled === true}
-          title={option.label}
-          onClick={() => { onNewTab(option.id) }}
-        >
-          {option.icon ?? null}
-          <span>{option.label}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
 /** A leaf: tab strip + active content + VSCode-style drop target for tabs. */
 function LeafView(props: {
   leaf: { id: string; tabs: SidebarTab[]; active: string | null }
@@ -235,7 +206,10 @@ function LeafView(props: {
           ))}
         </div>
       ) : (
-        <PaneEmptyCards newTabOptions={newTabOptions} onNewTab={onNewTab} />
+        /* Magic local patch (2026-09-14): the empty-pane card grid is gone —
+           the bottom workbench is terminal-only (the + menu opens one), so a
+           bare empty pane carries no openable-type cards. */
+        <div className={css.paneEmpty} />
       )}
     </div>
   )

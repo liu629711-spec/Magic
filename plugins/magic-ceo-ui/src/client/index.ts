@@ -2,6 +2,7 @@ import { CeoDecisionDock } from './CeoDecisionDrawer.ts'
 import { CeoDelegateRow } from './CeoDelegateRow.ts'
 import { CeoTeamGraph } from './CeoTeamGraph.ts'
 import { CeoWorkspace } from './CeoWorkspace.ts'
+import { MemberTabTitle } from './MemberTabTitle.ts'
 import { TurnProcessSummary } from './TurnProcessSummary.ts'
 import { inject, registerCeoUi } from './register.ts'
 
@@ -14,5 +15,6 @@ export function apply(ctx: Parameters<typeof registerCeoUi>[0]) {
     workspace: CeoWorkspace,
     drawer: CeoDecisionDock,
     turnProcess: TurnProcessSummary,
+    tabTitle: MemberTabTitle,
   })
 }

@@ -31,6 +31,30 @@ export function parseToolArgs(raw: string | undefined): Record<string, unknown> 
   }
 }
 
+/** Path from tool JSON, including a truncated write payload that still quotes file_path/path. */
+export function pathHintFromArgs(raw: string | undefined): string | undefined {
+  const parsed = parseToolArgs(raw)
+  const parsedPath = firstString(parsed.file_path) ?? firstString(parsed.path)
+  if (parsedPath !== undefined) return parsedPath
+  if (raw === undefined) return undefined
+  const match = /"(?:file_path|path)"\s*:\s*"((?:\\.|[^"\\])*)"/.exec(raw)
+  if (match?.[1] === undefined) return undefined
+  try {
+    const decoded: unknown = JSON.parse(`"${match[1]}"`)
+    return typeof decoded === 'string' && decoded.trim() !== '' ? decoded.trim() : undefined
+  } catch {
+    return match[1].trim() === '' ? undefined : match[1]
+  }
+}
+
+/** DSH write envelope: `<path>displayPath</path>` (`tool-fs` formatWriteOutput). */
+export function pathFromToolResult(result: string | undefined): string | undefined {
+  if (result === undefined) return undefined
+  const match = /<path>([^<]+)<\/path>/.exec(result)
+  const path = match?.[1]?.trim()
+  return path === undefined || path === '' ? undefined : path
+}
+
 export type ToolIconKind =
   | 'search'
   | 'globe'
@@ -98,16 +122,19 @@ export function clipTitle(text: string, limit = QUERY_LIMIT): string {
   return `${line.slice(0, limit)}…`
 }
 
-export function toolQueryDetail(name: string, args: string | undefined): string {
+export function toolQueryDetail(name: string, args: string | undefined, result?: string): string {
   const parsed = parseToolArgs(args)
   if (name === 'web_search') return clipTitle(firstQuery(parsed))
   if (name === 'web_fetch') return clipTitle(firstString(parsed.url) ?? '')
   return clipTitle(
     firstString(parsed.query)
+    ?? firstString(parsed.file_path)
     ?? firstString(parsed.path)
     ?? firstString(parsed.url)
     ?? firstString(parsed.pattern)
     ?? firstString(parsed.command)
+    ?? pathHintFromArgs(args)
+    ?? pathFromToolResult(result)
     ?? '',
   )
 }

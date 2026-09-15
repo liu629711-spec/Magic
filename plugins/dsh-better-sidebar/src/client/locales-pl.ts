@@ -206,6 +206,7 @@ export const pl: Record<string, string> = {
   gitDetail: 'Zobacz szczegóły zmian',
   referenceFile: '@plik',
   addToConversation: 'Dodaj do rozmowy',
+  fileComment: 'Komentarz',
   copyRelative: 'Kopiuj ścieżkę względną',
   copyAbsolute: 'Kopiuj ścieżkę bezwzględną',
   rename: 'Zmień nazwę',

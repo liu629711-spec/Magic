@@ -70,11 +70,18 @@ test('timelineDefaultExpanded：运行中永远展开；完成态超过阈值默
 
 // CeoProcessTimeline 依赖 react（测试环境解析不到），静态契约钉住接线：
 // 摘要行必须真的消费 summarizeProcessSteps，且折叠判定走 timelineDefaultExpanded。
+// 右坞成员详情对齐 AgentCore RunDetailBody：collapseProcessSteps=false，过程不折成摘要。
 test('时间线组件必须接过程摘要与折叠判定', async () => {
   const timeline = await readFile(new URL('../src/client/CeoProcessTimeline.ts', import.meta.url), 'utf8')
   assert.match(timeline, /summarizeProcessSteps\(steps\)/)
   assert.match(timeline, /timelineDefaultExpanded\(summary\)/)
   assert.match(timeline, /data-magic-ceo-process-summary/)
+  assert.match(timeline, /collapseProcessSteps/)
   const inspector = await readFile(new URL('../src/client/CeoMemberInspector.ts', import.meta.url), 'utf8')
   assert.match(inspector, /useElapsedSeconds\(true\)/)
+  assert.match(inspector, /collapseProcessSteps: false/)
+  assert.match(inspector, /data-magic-ceo-context/)
+  assert.match(inspector, /tokens.title/)
+  assert.match(inspector, /relations.title/)
+  assert.match(inspector, /data-magic-ceo-produced/)
 })

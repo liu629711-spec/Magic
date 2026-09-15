@@ -204,6 +204,7 @@ export const hi: Record<string, string> = {
   gitDetail: 'बदलाव विवरण देखें',
   referenceFile: '@फ़ाइल',
   addToConversation: 'वार्तालाप में जोड़ें',
+  fileComment: 'टिप्पणी',
   copyRelative: 'सापेक्ष पथ कॉपी',
   copyAbsolute: 'निरपेक्ष पथ कॉपी',
   rename: 'नाम बदलें',

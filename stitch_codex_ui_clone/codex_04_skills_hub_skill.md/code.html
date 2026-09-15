@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-container-high": "#292a2d", "inverse-on-surface": "#2f3034", "on-secondary-container": "#b0b2ff", "primary-fixed": "#d8e2ff", "background": "#121316", "on-tertiary": "#003824", "surface-variant": "#343538", "surface-container-highest": "#343538", "primary-container": "#4d8eff", "on-primary-container": "#00285d", "on-primary-fixed-variant": "#004395", "tertiary": "#4edea3", "surface-container-low": "#1b1b1f", "on-secondary-fixed-variant": "#2f2ebe", "on-background": "#e3e2e6", "surface-container-lowest": "#0d0e11", "secondary-fixed": "#e1e0ff", "surface-bright": "#38393c", "error": "#ffb4ab", "on-primary": "#002e6a", "primary-fixed-dim": "#adc6ff", "on-tertiary-container": "#00311f", "outline-variant": "#424754", "secondary-fixed-dim": "#c0c1ff", "on-surface-variant": "#c2c6d6", "tertiary-fixed-dim": "#4edea3", "on-secondary-fixed": "#07006c", "surface-tint": "#adc6ff", "on-tertiary-fixed": "#002113", "on-primary-fixed": "#001a42", "on-error-container": "#ffdad6", "primary": "#adc6ff", "on-tertiary-fixed-variant": "#005236", "surface-dim": "#121316", "outline": "#8c909f", "secondary-container": "#3131c0", "on-surface": "#e3e2e6", "surface-container": "#1f1f23", "on-secondary": "#1000a9", "inverse-primary": "#005ac2", "tertiary-container": "#00a572", "inverse-surface": "#e3e2e6", "on-error": "#690005", "surface": "#121316", "error-container": "#93000a", "tertiary-fixed": "#6ffbbe", "secondary": "#c0c1ff" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "margin": "0.75rem", "space-lg": "1rem", "space-sm": "0.5rem", "space-xs": "0.25rem", "space-md": "0.75rem", "space-xl": "1.5rem", "gutter": "0.5rem" }, "fontFamily": { "headline-md": [ "Inter" ], "headline-xl": [ "Inter" ], "body-lg": [ "JetBrains Mono" ], "headline-lg": [ "Inter" ], "body-sm": [ "JetBrains Mono" ], "body-md": [ "JetBrains Mono" ], "code-inline": [ "JetBrains Mono" ], "label-sm": [ "Inter" ], "label-md": [ "Inter" ] }, "fontSize": { "headline-md": [ "1rem", { "lineHeight": "1.375rem", "letterSpacing": "-0.01em", "fontWeight": "500" } ], "headline-xl": [ "1.5rem", { "lineHeight": "1.875rem", "letterSpacing": "-0.02em", "fontWeight": "600" } ], "headline-lg": [ "1.25rem", { "lineHeight": "1.625rem", "letterSpacing": "-0.015em", "fontWeight": "600" } ], "body-lg": [ "0.875rem", { "lineHeight": "1.375rem", "letterSpacing": "-0.01em", "fontWeight": "400" } ], "body-sm": [ "0.75rem", { "lineHeight": "1.125rem", "letterSpacing": "0em", "fontWeight": "400" } ], "body-md": [ "0.8125rem", { "lineHeight": "1.25rem", "letterSpacing": "-0.01em", "fontWeight": "400" } ], "code-inline": [ "0.8125rem", { "lineHeight": "1.25rem", "letterSpacing": "-0.01em", "fontWeight": "500" } ], "label-sm": [ "0.6875rem", { "lineHeight": "0.875rem", "letterSpacing": "0.02em", "fontWeight": "500" } ], "label-md": [ "0.75rem", { "lineHeight": "1rem", "letterSpacing": "0.01em", "fontWeight": "500" } ] } } } };</script></head><body class="bg-surface text-on-surface font-headline-md text-headline-md antialiased min-h-screen selection:bg-primary-container selection:text-on-primary-container"><aside class="fixed left-0 top-0 h-full w-[260px] bg-surface-container-lowest z-50 flex flex-col justify-between select-none"><div class="flex flex-col h-full overflow-hidden"><div class="h-12 px-space-md flex items-center justify-between bg-surface-container-lowest"><div class="flex items-center gap-space-sm"><div class="w-6 h-6 rounded bg-primary-container flex items-center justify-center text-on-primary-container shadow-[0_0_12px_rgba(77,142,255,0.4)]"><span class="material-symbols-outlined text-[16px]">auto_awesome</span></div><div class="flex items-baseline gap-space-xs"><span class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Magic Agent</span><span class="font-body-sm text-body-sm text-outline">v1.4.2</span></div></div><span class="material-symbols-outlined text-outline hover:text-on-surface cursor-pointer text-[18px]">dock_to_right</span></div><div class="px-space-md pt-space-xs pb-space-sm"><button class="w-full h-8 px-space-md bg-primary-container hover:bg-primary text-on-primary-container rounded flex items-center justify-between shadow-[0_0_14px_rgba(77,142,255,0.25)] transition-all"><span class="flex items-center gap-space-sm font-label-md text-label-md font-medium"><span class="material-symbols-outlined text-[16px]">add</span>New Task</span><kbd class="px-space-xs py-0.5 bg-surface-container-lowest/50 text-on-surface rounded font-body-sm text-body-sm text-[10px] uppercase">⌘K</kbd></button></div><div class="flex-1 overflow-y-auto px-space-sm space-y-space-md"><div class="space-y-0.5"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold">Orchestration</div><nav class="space-y-0.5" data-active-classes="bg-surface-container text-on-surface font-medium"><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="projects" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md"><span class="material-symbols-outlined text-outline text-[16px]">folder_open</span>Projects</span><span class="px-1.5 py-0.2 bg-surface-container-high rounded font-body-sm text-body-sm text-outline">12</span></a><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="threads" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md"><span class="material-symbols-outlined text-outline text-[16px]">smart_toy</span>Threads / Agents</span><span class="flex items-center gap-1 px-1.5 py-0.2 bg-tertiary-container/30 text-tertiary rounded font-body-sm text-body-sm"><span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>3 active</span></a><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="worktrees" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md"><span class="material-symbols-outlined text-outline text-[16px]">account_tree</span>Worktrees</span><span class="font-body-sm text-body-sm text-outline">5</span></a><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="automations" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md"><span class="material-symbols-outlined text-outline text-[16px]">alt_route</span>Automations</span></a><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="skills" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md"><span class="material-symbols-outlined text-outline text-[16px]">extension</span>Skills</span><span class="px-1.5 py-0.2 bg-surface-container-high rounded font-body-sm text-body-sm text-outline">28</span></a><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="history" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md"><span class="material-symbols-outlined text-outline text-[16px]">history</span>History &amp; Audits</span></a></nav></div><div class="space-y-1"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold flex items-center justify-between"><span>Pinned Workflows</span><span class="material-symbols-outlined text-outline hover:text-on-surface text-[14px] cursor-pointer">add</span></div><nav class="space-y-0.5" data-active-classes="bg-surface-container text-on-surface font-medium"><a class="flex items-center gap-space-sm px-space-sm py-1 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors truncate" data-path="task-redesign-modern-ui" href="#"><span class="w-1.5 h-1.5 rounded-full bg-outline"></span><span class="font-label-md text-label-md truncate">Redesign app modern UI</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-1 rounded transition-colors truncate bg-surface-container text-on-surface font-medium" data-path="task-redis-migration" href="#"><span class="w-1.5 h-1.5 rounded-full bg-tertiary shadow-[0_0_6px_rgba(78,222,163,0.8)]"></span><span class="font-label-md text-label-md truncate">Redis session cache migration</span></a><a class="flex items-center gap-space-sm px-space-sm py-1 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors truncate" data-path="task-fix-playwright-flakiness" href="#"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span><span class="font-label-md text-label-md truncate">Fix Playwright flakiness</span></a></nav></div><div class="space-y-1"><div class="px-space-sm py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold flex items-center justify-between"><span>Repositories</span><span class="material-symbols-outlined text-outline hover:text-on-surface text-[14px] cursor-pointer">sync</span></div><nav class="space-y-0.5" data-active-classes="bg-surface-container text-on-surface font-medium"><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="repo-burger-restaurant" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md truncate"><span class="material-symbols-outlined text-[15px] text-tertiary">code</span>burger-restaurant</span><span class="flex items-center gap-1 font-body-sm text-body-sm text-outline"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>2</span></a><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="repo-core-auth-service" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md truncate"><span class="material-symbols-outlined text-[15px] text-secondary">lock</span>core-auth-service</span><span class="px-1 py-0.2 bg-secondary-container/40 text-secondary rounded font-body-sm text-body-sm text-[10px]">review</span></a><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="repo-ai-orchestrator-engine" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md truncate"><span class="material-symbols-outlined text-[15px] text-primary">memory</span>ai-orchestrator</span><span class="flex items-center gap-1 font-body-sm text-body-sm text-primary"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>ci</span></a><a class="flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" data-path="repo-web-dashboard-v2" href="#"><span class="flex items-center gap-space-sm font-label-md text-label-md truncate"><span class="material-symbols-outlined text-[15px] text-outline">space_dashboard</span>web-dashboard-v2</span><span class="font-body-sm text-body-sm text-outline">idle</span></a></nav></div></div><div class="p-space-sm bg-surface-container-lowest space-y-space-xs"><div class="flex items-center justify-between px-space-xs py-1 rounded hover:bg-surface-container-low cursor-pointer"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-outline text-[16px]">tune</span><span class="font-label-sm text-label-sm text-on-surface-variant">Default · Safe Mode</span></div><span class="material-symbols-outlined text-outline text-[14px]">expand_more</span></div><div class="flex items-center justify-between px-space-xs py-1 rounded hover:bg-surface-container-low cursor-pointer"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-tertiary text-[16px]">terminal</span><span class="font-label-sm text-label-sm text-on-surface-variant">Docker Isolated</span></div><span class="px-1 bg-surface-container rounded font-body-sm text-body-sm text-outline text-[9px]">LIVE</span></div><div class="pt-space-xs flex items-center justify-between"><div class="flex items-center gap-space-xs cursor-pointer"><div class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(78,222,163,0.8)]"></div><span class="font-body-sm text-body-sm text-on-surface font-medium">GPT-5.4 Extra High</span></div><span class="material-symbols-outlined text-outline hover:text-on-surface cursor-pointer text-[16px]">settings</span></div></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-12 bg-surface-container-lowest/90 backdrop-blur-xl z-40 flex items-center justify-between px-space-md select-none"><div class="flex items-center gap-space-md"><div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-full bg-[#ff5f56] opacity-80 hover:opacity-100 cursor-pointer"></div><div class="w-3 h-3 rounded-full bg-[#ffbd2e] opacity-80 hover:opacity-100 cursor-pointer"></div><div class="w-3 h-3 rounded-full bg-[#27c93f] opacity-80 hover:opacity-100 cursor-pointer"></div></div><div class="flex items-center gap-space-xs font-body-sm text-body-sm text-on-surface-variant"><span class="text-on-surface font-medium hover:underline cursor-pointer">burger-restaurant</span><span class="text-outline">/</span><span class="hover:underline cursor-pointer text-on-surface">task-491: Migrate auth session engine to Redis cluster</span><span class="px-1.5 py-0.2 bg-surface-container-high rounded text-outline font-body-sm text-body-sm text-[10px]">main</span></div></div><div class="flex items-center gap-space-sm"><div class="flex items-center gap-1.5 px-2 py-1 rounded bg-tertiary-container/20 text-tertiary shadow-[0_0_12px_rgba(78,222,163,0.25)]"><span class="w-2 h-2 rounded-full bg-tertiary animate-ping"></span><span class="font-label-sm text-label-sm font-semibold tracking-wide uppercase">Autonomous Active</span></div><div class="hidden xl:flex items-center gap-1.5 px-2 py-1 rounded bg-surface-container-high font-body-sm text-body-sm text-outline"><span class="material-symbols-outlined text-[14px]">dns</span><span>Docker Sandbox: node20</span></div><div class="flex items-center gap-1 font-body-sm text-body-sm px-2 py-0.5 rounded bg-surface-container"><span class="text-tertiary">+1,482</span><span class="text-outline">/</span><span class="text-error">-126</span></div><div class="flex items-center gap-space-xs"><button class="h-7 px-2.5 rounded bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors"><span class="material-symbols-outlined text-[15px]">open_in_new</span><span class="hidden lg:inline">VS Code</span></button><button class="h-7 px-2.5 rounded bg-primary-container hover:bg-primary text-on-primary-container font-label-md text-label-md font-medium flex items-center gap-1 shadow-[0_0_10px_rgba(77,142,255,0.3)] transition-all"><span class="material-symbols-outlined text-[15px]">commit</span><span>Commit</span></button></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="relative pt-12 w-full min-h-screen bg-surface"><div class="flex flex-col w-full">
+<div class="p-space-lg max-w-[1540px] mx-auto w-full space-y-space-xl">
+<!-- Top Management Sub-Header Bar -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="space-y-1">
+<div class="flex items-center gap-space-sm">
+<h1 class="font-headline-xl text-headline-xl text-on-surface font-semibold tracking-tight">Skills</h1>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-body-sm text-body-sm">28 Active</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-container/30 text-tertiary font-body-sm text-body-sm flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
+            MCP v2.1
+          </span>
+</div>
+<p class="font-body-md text-body-md text-outline">
+          Give Codex autonomous superpowers. Augment runtime tool calling, file transforms, and isolated environments.
+          <a class="text-primary hover:underline ml-1 font-medium inline-flex items-center gap-0.5" href="#learn-more">
+            Learn more
+            <span class="material-symbols-outlined text-[13px]">arrow_outward</span>
+</a>
+</p>
+</div>
+<!-- Actions & Search -->
+<div class="flex items-center gap-space-sm">
+<div class="relative min-w-[260px] lg:min-w-[320px]">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[16px]">search</span>
+<input class="w-full h-8 pl-9 pr-8 bg-surface-container-low text-on-surface font-body-sm text-body-sm placeholder:text-outline rounded focus:outline-none focus:bg-surface-container-high transition-colors" id="skill-search" placeholder="Search installed &amp; recommended skills..." type="text"/>
+<kbd class="absolute right-2.5 top-1/2 -translate-y-1/2 px-1 py-0.5 bg-surface-container-highest text-outline text-[10px] font-body-sm rounded">⌘F</kbd>
+</div>
+<button class="h-8 px-space-md rounded bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors shadow-sm" id="btn-inspect-spec" title="Open Skill Specification Inspector">
+<span class="material-symbols-outlined text-[16px] text-tertiary">code</span>
+<span>Spec Anatomy</span>
+</button>
+<button class="h-8 px-space-md bg-primary-container hover:bg-primary text-on-primary-container rounded flex items-center gap-1.5 font-label-md text-label-md font-medium shadow-[0_0_14px_rgba(77,142,255,0.3)] transition-all">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>New Skill</span>
+</button>
+</div>
+</div>
+<!-- Main Dynamic Split Grid: Skills List / Inspector View -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+<!-- Left / Primary Column: Installed & Recommended Catalog (7 cols) -->
+<div class="lg:col-span-7 space-y-space-xl min-w-0">
+<!-- Section: Installed Skills -->
+<section class="space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold">Installed Superpowers</span>
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">4 loaded in sandbox</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
+<!-- Card 1: Skill Creator (Focus card) -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all cursor-pointer shadow-sm group relative overflow-hidden" onclick="selectSkill('skill-creator')">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container"></div>
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-primary-container/20 text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]">edit_note</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5">
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold truncate">Skill Creator</h2>
+<span class="px-1 py-0.2 rounded bg-tertiary-container/30 text-tertiary text-[10px] font-body-sm">CORE</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline truncate mt-0.5">Create, scaffold, or update autonomous skills</p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface text-[16px] transition-colors">edit_square</span>
+<div class="w-7 h-4 rounded-full bg-primary-container p-0.5 flex items-center justify-end shadow-[0_0_8px_rgba(77,142,255,0.4)] cursor-pointer">
+<div class="w-3 h-3 rounded-full bg-on-primary-container"></div>
+</div>
+</div>
+</div>
+<div class="mt-space-sm pt-space-xs flex items-center justify-between text-outline font-body-sm text-[11px]">
+<span class="flex items-center gap-1"><span class="text-tertiary">SKILL.md</span> validated</span>
+<span class="font-label-sm text-label-sm text-primary group-hover:underline flex items-center">Inspect Spec <span class="material-symbols-outlined text-[12px]">chevron_right</span></span>
+</div>
+</div>
+<!-- Card 2: Imagegen -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all cursor-pointer shadow-sm group">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-tertiary-container/20 text-tertiary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]">palette</span>
+</div>
+<div class="min-w-0">
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold truncate">Imagegen</h2>
+<p class="font-body-sm text-body-sm text-outline truncate mt-0.5">Generate and edit assets using diffusion models</p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface text-[16px] transition-colors">edit_square</span>
+<div class="w-7 h-4 rounded-full bg-primary-container p-0.5 flex items-center justify-end cursor-pointer">
+<div class="w-3 h-3 rounded-full bg-on-primary-container"></div>
+</div>
+</div>
+</div>
+<div class="mt-space-sm pt-space-xs flex items-center justify-between text-outline font-body-sm text-[11px]">
+<span>2 scripts · assets/ ready</span>
+<span class="text-tertiary font-medium">Synced</span>
+</div>
+</div>
+<!-- Card 3: PDF Suite -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all cursor-pointer shadow-sm group">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-error-container/30 text-error flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+</div>
+<div class="min-w-0">
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold truncate">PDF Parser &amp; Engine</h2>
+<p class="font-body-sm text-body-sm text-outline truncate mt-0.5">Extract tables, render, edit, and review PDFs</p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface text-[16px] transition-colors">edit_square</span>
+<div class="w-7 h-4 rounded-full bg-primary-container p-0.5 flex items-center justify-end cursor-pointer">
+<div class="w-3 h-3 rounded-full bg-on-primary-container"></div>
+</div>
+</div>
+</div>
+<div class="mt-space-sm pt-space-xs flex items-center justify-between text-outline font-body-sm text-[11px]">
+<span>pdftotext v4.0.5</span>
+<span class="text-tertiary">Ready</span>
+</div>
+</div>
+<!-- Card 4: Playwright CLI -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all cursor-pointer shadow-sm group">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-secondary-container/40 text-secondary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]">terminal</span>
+</div>
+<div class="min-w-0">
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold truncate">Playwright CLI</h2>
+<p class="font-body-sm text-body-sm text-outline truncate mt-0.5">Automate real headless browsers &amp; testing</p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface text-[16px] transition-colors">edit_square</span>
+<div class="w-7 h-4 rounded-full bg-primary-container p-0.5 flex items-center justify-end cursor-pointer">
+<div class="w-3 h-3 rounded-full bg-on-primary-container"></div>
+</div>
+</div>
+</div>
+<div class="mt-space-sm pt-space-xs flex items-center justify-between text-outline font-body-sm text-[11px]">
+<span>Chromium 124.0.x</span>
+<span class="text-tertiary">Headless Port Active</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Section: Recommended Skills (Catalog) -->
+<section class="space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold">Recommended Codex Integrations</span>
+</div>
+<a class="font-body-sm text-body-sm text-primary hover:underline" href="#browse-all">Explore MCP Registry (140+)</a>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
+<!-- Recommended 1: Speech Gen -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all flex items-center justify-between gap-space-md shadow-sm group">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-high text-on-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px] text-tertiary">graphic_eq</span>
+</div>
+<div class="min-w-0">
+<div class="font-headline-md text-headline-md text-on-surface font-semibold truncate">Speech generation</div>
+<div class="font-body-sm text-body-sm text-outline truncate">Generate realistic narrated audio</div>
+</div>
+</div>
+<button class="w-7 h-7 rounded bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors shadow-sm" title="Install Skill">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<!-- Recommended 2: Notion Knowledge -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all flex items-center justify-between gap-space-md shadow-sm group">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-high text-on-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px] text-secondary">menu_book</span>
+</div>
+<div class="min-w-0">
+<div class="font-headline-md text-headline-md text-on-surface font-semibold truncate">Notion Knowledge</div>
+<div class="font-body-sm text-body-sm text-outline truncate">Index workspace docs &amp; PRDs</div>
+</div>
+</div>
+<button class="w-7 h-7 rounded bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors shadow-sm" title="Install Skill">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<!-- Recommended 3: Figma MCP -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all flex items-center justify-between gap-space-md shadow-sm group">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-high text-on-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px] text-primary">draw</span>
+</div>
+<div class="min-w-0">
+<div class="font-headline-md text-headline-md text-on-surface font-semibold truncate">Figma Design System</div>
+<div class="font-body-sm text-body-sm text-outline truncate">Direct node inspect to Tailwind code</div>
+</div>
+</div>
+<button class="w-7 h-7 rounded bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors shadow-sm" title="Install Skill">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<!-- Recommended 4: Vercel Deploy -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all flex items-center justify-between gap-space-md shadow-sm group">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-high text-on-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px] text-tertiary">cloud_upload</span>
+</div>
+<div class="min-w-0">
+<div class="font-headline-md text-headline-md text-on-surface font-semibold truncate">Vercel Deploy</div>
+<div class="font-body-sm text-body-sm text-outline truncate">Deploy branch previews with zero-config</div>
+</div>
+</div>
+<button class="w-7 h-7 rounded bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors shadow-sm" title="Install Skill">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<!-- Recommended 5: Yeet (Git automated workflow) -->
+<div class="p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-all flex items-center justify-between gap-space-md shadow-sm group sm:col-span-2">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-high text-on-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px] text-on-surface">rocket_launch</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-2">
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Yeet (Fast Push)</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container text-outline text-[10px] font-body-sm">git helper</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline truncate">Stage unstaged files, craft conventional commit message, push and open PR automatically</p>
+</div>
+</div>
+<button class="h-7 px-3 rounded bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container text-on-surface-variant flex items-center gap-1 shrink-0 font-label-md text-label-md transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[14px]">add</span>
+<span>Install</span>
+</button>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: SKILL.md Anatomy Spec Modal/Inspector (5 cols) -->
+<!-- Perfectly replicates the anatomy format from Reference Image 1 & 2 -->
+<div class="lg:col-span-5 w-full sticky top-16">
+<div class="rounded-xl bg-surface-container-lowest p-space-lg shadow-xl space-y-space-md relative overflow-hidden">
+<!-- Subtle Luminescence Bloom -->
+<div class="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-primary-container/10 blur-3xl pointer-events-none"></div>
+<!-- Inspector Modal Header -->
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded bg-surface-container-high flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[18px] text-tertiary">draw</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<h2 class="font-headline-lg text-headline-lg text-on-surface font-semibold">Skill Creator</h2>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-[10px]">Skill</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline">Create or update a skill in codex</p>
+</div>
+</div>
+<!-- Active Toggle & Dropdown Trigger -->
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-5 rounded-full bg-primary-container p-0.5 flex items-center justify-end shadow-[0_0_10px_rgba(77,142,255,0.4)] cursor-pointer" title="Skill Active">
+<div class="w-4 h-4 rounded-full bg-on-primary-container shadow-sm"></div>
+</div>
+<button class="w-7 h-7 rounded hover:bg-surface-container-high text-outline hover:text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[18px]">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- Header Spec intro -->
+<div class="space-y-1">
+<div class="font-headline-md text-headline-md text-on-surface font-medium">Anatomy of a Skill</div>
+<p class="font-body-sm text-body-sm text-outline leading-relaxed">
+              Every skill consists of a required <span class="text-tertiary">SKILL.md</span> file and optional bundled resources:
+            </p>
+</div>
+<!-- Code Structure Spec Box (Exact match to IMAGE_45) -->
+<div class="p-space-md rounded-lg bg-surface-container-low relative font-code-inline text-[12px] leading-relaxed select-text overflow-x-auto shadow-inner">
+<!-- Quick Actions on Code Box -->
+<div class="absolute right-2.5 top-2.5 flex items-center gap-1.5">
+<button class="p-1 rounded hover:bg-surface-container-highest text-outline hover:text-on-surface transition-colors" title="Copy Structure">
+<span class="material-symbols-outlined text-[14px]">content_copy</span>
+</button>
+<button class="p-1 rounded hover:bg-surface-container-highest text-outline hover:text-on-surface transition-colors" title="Open in Worktree">
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+</div>
+<pre class="text-on-surface-variant font-code-inline"><span class="text-on-surface font-semibold">skill-name/</span>
+├── <span class="text-error font-medium">SKILL.md</span> <span class="text-primary">(required)</span>
+│   ├── <span class="text-error">YAML frontmatter metadata</span> <span class="text-primary">(required)</span>
+│   │   ├── <span class="text-secondary">name:</span> <span class="text-primary">(required)</span>
+│   │   └── <span class="text-secondary">description:</span> <span class="text-primary">(required)</span>
+│   └── <span class="text-error">Markdown instructions</span> <span class="text-primary">(required)</span>
+├── <span class="text-on-surface">agents/</span> <span class="text-outline-variant">(recommended)</span>
+│   └── <span class="text-tertiary">openai.yaml</span> - UI metadata for skill lists and chips
+└── <span class="text-error">Bundled Resources</span> <span class="text-outline">(optional)</span>
+    ├── <span class="text-secondary">scripts/</span>         - Executable code
+    │   <span class="text-outline">(Python/Bash/Node)</span>
+    ├── <span class="text-secondary">references/</span>      - Documentation intended to be
+    │   <span class="text-outline">loaded into context as needed</span>
+    └── <span class="text-secondary">assets/</span>          - Files used in output (templates,
+        <span class="text-outline">icons, mockups, etc.)</span></pre>
+</div>
+<!-- Section: SKILL.md Detail Specification Tabs -->
+<div class="space-y-space-sm pt-space-xs">
+<div class="flex items-center justify-between text-on-surface">
+<span class="font-headline-md text-headline-md font-medium flex items-center gap-1.5">
+<span class="material-symbols-outlined text-tertiary text-[16px]">description</span>
+                SKILL.md Spec Overview
+              </span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-tertiary font-body-sm text-[10px]">Strict Mode</span>
+</div>
+<div class="space-y-2 text-outline font-body-sm text-body-sm leading-relaxed">
+<div class="flex items-start gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0"></span>
+<span><strong class="text-on-surface font-medium">Frontmatter (YAML):</strong> Required <code class="text-tertiary font-code-inline px-1 py-0.5 bg-surface-container rounded">name</code> and <code class="text-tertiary font-code-inline px-1 py-0.5 bg-surface-container rounded">description</code>. Determines when Codex automatically invokes the skill during autonomous operations.</span>
+</div>
+<div class="flex items-start gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary mt-1.5 shrink-0"></span>
+<span><strong class="text-on-surface font-medium">Instructions (Markdown):</strong> Clear procedural guide. Outlines how scripts execute, environment variables needed, and safety checkpoints.</span>
+</div>
+<div class="flex items-start gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary mt-1.5 shrink-0"></span>
+<span><strong class="text-on-surface font-medium">Deterministic Tool Bindings:</strong> Any executable within <code class="text-secondary font-code-inline px-1 py-0.5 bg-surface-container rounded">scripts/</code> is mapped as a typed tool call in the LLM runtime context.</span>
+</div>
+</div>
+</div>
+<!-- Bottom Footer Actions (Uninstall link & Try in chat pill button) -->
+<div class="pt-space-md flex items-center justify-between">
+<button class="font-label-md text-label-md text-error hover:underline flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Uninstall</span>
+</button>
+<div class="flex items-center gap-space-sm">
+<button class="h-8 px-space-md rounded bg-surface-container-high hover:bg-surface-bright text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[15px]">code_blocks</span>
+<span>Edit Source</span>
+</button>
+<!-- Try in Chat Pill Button (matching IMAGE_45) -->
+<button class="h-8 px-space-lg rounded-full bg-surface-container-highest hover:bg-primary-container hover:text-on-primary-container text-on-surface font-label-md text-label-md font-medium flex items-center gap-1.5 shadow-[0_0_12px_rgba(0,0,0,0.5)] transition-all">
+<span class="material-symbols-outlined text-[16px]">chat_bubble</span>
+<span>Try in chat</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Telemetry Card Below Inspector -->
+<div class="mt-space-md p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-tertiary text-[18px]">verified_user</span>
+<div>
+<div class="font-label-md text-label-md text-on-surface font-medium">Sandboxed Runtime Execution</div>
+<div class="font-body-sm text-body-sm text-outline">All skill scripts execute inside isolated Docker worktrees</div>
+</div>
+</div>
+<span class="font-body-sm text-body-sm text-tertiary">Secured</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  function selectSkill(skillKey) {
+    const searchInput = document.getElementById('skill-search');
+    if (searchInput) {
+      searchInput.value = skillKey;
+      searchInput.dispatchEvent(new Event('input'));
+    }
+  }
+
+  document.getElementById('btn-inspect-spec')?.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+</script></main></div></body></html>

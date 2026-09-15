@@ -204,6 +204,7 @@ export const ja: Record<string, string> = {
   gitDetail: '変更詳細を表示',
   referenceFile: '@ファイル',
   addToConversation: '会話に追加',
+  fileComment: 'コメント',
   copyRelative: '相対パスをコピー',
   copyAbsolute: '絶対パスをコピー',
   rename: '名前の変更',

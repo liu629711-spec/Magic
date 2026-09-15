@@ -454,6 +454,36 @@ describe('NativeTabTitle (the chip glyph)', () => {
     unmount()
   })
 
+  it('a file tab with no live record (body unmounted) still shows the FILE glyph', () => {
+    const records = createNativeTabRecords()
+    const service = createBetterSidebarService(createSidebarStore())
+    service.registerTab({
+      id: 'editor',
+      title: () => 'Files',
+      icon: (size: number) => createElement('i', { 'data-type-icon': size }),
+      component: () => createElement('div'),
+    })
+    // No records.ensure: the body never mounted (or was dropped on unmount),
+    // so the chip has no synthetic record to read a path from.
+
+    const { host, unmount } = renderTitle(records, service, {
+      tab: {
+        id: 'chip-4',
+        kind: 'editor',
+        title: '名将杀.md',
+        contentId: 'dsh-resource://file/session/s1/%E5%90%8D%E5%B0%86%E6%9D%80.md',
+        visible: true,
+        navigation: { address: 'dsh-resource://file/session/s1/%E5%90%8D%E5%B0%86%E6%9D%80.md', params: undefined, revision: 0 },
+        signal: new AbortController().signal,
+      },
+    }, 'editor')
+    expect(host.querySelector('[data-type-icon]'), 'the files-window folder glyph must not own a file chip').toBeNull()
+    // The file glyph is the host's own FileTypeIcon, drawn from the address alone.
+    expect(host.querySelector('[aria-hidden="true"]')).not.toBeNull()
+    expect(host.textContent).toBe('名将杀.md')
+    unmount()
+  })
+
   it('falls back to the title alone when the type is gone (unregistered descriptor)', () => {
     const records = createNativeTabRecords()
     const service = createBetterSidebarService(createSidebarStore())

@@ -10,7 +10,6 @@
  * @module better-sidebar/file-comment-cards
  */
 import { relativeTo } from './paths.ts'
-import { t } from './locales.ts'
 import { buildCommentCardDom } from './comment-dom.ts'
 
 /** Structural mirror of sidenote's FileNotesBridge (window contract). */
@@ -43,8 +42,6 @@ export function sidenoteFileNotes(): SidenoteFileNotes | null {
 
 const CARD_FLAG = 'data-dsh-file-comment'
 
-const cardStyle = 'border:1px solid rgba(127,127,127,.4);border-left:3px solid #2563eb;border-radius:8px;padding:6px 8px;margin:6px 0 10px;font-size:12px;line-height:1.5;background:var(--dsw-alias-bg-layer-1, rgba(127,127,127,.06));color:inherit'
-
 function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
@@ -73,16 +70,45 @@ export function findAnchorBlock(surface: HTMLElement, quote: string): Element | 
   return best
 }
 
+function commentIdentity(item: FileNoteItem): string {
+  return `${item.header}\0${item.quote}\0${item.note ?? ''}`
+}
+
+function isSavedCommentCard(node: Element): boolean {
+  if (node.classList.contains('dsh-file-comment-editor') || node.querySelector('textarea') !== null) return false
+  if (node.hasAttribute(CARD_FLAG) || node.classList.contains('dsh-file-comment-card')) return true
+  // Legacy unflagged cards from the duplicate-insert bug: avatar row + 删除, no textarea.
+  const text = node.textContent ?? ''
+  return text.includes('本地评论') && text.includes('删除')
+}
+
+function commentsForFile(items: readonly FileNoteItem[], rel: string): FileNoteItem[] {
+  const wanted: FileNoteItem[] = []
+  const seen = new Set<string>()
+  for (const item of items) {
+    if (item.kind !== 'comment' || filePartOf(item.header) !== rel) continue
+    const key = commentIdentity(item)
+    if (seen.has(key)) continue
+    seen.add(key)
+    wanted.push(item)
+  }
+  return wanted
+}
+
 function buildCard(item: FileNoteItem, remove: (id: number) => void, cwd: string | undefined, path: string): HTMLElement {
   const rel = cwd !== undefined ? relativeTo(cwd, path) : path
   const lineMatch = /:(\d+)/.exec(item.header)
   const line = lineMatch !== null && item.header.slice(0, lineMatch.index) === rel ? Number(lineMatch[1]) : undefined
-  return buildCommentCardDom({
+  const card = buildCommentCardDom({
     line,
     note: item.note ?? '',
     deletable: true,
     onDelete: () => { remove(item.id) },
   })
+  // The rescan layer keys cards by this flag. Without it, MutationObserver
+  // re-inserts a new card on every preview mutation (the duplicate-card bug).
+  card.setAttribute(CARD_FLAG, String(item.id))
+  return card
 }
 
 export interface FileCommentCardsOptions {
@@ -101,7 +127,7 @@ export function mountFileCommentCards(bridge: SidenoteFileNotes, opts: FileComme
   let timer = 0
 
   const removeAll = (): void => {
-    for (const card of Array.from(document.querySelectorAll(`[${CARD_FLAG}]`))) card.remove()
+    for (const card of Array.from(document.querySelectorAll(`[${CARD_FLAG}], .dsh-file-comment-card`))) card.remove()
   }
 
   const rescan = (): void => {
@@ -110,21 +136,35 @@ export function mountFileCommentCards(bridge: SidenoteFileNotes, opts: FileComme
     const cwd = opts.getCwd()
     const rel = cwd !== undefined ? relativeTo(cwd, opts.getPath()) : opts.getPath()
     if (surface === null || sessionId === '' || rel === '') { removeAll(); return }
-    const wanted = bridge.list(sessionId).filter(item =>
-      item.kind === 'comment' && filePartOf(item.header) === rel)
+    const wanted = commentsForFile(bridge.list(sessionId), rel)
+    const wantedIds = new Set(wanted.map(item => String(item.id)))
     // Drop stale/mis-anchored cards (quote edited away, file switched back, …).
     for (const card of Array.from(surface.querySelectorAll(`[${CARD_FLAG}]`))) {
-      const id = Number(card.getAttribute(CARD_FLAG))
-      const item = wanted.find(entry => entry.id === id)
+      const id = card.getAttribute(CARD_FLAG)
+      const item = id !== null ? wanted.find(entry => String(entry.id) === id) : undefined
       const anchor = item !== undefined ? findAnchorBlock(surface, item.quote) : null
       const stillValid = item !== undefined && anchor !== null
         && (anchor.nextElementSibling === card || anchor.contains(card) || card.previousElementSibling === anchor)
       if (!stillValid) card.remove()
     }
     for (const item of wanted) {
-      if (surface.querySelector(`[${CARD_FLAG}="${item.id}"]`) !== null) continue
       const anchor = findAnchorBlock(surface, item.quote)
       if (anchor === null) continue
+      // Collapse leftover copies sitting after this block — unflagged legacy
+      // cards from the duplicate-insert bug, plus extras that are not in the
+      // unique wanted set. Keep other live comments that share the same block.
+      let sibling = anchor.nextElementSibling
+      while (sibling !== null && isSavedCommentCard(sibling)) {
+        const next = sibling.nextElementSibling
+        const id = sibling.getAttribute(CARD_FLAG)
+        if (id !== null && wantedIds.has(id)) {
+          sibling = next
+          continue
+        }
+        sibling.remove()
+        sibling = next
+      }
+      if (surface.querySelector(`[${CARD_FLAG}="${item.id}"]`) !== null) continue
       anchor.after(buildCard(item, id => { bridge.remove(sessionId, id) }, cwd, opts.getPath()))
     }
   }

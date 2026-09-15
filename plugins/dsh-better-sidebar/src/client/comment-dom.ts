@@ -27,6 +27,7 @@ export interface CommentCardOptions {
 /** The saved-comment card: avatar row + body + right-aligned 删除. */
 export function buildCommentCardDom(options: CommentCardOptions): HTMLElement {
   const card = el('div', 'margin:4px 0 10px;padding:12px 14px;border:1px solid rgba(127,127,127,.28);border-radius:14px;background:var(--dsw-alias-bg-layer-2, #fff);color:inherit;font-size:13px;line-height:1.55')
+  card.className = 'dsh-file-comment-card'
   const head = el('div', 'display:flex;align-items:center;gap:8px')
   head.append(
     el('span', `width:22px;height:22px;border-radius:50%;background:${AVATAR_BG};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex:none`, '你'),
@@ -62,6 +63,7 @@ export interface CommentEditorOptions {
  */
 export function buildCommentEditorDom(options: CommentEditorOptions): HTMLElement {
   const box = el('div', 'margin:4px 0 10px;padding:12px 14px;border:1px solid rgba(127,127,127,.28);border-radius:14px;background:var(--dsw-alias-bg-layer-2, #fff);color:inherit;font-size:13px;line-height:1.55')
+  box.className = 'dsh-file-comment-editor'
   const head = el('div', 'display:flex;align-items:center;gap:8px')
   head.append(
     el('span', `width:22px;height:22px;border-radius:50%;background:${AVATAR_BG};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex:none`, '你'),
@@ -77,7 +79,14 @@ export function buildCommentEditorDom(options: CommentEditorOptions): HTMLElemen
   cancel.addEventListener('click', () => { options.onCancel() })
   const submit = el('button', `border:none;background:#8a8f98;color:#fff;cursor:pointer;font-size:12px;padding:5px 14px;border-radius:8px`, options.submitLabel ?? '注释')
   submit.type = 'button'
+  // 一次性防重：双击或 Enter 重触不再产生第二条评论（提交后按钮禁用 +
+  // 回调短路；Enter 重复 keydown 也走这里）。
+  let settled = false
   const submitNow = (): void => {
+    if (settled) return
+    settled = true
+    submit.disabled = true
+    cancel.disabled = true
     const note = ta.value.trim()
     if (note !== '') options.onSubmit(note)
   }
@@ -88,7 +97,7 @@ export function buildCommentEditorDom(options: CommentEditorOptions): HTMLElemen
       event.preventDefault()
       submitNow()
     }
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && !settled) {
       event.stopPropagation()
       options.onCancel()
     }

@@ -100,6 +100,7 @@ const CEO_GRAPH_RULES = [
   '- Workers are always asked to file evidence via ledger_record_evidence. To hold a node to named sections or on-disk artifacts, add contract { required_sections, artifacts, form } to that task: the worker is then told those exact requirements, and a "completed" claim counts only if the evidence matches. Without a contract, acceptance is not enforced.',
   '- Members stay resident after a node finishes. Do not spawn a new worker for the same seat unless you replace that node.',
   '- When a member returns user_decisions, the graph yields. Ask the user yourself with ask_user_question, then call ceo_replan with continue. Do not rewrite their work as success.',
+  '- When the graph yields (a member blocked or a bind_after_deps node ready), report that state to the user in your reply before doing anything else. If the tool receipts fail so you cannot see the graph, say so and ask before finishing the delivery yourself — silently replacing the graph with manual work is forbidden.',
   '- A bind_after_deps node waits until its producers finish, then the graph yields. Call ceo_replan binds to finalize it before it starts.',
   '- Use ceo_replan on the same graph to bind, steer queued nodes, add nodes, continue a blocked member, replace a failed node, or stop the remaining tail. Do not call ceo_delegate again for that graph.',
   '- Using CEO does not create an engineering organization.',
@@ -1190,11 +1191,15 @@ export function apply(ctx: {
         const member = existing.find(item => item.runId === node.runId)
         const phase = state?.phase ?? member?.phase ?? 'queued'
         if (member !== undefined) member.phase = phase
+        const memberId = state?.memberId ?? member?.memberId
+        // 工具回执走 DSH 无损 JSON 门（snapshotJsonValue）：undefined 属性会让整份
+        // 回执被拒（"value is not lossless JSON"），图跑完却在序列化时炸——2026-09-14
+        // 汇总节点未启动时 memberId 为空触发过。未定成员直接省略该键。
         return {
           runId: node.runId,
           role: node.role,
           task: node.task,
-          memberId: state?.memberId ?? member?.memberId,
+          ...(memberId === undefined ? {} : { memberId }),
           phase,
         }
       }),

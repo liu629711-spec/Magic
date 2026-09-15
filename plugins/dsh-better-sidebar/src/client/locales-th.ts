@@ -204,6 +204,7 @@ export const th: Record<string, string> = {
   gitDetail: 'ดูรายละเอียดการเปลี่ยนแปลง',
   referenceFile: '@ไฟล์',
   addToConversation: 'เพิ่มไปยังแชท',
+  fileComment: 'ความคิดเห็น',
   copyRelative: 'คัดลอกพาธสัมพัทธ์',
   copyAbsolute: 'คัดลอกพาธ absolute',
   rename: 'เปลี่ยนชื่อ',

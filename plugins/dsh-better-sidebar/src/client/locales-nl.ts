@@ -202,6 +202,7 @@ export const nl: Record<string, string> = {
   gitDetail: 'Wijzigingsdetails bekijken',
   referenceFile: '@bestand',
   addToConversation: 'Aan conversatie toevoegen',
+  fileComment: 'Opmerking',
   copyRelative: 'Relatief pad kopiëren',
   copyAbsolute: 'Absoluut pad kopiëren',
   rename: 'Naam wijzigen',

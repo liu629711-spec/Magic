@@ -250,6 +250,9 @@ export function TabBar(props: {
           The + sits immediately after the rightmost tab (sticky at the
           right edge of the scrollport when the tabs overflow, so it stays
           reachable no matter how many tabs are open).
+          Magic local patch (2026-09-14): with exactly one enabled option
+          (the terminal-only bottom workbench) the + opens it directly —
+          a one-item menu is an extra click with no choice to make.
         */}
         <Menu
           open={menuOpen}
@@ -273,7 +276,15 @@ export function TabBar(props: {
               className={css.tabBarPlus}
               aria-label={t('newTab')}
               title={t('newTab')}
-              onClick={() => { setMenuOpen(v => !v); setTabMenu(null) }}
+              onClick={() => {
+                setTabMenu(null)
+                const enabled = newTabOptions.filter(option => option.disabled !== true)
+                if (enabled.length === 1) {
+                  onNewTab(enabled[0]!.id)
+                  return
+                }
+                setMenuOpen(v => !v)
+              }}
             >
               <IconPlusOutline16 />
             </button>

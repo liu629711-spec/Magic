@@ -662,16 +662,27 @@ describe('session cwd resolution over the API route', () => {
   })
 
   it('fs.read resolves repo-relative paths (untracked diff fallback)', async () => {
-    const route = mount({
-      sessions: {
-        get: () => ({ header: { cwd: join(process.cwd(), 'src') } }),
-      },
-    })
-    const result = await invoke(route, 'fs.read', { sessionId: 's-sub', path: 'src/git.ts' })
-    expect(result.ok).toBe(true)
-    const value = result as unknown as { ok: boolean; value?: { kind: string; content: string } }
-    expect(value.value?.kind).toBe('text')
-    expect(value.value?.content).toContain('runGit')
+    const repo = mkdtempSync(join(tmpdir(), 'dsh-sidebar-fs-read-repo-'))
+    const sourceDir = join(repo, 'src')
+    const source = join(sourceDir, 'git.ts')
+    mkdirSync(sourceDir)
+    writeFileSync(source, 'export function runGit(): void {}\n')
+    const init = spawnSync('git', ['-C', repo, 'init', '-q'], { encoding: 'utf8' })
+    if (init.status !== 0) throw new Error(init.stderr || 'git init failed')
+    try {
+      const route = mount({
+        sessions: {
+          get: () => ({ header: { cwd: sourceDir } }),
+        },
+      })
+      const result = await invoke(route, 'fs.read', { sessionId: 's-sub', path: 'src/git.ts' })
+      expect(result.ok).toBe(true)
+      const value = result as unknown as { ok: boolean; value?: { kind: string; content: string } }
+      expect(value.value?.kind).toBe('text')
+      expect(value.value?.content).toContain('runGit')
+    } finally {
+      rmSync(repo, { recursive: true, force: true })
+    }
   })
 
   it('rejects repo-root-relative fs.read paths outside a nested session workspace', async () => {

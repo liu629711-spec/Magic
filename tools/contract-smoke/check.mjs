@@ -26,11 +26,15 @@ const CORE_CORDIS_API = new Set([
   'effect', 'on', 'off', 'emit', 'provide', 'inject', 'extend',
   'get', 'root', 'scope', 'setTimeout', 'setInterval', 'clearTimeout',
   'clearInterval', 'bail', 'parallel', 'serial', 'all', 'collect',
+  'logger', 'fiber', 'reflect', 'plugin',
 ])
 
-// Remote 命名空间：由官方插件在运行时挂载（remote.$mount(contribution)），静态扫描
-// 看不到 provide 调用，需要显式登记。挂载方与命名空间一一对应：
-//   remote.agentTeams —— ui-agent-team（已在 web.patch.yml 挂载）
+// Services provided dynamically or by a mounted sub-entry rather than a
+// literal `ctx.provide('name', ...)` in the scanned source tree.
+const RUNTIME_PROVIDED_SERVICES = new Set(['webRuntime', 'betterSidebar', 'browser'])
+
+// Remote namespace: mounted by the official plugin at runtime.
+// remote.agentTeams is not visible to a static provide() scan.
 const RUNTIME_REMOTE_NAMESPACES = new Set(['remote.agentTeams'])
 
 // 递归列举目录下的所有文件。
@@ -94,13 +98,17 @@ function sliceToMatchingBrace(content, openPos) {
   return content.slice(openPos, i - 1)
 }
 
-// 抽取 `xxx.provide('name', ...)` / `xxx.provide?.('name', ...)` 的注册名。
+// 抽取 `xxx.provide('name', ...)` / `xxx.provide?.('name', ...)` 的注册名，
+// 以及 Cordis `Service` 基类的 `super(ctx, 'name')` 注册名（Service 构造时
+// 会以该名字 provide 到 ctx，与字面 provide 调用等价）。
 // 注意可选链 `?.` 在 `?` 和 `(` 之间还有个点号，所以正则要允许这个 `.`。
 function extractProvided(content) {
   const set = new Set()
   const re = /\.provide\??\.?\s*\(\s*['"]([^'"]+)['"]/g
   let m
   while ((m = re.exec(content))) set.add(m[1])
+  const serviceRe = /\bsuper\s*\(\s*(?:ctx|context)\s*,\s*['"]([^'"]+)['"]\s*\)/g
+  while ((m = serviceRe.exec(content))) set.add(m[1])
   return set
 }
 
@@ -121,14 +129,42 @@ function extractName(content) {
   return m ? m[1] : null
 }
 
-// 抽取源码里所有 `ctx.<member>` 的用法（排除 tests 目录与 .spec.ts）。
+// Extract all `ctx.<member>` uses from source (excluding tests and comments).
 function extractCtxMembers(srcDir) {
   const usage = []
   for (const f of walk(srcDir)) {
-    if (!f.endsWith('.ts')) continue
-    if (/\/tests?\//.test(f) || f.endsWith('.spec.ts')) continue
-    const lines = readFileSync(f, 'utf8').split('\n')
+    if (!f.endsWith('.ts') && !f.endsWith('.tsx')) continue
+    const normalized = f.replaceAll('\\', '/')
+    if (/\/tests?\//.test(normalized) || /\.spec\.tsx?$/.test(normalized)) continue
+    const content = stripComments(readFileSync(f, 'utf8'))
+    // 局部变量 ctx（如插件自定义的 PromptBuildContext 函数参数）与宿主 ctx 重名：
+    // 函数签名把 ctx 注解为非 Cordis Context 的类型时，该参数的成员访问不算
+    // 宿主契约。逐函数识别参数注解，用括号配对划出函数体并按需排除。
+    const shadowedRanges = []
+    const paramRe = /\b(\w+)\s*:\s*([A-Za-z_$][\w$.]*)(?:\s*\[\])?\s*(?=[,)])/g
+    let pm
+    while ((pm = paramRe.exec(content))) {
+      const [, paramName, typeName] = pm
+      if (paramName !== 'ctx') continue
+      // Context/Sctx 是宿主 ctx 本体；any/unknown 无法证明不是宿主 ctx，
+      // 必须保持报警（护栏宁可误报也不放过真实笔误）。
+      if (/^(Context|Sctx|any|unknown)$/i.test(typeName)) continue
+      // 找到该参数所属函数体的开括号并配对，划出排除区间。
+      const openBrace = content.indexOf('{', pm.index + pm[0].length)
+      if (openBrace === -1) continue
+      const body = sliceToMatchingBrace(content, openBrace + 1)
+      if (body) shadowedRanges.push([openBrace, openBrace + body.length + 2])
+    }
+    const lines = content.split('\n')
+    // 把排除区间换算成"行-列"屏蔽表。
+    const masked = new Set()
+    for (const [start, end] of shadowedRanges) {
+      const startLine = content.slice(0, start).split('\n').length
+      const endLine = content.slice(0, end).split('\n').length
+      for (let l = startLine; l < endLine; l++) masked.add(l)
+    }
     for (let i = 0; i < lines.length; i++) {
+      if (masked.has(i + 1)) continue
       const re = /[^\w.]ctx\.([A-Za-z_$][\w$]*)/g
       let mm
       while ((mm = re.exec(lines[i]))) {
@@ -137,6 +173,13 @@ function extractCtxMembers(srcDir) {
     }
   }
   return usage
+}
+
+// Remove comments while preserving line breaks so reported locations remain useful.
+function stripComments(content) {
+  return content
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
+    .replace(/\/\/[^\n]*/g, '')
 }
 
 // 极简解析 cordis.patch.yml 里的 insert name 列表。只处理本仓实际结构：
@@ -184,15 +227,33 @@ function buildDshSurface(dshRoot) {
   const roots = existsSync(pkgRoot) ? [pkgRoot] : [dshRoot]
   for (const root of roots) {
     for (const f of walk(root)) {
-      if (!f.endsWith('.ts') && !f.endsWith('.d.ts')) continue
-      // 测试里的 provide 是测试替身，不代表真实契约，跳过以免误放。
-      if (/\/tests?\//.test(f) || f.endsWith('.spec.ts')) continue
+      if (!f.endsWith('.ts') && !f.endsWith('.tsx')) continue
+      const normalized = f.replaceAll('\\', '/')
+      if (/\/tests?\//.test(normalized) || /\.spec\.tsx?$/.test(normalized)) continue
       const content = readFileSync(f, 'utf8')
       for (const name of extractDeclaredContextFields(content)) declared.add(name)
       for (const name of extractProvided(content)) provided.add(name)
     }
   }
   return { declared, provided, found }
+}
+
+// Resolve effective plugin roots from active `insert` entries in a web patch.
+// A package may be mounted through several sub-entry files, so normalize all
+// entries back to the plugin directory under `pluginsRoot`.
+function activePluginDirs(pluginsRoot, patchPath) {
+  if (!existsSync(patchPath)) return null
+  const dirs = new Map()
+  for (const name of parsePatchInsertNames(readFileSync(patchPath, 'utf8'))) {
+    const mounted = resolve(dirname(patchPath), name)
+    const rel = relative(pluginsRoot, mounted)
+    if (rel === '' || rel.startsWith('..') || rel.includes(':')) continue
+    const rootName = rel.split(/[\\/]/)[0]
+    if (!rootName) continue
+    const dir = join(pluginsRoot, rootName)
+    if (existsSync(dir) && statSync(dir).isDirectory()) dirs.set(rootName, dir)
+  }
+  return [...dirs.values()]
 }
 
 // 从 Magic 插件目录抽取插件间互相 provide 的服务名（如 magicWorkMode）。
@@ -203,9 +264,10 @@ function buildMagicProvided(pluginsRoot) {
     const srcDir = join(pd, 'src')
     if (!existsSync(srcDir)) continue
     for (const f of walk(srcDir)) {
-      if (!f.endsWith('.ts')) continue
-      if (/\/tests?\//.test(f) || f.endsWith('.spec.ts')) continue
-      for (const name of extractProvided(readFileSync(f, 'utf8'))) provided.add(name)
+      if (!f.endsWith('.ts') && !f.endsWith('.tsx')) continue
+      const normalized = f.replaceAll('\\', '/')
+      if (/\/tests?\//.test(normalized) || /\.spec\.tsx?$/.test(normalized)) continue
+      for (const name of extractProvided(stripComments(readFileSync(f, 'utf8')))) provided.add(name)
     }
   }
   return provided
@@ -282,7 +344,9 @@ function analyzePlugin(pluginDir, ctx) {
   } else {
     const insertNames = parsePatchInsertNames(readFileSync(patchPath, 'utf8'))
     const expected = pkg.name
-    if (expected && insertNames.length && !insertNames.includes(expected)) {
+    const subEntriesOnly = expected && insertNames.length > 0
+      && insertNames.every((name) => name.startsWith(`${expected}/`))
+    if (expected && insertNames.length && !insertNames.includes(expected) && !subEntriesOnly) {
       findings.push({
         severity: 'FAIL', category: 'meta', plugin: pluginName,
         message: `cordis.patch.yml 的 insert name [${insertNames.join(', ')}] 与包名 "${expected}" 不一致`,
@@ -340,6 +404,18 @@ function analyzePlugin(pluginDir, ctx) {
   // ---- 检查 3：ctx 成员使用面 ----
   const srcDir = join(pluginDir, 'src')
   const usage = existsSync(srcDir) ? extractCtxMembers(srcDir) : []
+  // 插件自身的 declare module Context 声明与 provide/Service 注册也计入可用面：
+  // 一个插件 provide 的服务可能被同插件的另一个入口文件消费。
+  const selfProvided = new Set()
+  for (const f of walk(pluginDir)) {
+    if (!f.endsWith('.ts') && !f.endsWith('.tsx')) continue
+    const normalized = f.replaceAll('\\', '/')
+    if (/\/tests?\//.test(normalized) || /\.spec\.tsx?$/.test(normalized)) continue
+    if (normalized.includes('/node_modules/')) continue
+    const content = stripComments(readFileSync(f, 'utf8'))
+    for (const name of extractProvided(content)) selfProvided.add(name)
+    for (const name of extractDeclaredContextFields(content)) selfProvided.add(name)
+  }
   // 去重到 member 维度，保留首个出现位置作为样例。
   const seen = new Map()
   for (const u of usage) {
@@ -353,7 +429,7 @@ function analyzePlugin(pluginDir, ctx) {
   }
   for (const [member, sample] of seen) {
     const source = sources.get(member)
-    if (available.has(member) || CORE_CORDIS_API.has(member)) {
+    if (available.has(member) || CORE_CORDIS_API.has(member) || selfProvided.has(member)) {
       findings.push({
         severity: 'PASS', category: 'ctx', plugin: pluginName,
         message: `ctx.${member} 在宿主可用 (来源: ${source || 'core-cordis'})`,
@@ -479,6 +555,7 @@ function dshSideDrift(dshRoot, findings) {
 export function contractSmoke(opts) {
   const pluginsRoot = resolve(opts.pluginsRoot)
   const dshRoot = resolve(opts.dshRoot)
+  const patchPath = resolve(opts.patchPath || join(dirname(pluginsRoot), 'patches', 'web.patch.yml'))
   const findings = []
 
   const dsh = buildDshSurface(dshRoot)
@@ -490,11 +567,18 @@ export function contractSmoke(opts) {
   }
 
   const magicProvided = buildMagicProvided(pluginsRoot)
-  const available = new Set([...dsh.declared, ...dsh.provided, ...magicProvided, ...RUNTIME_REMOTE_NAMESPACES])
+  const available = new Set([
+    ...dsh.declared,
+    ...dsh.provided,
+    ...magicProvided,
+    ...RUNTIME_PROVIDED_SERVICES,
+    ...RUNTIME_REMOTE_NAMESPACES,
+  ])
   const sources = buildSources(dsh, magicProvided)
+  for (const name of RUNTIME_PROVIDED_SERVICES) sources.set(name, 'runtime-provided')
   for (const name of RUNTIME_REMOTE_NAMESPACES) sources.set(name, 'runtime-remote')
 
-  const pluginDirs = listPluginDirs(pluginsRoot)
+  const pluginDirs = activePluginDirs(pluginsRoot, patchPath) || listPluginDirs(pluginsRoot)
   if (pluginDirs.length === 0) {
     findings.push({
       severity: 'WARN', category: 'meta', plugin: null,

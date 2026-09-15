@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { CEO_MEMBER_TAB_ID, CEO_MEMBER_TAB_KIND, inject, registerCeoUi, zh } from '../src/client/register.ts'
+import { sessionCanvasHeight } from '../src/client/session-canvas.ts'
+import { resetCeoRoster } from '../src/client/selection.ts'
 
 const fakeTaskBoard = {
   // 线上载波信封的载荷字段是 value（官方 RemoteResult<T>），不是 data
@@ -32,7 +34,6 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
         assert.equal(dicts.zh['graph.goal'], '你的任务')
         assert.equal(dicts.zh['graph.goalHint'], '对话发起')
         assert.equal(dicts.zh['graph.ceo'], 'CEO 汇总')
-        assert.equal(dicts.zh['graph.openCanvas'], '在画布打开')
         assert.equal(dicts.zh['graph.fold'], '收起')
         assert.equal(dicts.zh['process.fetch.empty'], '（无正文）')
         assert.equal(dicts.zh['process.fetch.collection'], 'Read page · {count} sources')
@@ -48,6 +49,13 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
         assert.equal(dicts.zh['drawer.placeholder'], '用一句话写下你的选择')
         assert.equal(dicts.zh['inspector.decisionInChat'].includes('输入框上方'), true)
         assert.equal(dicts.zh['workspace.overview'], '团队总览')
+        assert.equal(dicts.zh['context.title'], '收到的上下文')
+        assert.equal(dicts.zh['context.segments'], '{count} 段')
+        assert.equal(dicts.zh['tokens.title'], '资源消耗')
+        assert.equal(dicts.zh['produced.label'], '本轮文件改动')
+        assert.equal(dicts.en['produced.label'], 'Files changed')
+        assert.equal(dicts.zh['relations.title'], '关系')
+        assert.equal(dicts.zh['activity.thinking'], '思考中')
         assert.equal(dicts.zh['attention.title'], '需要你处理')
         assert.equal(dicts.zh['decision.send'], '发给 CEO')
         assert.equal(dicts.en['workspace.empty'].includes('run graph'), true)
@@ -99,7 +107,7 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
       },
     },
     effect: (factory) => factory(),
-  }, { graph: 'graph', row: 'row', workspace: 'workspace', drawer: 'drawer', turnProcess: 'turn-process' })
+  }, { graph: 'graph', row: 'row', workspace: 'workspace', drawer: 'drawer', turnProcess: 'turn-process', tabTitle: 'tab-title' })
 
   assert.deepEqual(inject, ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.agentTeams'])
   assert.equal(definitions[0]?.kind, 'ceo-team')
@@ -113,6 +121,7 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
     { name: 'tool.call.toolview', key: 'ceo_delegate', priority: undefined },
     { name: 'conversation.chat.node', key: 'turn-process', priority: -10 },
     { name: 'sidebar.right.pane.tab', key: CEO_MEMBER_TAB_ID, priority: undefined },
+    { name: 'sidebar.right.pane.tab.title', key: CEO_MEMBER_TAB_ID, priority: undefined },
   ])
 
   // The canvas node's inject opens the member workspace page tab by kind.
@@ -122,8 +131,11 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
       taskBoard: { subscribe: unknown; getSnapshot: () => unknown }
     }
   }
-  graphSpec.inject().openWorkspace()
+  const graphInject = graphSpec.inject()
+  assert.equal('openLargeCanvas' in graphInject, false)
+  graphInject.openWorkspace()
   assert.deepEqual(openedTabs, [CEO_MEMBER_TAB_KIND])
+  resetCeoRoster()
   // 画布卡必须是「句柄」：有 subscribe/getSnapshot 才能被 useSyncExternalStore 订阅。
   // 若这里误注入 RPC 本体，getSnapshot 为 undefined → 回落到空快照 → React #185 拆卡。
   const graphBoard = graphSpec.inject().taskBoard
@@ -140,4 +152,23 @@ test('registers the ceo-team node, ceo_delegate toolview, and the right-sidebar 
   // PRD-04 §12（2026-09-13 裁定）：任务板只在画布呈现，右坞不再注入任务板面。
   assert.equal(workspaceInject.taskBoard, undefined)
   assert.equal(workspaceInject.taskBoardApi, undefined)
+})
+
+test('session canvas grows with layout and caps at about 70% of the viewport', () => {
+  const previous = globalThis.window
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { innerHeight: 1000 },
+  })
+  try {
+    assert.equal(sessionCanvasHeight(100), 300)
+    assert.equal(sessionCanvasHeight(400), 472)
+    assert.equal(sessionCanvasHeight(2000), 700)
+  } finally {
+    if (previous === undefined) {
+      Reflect.deleteProperty(globalThis, 'window')
+    } else {
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: previous })
+    }
+  }
 })

@@ -204,6 +204,7 @@ export const tr: Record<string, string> = {
   gitDetail: 'Değişiklik ayrıntılarını görüntüle',
   referenceFile: '@dosya',
   addToConversation: 'Sohbete ekle',
+  fileComment: 'Yorum',
   copyRelative: 'Göreli yolu kopyala',
   copyAbsolute: 'Mutlak yolu kopyala',
   rename: 'Yeniden adlandır',

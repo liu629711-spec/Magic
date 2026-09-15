@@ -27,6 +27,7 @@ import type { SessionScope } from '../api.ts'
 import { RenderBoundary } from '../RenderBoundary.tsx'
 import { OrphanedTab } from '../OrphanedTab.tsx'
 import { referenceInChat } from '../reference-in-chat.ts'
+import { parseFileAddress } from '../resource-address.ts'
 import type { BetterSidebarService } from '../service.ts'
 import type { SidebarStore, SidebarTab, TabType } from '../state.ts'
 import css from '../sidebar.module.css'
@@ -368,7 +369,13 @@ export function NativeTabTitle(props: NativeTitleInjected & NativeBodyFrameworkP
   // icon itself is derived from the record, never stored.
   void version
   const descriptor = service.getTab(descriptorId) ?? service.getTab(record?.tab.type ?? nativeTab.kind)
-  const path = record?.tab.path
+  // The record rides the body's lifetime (dropped on unmount), so a chip whose
+  // body is gone would fall back to the files-window folder glyph. The file
+  // tab's identity is its `dsh-resource://file/…` address, which parses
+  // without any record — the record's live path only wins when present.
+  const path = descriptorId === EDITOR_KIND
+    ? record?.tab.path ?? parseFileAddress(nativeTab.contentId)?.path
+    : record?.tab.path
   const icon = path !== undefined && descriptorId === EDITOR_KIND
     ? service.fileIcon(path, CHIP_ICON_SIZE)
     : undefined

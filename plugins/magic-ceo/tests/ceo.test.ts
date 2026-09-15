@@ -495,6 +495,53 @@ test('records the final worker output without relying on send_message and blocks
   assert.match(String((event?.data as { output?: string } | undefined)?.output), /无法联网核验/)
 })
 
+test('research evidence gap with an explicit no-decision degrades to partial and does not yield (2026-09-14 user ruling)', async () => {
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  const tasks = [{ role: 'market researcher', task: 'Survey the market', id: 'market' }]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session }, callId: 'call-1', signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.(
+    'status: completed\ndone: surveyed with secondary sources\nnot_done: Sensor Tower 原始报告页因网络不可达未能直接访问\nuser_decisions: 无（未遇到需要用户决策的分叉点）',
+  )
+  const result = await pending
+  assert.equal(started.length, 1)
+  assert.equal(result.yielded, undefined)
+  assert.equal(result.runs![0]?.phase, 'completed')
+  const event = session.events.find(item => item.type === CEO_MEMBER_RESULT)
+  assert.equal((event?.data as { status?: string } | undefined)?.status, 'partial')
+})
+
+test('research evidence gap still blocks when the member declares blocked', async () => {
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  const tasks = [
+    { role: 'market researcher', task: 'Survey the market', id: 'market' },
+    { role: 'implementer', task: 'Build it', id: 'build', depends_on: ['market'] },
+  ]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session }, callId: 'call-1', signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.(
+    'status: blocked\ndone: stopped at the paywall\nuser_decisions: 无',
+  )
+  const result = await pending
+  assert.equal(started.length, 1)
+  // declared blocked 映射为 failed（非 blocked phase），依赖节点被 skip 而非挂起：
+  // 挂起等拍板只发生在 phase==='blocked'（真 user_decisions 问题）时。
+  assert.equal(result.runs![0]?.phase, 'failed')
+  assert.equal(result.runs![1]?.phase, 'skipped')
+})
+
 test('stamps memberId while the child is still running and mirrors its process', async () => {
   const { tool, plan, started, release, emitChild } = harness('ceo')
   const delegate = tool()
@@ -602,6 +649,50 @@ test('does not yield on an empty 用户决策', async () => {
   assert.equal(started.length, 1)
   assert.equal(result.yielded, undefined)
   assert.equal(result.runs![0]?.phase, 'completed')
+})
+
+test('does not yield on 无 followed by a parenthetical explanation (2026-09-14 live regression)', async () => {
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  const tasks = [{ role: 'researcher', task: 'Survey options', id: 'survey' }]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.(
+    'status: completed\ndone: surveyed the market with 360 cross-checks\n用户决策：无（未遇到需要用户决策的分叉点）',
+  )
+  const result = await pending
+  assert.equal(started.length, 1)
+  assert.equal(result.yielded, undefined)
+  assert.equal(result.runs![0]?.phase, 'completed')
+})
+
+test('still yields on a real decision question after a negation word', async () => {
+  const { tool, plan, started, release } = harness('ceo')
+  const delegate = tool()
+  assert.ok(delegate)
+  const session = journalSession('session-1')
+  const tasks = [{ role: 'researcher', task: 'Survey options', id: 'survey' }]
+  await recordPlan(plan, tasks, session)
+  const pending = delegate.execute({ tasks }, {
+    agent: { session },
+    callId: 'call-1',
+    signal: new AbortController().signal,
+  })
+  await Promise.resolve()
+  release.get('member-1')?.(
+    'status: blocked\ndone: shortlisted two vendors\n用户决策：是否优先覆盖下载量还是收入',
+  )
+  const result = await pending
+  assert.equal(started.length, 1)
+  assert.equal(result.yielded, 'decision')
+  assert.equal(result.runs![0]?.phase, 'blocked')
 })
 
 test('yields a bind_after_deps node until ceo_replan binds it', async () => {

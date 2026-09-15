@@ -8,8 +8,9 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react'
-import { ceoAttentionItems, displayCeoSeat, formatTokenCount, presentCeoMember, type CeoAttentionKind, type CeoTeamMember } from '../team.ts'
+import { ceoAttentionItems, displayCeoSeat, presentCeoMember, type CeoAttentionKind, type CeoTeamMember } from '../team.ts'
 import { CeoMemberInspector } from './CeoMemberInspector.ts'
+import { MemberAvatar } from './MemberAvatar.ts'
 import { ink, line, surface } from './theme.ts'
 import {
   getCeoRoster,
@@ -24,6 +25,8 @@ export interface CeoWorkspaceProps {
   useTabInfo: () => { tab: { actions: { close: () => void } } }
   /** Send a per-member intervention (halt/redirect/resume) into the parent chat. */
   sendIntervention?: (message: string) => void
+  /** Open a produced file in the existing sidebar editor. */
+  onOpenFile?: (path: string) => void
   t: (key: string, params?: Record<string, unknown>) => string
 }
 
@@ -206,7 +209,8 @@ function rowButton(
     },
   },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-      h('strong', { style: { fontSize: 13, fontWeight: 510 } }, title),
+      h(MemberAvatar, { size: 28 }),
+      h('strong', { style: { fontSize: 13, fontWeight: 510, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, title),
       h('span', {
         style: {
           marginLeft: 'auto',
@@ -283,7 +287,7 @@ function overview(
   )
 }
 
-export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }: CeoWorkspaceProps) {
+export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, onOpenFile, t }: CeoWorkspaceProps) {
   const selected = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember)
   const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster)
   const tabActions = useTabInfo().tab.actions
@@ -300,6 +304,9 @@ export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }: Ceo
       key: selected.callId,
       member: selected,
       roster,
+      onBack: () => { selectCeoMember(null) },
+      onSelectMember: (next) => { selectCeoMember(next) },
+      onOpenFile,
       onIntervene: sendIntervention === undefined
         ? undefined
         : (action: 'halt' | 'redirect' | 'resume' | 'retry' | 'replan', note: string) => {
@@ -373,55 +380,32 @@ export function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }: Ceo
         },
       }, t('workspace.close')),
     )
-    : h('div', {
-      style: {
-        display: 'flex',
-        justifyContent: 'flex-end',
-        padding: '8px 12px 0',
-      },
-    },
-      h('button', {
-        type: 'button',
-        'aria-label': t('workspace.close'),
-        onClick: close,
-        style: {
-          width: 28,
-          height: 28,
-          border: 0,
-          borderRadius: 99,
-          background: 'transparent',
-          color: ink.tertiary,
-          cursor: 'pointer',
-          fontSize: 16,
-          lineHeight: '28px',
-        },
-      }, '×'),
-    ),
+    : null,
   h('div', {
-    style: {
-      position: 'relative',
-      flex: 1,
-      minWidth: 0,
-      minHeight: 0,
-    },
-  },
-    h('div', {
-      ref: scrollRef,
       style: {
-        height: '100%',
+        position: 'relative',
+        flex: 1,
         minWidth: 0,
-        padding: selected === null ? 16 : '8px 16px 16px',
-        overflowX: 'hidden',
-        overflowY: 'auto',
+        minHeight: 0,
       },
     },
-      h('div', { ref: contentRef },
-        selected === null ? overview(roster, t) : inspector,
+      h('div', {
+        ref: scrollRef,
+        style: {
+          height: '100%',
+          minWidth: 0,
+          padding: selected === null ? 16 : '12px 16px 16px',
+          overflowX: 'hidden',
+          overflowY: 'auto',
+        },
+      },
+        h('div', { ref: contentRef },
+          selected === null ? overview(roster, t) : inspector,
+        ),
       ),
+      selected !== null && atBottom === false
+        ? h(ToBottomButton, { onClick: jumpToBottom, label: t('workspace.toBottom') })
+        : null,
     ),
-    selected !== null && atBottom === false
-      ? h(ToBottomButton, { onClick: jumpToBottom, label: t('workspace.toBottom') })
-      : null,
-  ),
   )
 }

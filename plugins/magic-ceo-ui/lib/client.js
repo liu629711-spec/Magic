@@ -1510,7 +1510,7 @@ function CeoDelegateRow({ block, inspect, t }) {
 // src/client/CeoTeamGraph.ts
 var import_react6 = require("react");
 
-// ../../node_modules/.pnpm/@xyflow+react@12.11.6_react_c2c6b2ffa45210201bfebe3ffbf25aee/node_modules/@xyflow/react/dist/esm/index.js
+// ../../node_modules/.pnpm/@xyflow+react@12.11.6_@type_b921f264a833ab7dea0aad11fff63358/node_modules/@xyflow/react/dist/esm/index.js
 var import_jsx_runtime = require("react/jsx-runtime");
 var import_react4 = require("react");
 
@@ -2909,11 +2909,11 @@ function hex(value) {
   value = clampi(value);
   return (value < 16 ? "0" : "") + value.toString(16);
 }
-function hsla(h9, s, l, a) {
-  if (a <= 0) h9 = s = l = NaN;
-  else if (l <= 0 || l >= 1) h9 = s = NaN;
-  else if (s <= 0) h9 = NaN;
-  return new Hsl(h9, s, l, a);
+function hsla(h11, s, l, a) {
+  if (a <= 0) h11 = s = l = NaN;
+  else if (l <= 0 || l >= 1) h11 = s = NaN;
+  else if (s <= 0) h11 = NaN;
+  return new Hsl(h11, s, l, a);
 }
 function hslConvert(o) {
   if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
@@ -2921,23 +2921,23 @@ function hslConvert(o) {
   if (!o) return new Hsl();
   if (o instanceof Hsl) return o;
   o = o.rgb();
-  var r = o.r / 255, g = o.g / 255, b = o.b / 255, min = Math.min(r, g, b), max = Math.max(r, g, b), h9 = NaN, s = max - min, l = (max + min) / 2;
+  var r = o.r / 255, g = o.g / 255, b = o.b / 255, min = Math.min(r, g, b), max = Math.max(r, g, b), h11 = NaN, s = max - min, l = (max + min) / 2;
   if (s) {
-    if (r === max) h9 = (g - b) / s + (g < b) * 6;
-    else if (g === max) h9 = (b - r) / s + 2;
-    else h9 = (r - g) / s + 4;
+    if (r === max) h11 = (g - b) / s + (g < b) * 6;
+    else if (g === max) h11 = (b - r) / s + 2;
+    else h11 = (r - g) / s + 4;
     s /= l < 0.5 ? max + min : 2 - max - min;
-    h9 *= 60;
+    h11 *= 60;
   } else {
-    s = l > 0 && l < 1 ? 0 : h9;
+    s = l > 0 && l < 1 ? 0 : h11;
   }
-  return new Hsl(h9, s, l, o.opacity);
+  return new Hsl(h11, s, l, o.opacity);
 }
-function hsl(h9, s, l, opacity) {
-  return arguments.length === 1 ? hslConvert(h9) : new Hsl(h9, s, l, opacity == null ? 1 : opacity);
+function hsl(h11, s, l, opacity) {
+  return arguments.length === 1 ? hslConvert(h11) : new Hsl(h11, s, l, opacity == null ? 1 : opacity);
 }
-function Hsl(h9, s, l, opacity) {
-  this.h = +h9;
+function Hsl(h11, s, l, opacity) {
+  this.h = +h11;
   this.s = +s;
   this.l = +l;
   this.opacity = +opacity;
@@ -2952,11 +2952,11 @@ define_default(Hsl, hsl, extend(Color, {
     return new Hsl(this.h, this.s, this.l * k, this.opacity);
   },
   rgb() {
-    var h9 = this.h % 360 + (this.h < 0) * 360, s = isNaN(h9) || isNaN(this.s) ? 0 : this.s, l = this.l, m2 = l + (l < 0.5 ? l : 1 - l) * s, m1 = 2 * l - m2;
+    var h11 = this.h % 360 + (this.h < 0) * 360, s = isNaN(h11) || isNaN(this.s) ? 0 : this.s, l = this.l, m2 = l + (l < 0.5 ? l : 1 - l) * s, m1 = 2 * l - m2;
     return new Rgb(
-      hsl2rgb(h9 >= 240 ? h9 - 240 : h9 + 120, m1, m2),
-      hsl2rgb(h9, m1, m2),
-      hsl2rgb(h9 < 120 ? h9 + 240 : h9 - 120, m1, m2),
+      hsl2rgb(h11 >= 240 ? h11 - 240 : h11 + 120, m1, m2),
+      hsl2rgb(h11, m1, m2),
+      hsl2rgb(h11 < 120 ? h11 + 240 : h11 - 120, m1, m2),
       this.opacity
     );
   },
@@ -2978,8 +2978,8 @@ function clamph(value) {
 function clampt(value) {
   return Math.max(0, Math.min(1, value || 0));
 }
-function hsl2rgb(h9, m1, m2) {
-  return (h9 < 60 ? m1 + (m2 - m1) * h9 / 60 : h9 < 180 ? m2 : h9 < 240 ? m1 + (m2 - m1) * (240 - h9) / 60 : m1) * 255;
+function hsl2rgb(h11, m1, m2) {
+  return (h11 < 60 ? m1 + (m2 - m1) * h11 / 60 : h11 < 180 ? m2 : h11 < 240 ? m1 + (m2 - m1) * (240 - h11) / 60 : m1) * 255;
 }
 
 // ../../node_modules/.pnpm/d3-interpolate@3.0.1/node_modules/d3-interpolate/src/basis.js
@@ -6200,7 +6200,7 @@ function getHandle(nodeId, handleType, handleId, nodeLookup, connectionMode, wit
     return null;
   }
   const handles2 = connectionMode === "strict" ? node.internals.handleBounds?.[handleType] : [...node.internals.handleBounds?.source ?? [], ...node.internals.handleBounds?.target ?? []];
-  const handle = (handleId ? handles2?.find((h9) => h9.id === handleId) : handles2?.[0]) ?? null;
+  const handle = (handleId ? handles2?.find((h11) => h11.id === handleId) : handles2?.[0]) ?? null;
   return handle && withAbsolutePosition ? { ...handle, ...getHandlePosition(node, handle, handle.position, true) } : handle;
 }
 function getHandleType(edgeUpdaterType, handleDomNode) {
@@ -7187,11 +7187,11 @@ function XYResizer({ domNode, nodeId, getStoreItems, onChange, onEnd }) {
   };
 }
 
-// ../../node_modules/.pnpm/zustand@4.5.7_react@19.2.8/node_modules/zustand/esm/traditional.mjs
+// ../../node_modules/.pnpm/zustand@4.5.7_@types+react@18.3.31_immer@10.2.0_react@19.2.8/node_modules/zustand/esm/traditional.mjs
 var import_react3 = __toESM(require("react"), 1);
 var import_with_selector = __toESM(require_with_selector(), 1);
 
-// ../../node_modules/.pnpm/zustand@4.5.7_react@19.2.8/node_modules/zustand/esm/vanilla.mjs
+// ../../node_modules/.pnpm/zustand@4.5.7_@types+react@18.3.31_immer@10.2.0_react@19.2.8/node_modules/zustand/esm/vanilla.mjs
 var import_meta = {};
 var createStoreImpl = (createState) => {
   let state;
@@ -7224,7 +7224,7 @@ var createStoreImpl = (createState) => {
 };
 var createStore = (createState) => createState ? createStoreImpl(createState) : createStoreImpl;
 
-// ../../node_modules/.pnpm/zustand@4.5.7_react@19.2.8/node_modules/zustand/esm/traditional.mjs
+// ../../node_modules/.pnpm/zustand@4.5.7_@types+react@18.3.31_immer@10.2.0_react@19.2.8/node_modules/zustand/esm/traditional.mjs
 var { useDebugValue } = import_react3.default;
 var { useSyncExternalStoreWithSelector } = import_with_selector.default;
 var identity3 = (arg) => arg;
@@ -7247,7 +7247,7 @@ var createWithEqualityFnImpl = (createState, defaultEqualityFn) => {
 };
 var createWithEqualityFn = (createState, defaultEqualityFn) => createState ? createWithEqualityFnImpl(createState, defaultEqualityFn) : createWithEqualityFnImpl;
 
-// ../../node_modules/.pnpm/zustand@4.5.7_react@19.2.8/node_modules/zustand/esm/shallow.mjs
+// ../../node_modules/.pnpm/zustand@4.5.7_@types+react@18.3.31_immer@10.2.0_react@19.2.8/node_modules/zustand/esm/shallow.mjs
 function shallow$1(objA, objB) {
   if (Object.is(objA, objB)) {
     return true;
@@ -7285,7 +7285,7 @@ function shallow$1(objA, objB) {
   return true;
 }
 
-// ../../node_modules/.pnpm/@xyflow+react@12.11.6_react_c2c6b2ffa45210201bfebe3ffbf25aee/node_modules/@xyflow/react/dist/esm/index.js
+// ../../node_modules/.pnpm/@xyflow+react@12.11.6_@type_b921f264a833ab7dea0aad11fff63358/node_modules/@xyflow/react/dist/esm/index.js
 var import_react_dom = require("react-dom");
 var StoreContext = (0, import_react4.createContext)(null);
 var Provider$1 = StoreContext.Provider;
@@ -10577,7 +10577,7 @@ function ResizeControl({ nodeId, position, variant = ResizeControlVariant.Handle
 }
 var NodeResizeControl = (0, import_react4.memo)(ResizeControl);
 
-// ../../node_modules/.pnpm/@xyflow+react@12.11.6_react_c2c6b2ffa45210201bfebe3ffbf25aee/node_modules/@xyflow/react/dist/style.css
+// ../../node_modules/.pnpm/@xyflow+react@12.11.6_@type_b921f264a833ab7dea0aad11fff63358/node_modules/@xyflow/react/dist/style.css
 var style_default3 = "/* this gets exported as style.css and can be used for the default theming */\n/* these are the necessary styles for React/Svelte Flow, they get used by base.css and style.css */\n.react-flow {\n  direction: ltr;\n\n  --xy-edge-stroke-default: #b1b1b7;\n  --xy-edge-stroke-width-default: 1;\n  --xy-edge-stroke-selected-default: #555;\n\n  --xy-connectionline-stroke-default: #b1b1b7;\n  --xy-connectionline-stroke-width-default: 1;\n\n  --xy-attribution-background-color-default: rgba(255, 255, 255, 0.5);\n\n  --xy-minimap-background-color-default: #fff;\n  --xy-minimap-mask-background-color-default: rgba(240, 240, 240, 0.6);\n  --xy-minimap-mask-stroke-color-default: transparent;\n  --xy-minimap-mask-stroke-width-default: 1;\n  --xy-minimap-node-background-color-default: #e2e2e2;\n  --xy-minimap-node-stroke-color-default: transparent;\n  --xy-minimap-node-stroke-width-default: 2;\n\n  --xy-background-color-default: transparent;\n  --xy-background-pattern-dots-color-default: #91919a;\n  --xy-background-pattern-lines-color-default: #eee;\n  --xy-background-pattern-cross-color-default: #e2e2e2;\n  background-color: var(--xy-background-color, var(--xy-background-color-default));\n  --xy-node-color-default: inherit;\n  --xy-node-border-default: 1px solid #1a192b;\n  --xy-node-background-color-default: #fff;\n  --xy-node-group-background-color-default: rgba(240, 240, 240, 0.25);\n  --xy-node-boxshadow-hover-default: 0 1px 4px 1px rgba(0, 0, 0, 0.08);\n  --xy-node-boxshadow-selected-default: 0 0 0 0.5px #1a192b;\n  --xy-node-border-radius-default: 3px;\n\n  --xy-handle-background-color-default: #1a192b;\n  --xy-handle-border-color-default: #fff;\n\n  --xy-selection-background-color-default: rgba(0, 89, 220, 0.08);\n  --xy-selection-border-default: 1px dotted rgba(0, 89, 220, 0.8);\n\n  --xy-controls-button-background-color-default: #fefefe;\n  --xy-controls-button-background-color-hover-default: #f4f4f4;\n  --xy-controls-button-color-default: inherit;\n  --xy-controls-button-color-hover-default: inherit;\n  --xy-controls-button-border-color-default: #eee;\n  --xy-controls-box-shadow-default: 0 0 2px 1px rgba(0, 0, 0, 0.08);\n\n  --xy-edge-label-background-color-default: #ffffff;\n  --xy-edge-label-color-default: inherit;\n  --xy-resize-background-color-default: #3367d9;\n}\n.react-flow.dark {\n  --xy-edge-stroke-default: #3e3e3e;\n  --xy-edge-stroke-width-default: 1;\n  --xy-edge-stroke-selected-default: #727272;\n\n  --xy-connectionline-stroke-default: #b1b1b7;\n  --xy-connectionline-stroke-width-default: 1;\n\n  --xy-attribution-background-color-default: rgba(150, 150, 150, 0.25);\n\n  --xy-minimap-background-color-default: #141414;\n  --xy-minimap-mask-background-color-default: rgba(60, 60, 60, 0.6);\n  --xy-minimap-mask-stroke-color-default: transparent;\n  --xy-minimap-mask-stroke-width-default: 1;\n  --xy-minimap-node-background-color-default: #2b2b2b;\n  --xy-minimap-node-stroke-color-default: transparent;\n  --xy-minimap-node-stroke-width-default: 2;\n\n  --xy-background-color-default: #141414;\n  --xy-background-pattern-dots-color-default: #555;\n  --xy-background-pattern-lines-color-default: #333;\n  --xy-background-pattern-cross-color-default: #333;\n  --xy-node-color-default: #f8f8f8;\n  --xy-node-border-default: 1px solid #3c3c3c;\n  --xy-node-background-color-default: #1e1e1e;\n  --xy-node-group-background-color-default: rgba(240, 240, 240, 0.25);\n  --xy-node-boxshadow-hover-default: 0 1px 4px 1px rgba(255, 255, 255, 0.08);\n  --xy-node-boxshadow-selected-default: 0 0 0 0.5px #999;\n\n  --xy-handle-background-color-default: #bebebe;\n  --xy-handle-border-color-default: #1e1e1e;\n\n  --xy-selection-background-color-default: rgba(200, 200, 220, 0.08);\n  --xy-selection-border-default: 1px dotted rgba(200, 200, 220, 0.8);\n\n  --xy-controls-button-background-color-default: #2b2b2b;\n  --xy-controls-button-background-color-hover-default: #3e3e3e;\n  --xy-controls-button-color-default: #f8f8f8;\n  --xy-controls-button-color-hover-default: #fff;\n  --xy-controls-button-border-color-default: #5b5b5b;\n  --xy-controls-box-shadow-default: 0 0 2px 1px rgba(0, 0, 0, 0.08);\n\n  --xy-edge-label-background-color-default: #141414;\n  --xy-edge-label-color-default: #f8f8f8;\n}\n.react-flow__background {\n  background-color: var(--xy-background-color-props, var(--xy-background-color, var(--xy-background-color-default)));\n  pointer-events: none;\n  z-index: -1;\n}\n.react-flow__container {\n  position: absolute;\n  width: 100%;\n  height: 100%;\n  top: 0;\n  left: 0;\n}\n.react-flow__pane {\n  z-index: 1;\n  touch-action: none;\n}\n.react-flow__pane.draggable {\n    cursor: grab;\n  }\n.react-flow__pane.dragging {\n    cursor: grabbing;\n  }\n.react-flow__pane.selection {\n    cursor: pointer;\n  }\n.react-flow__viewport {\n  transform-origin: 0 0;\n  z-index: 2;\n  pointer-events: none;\n}\n.react-flow__renderer {\n  z-index: 4;\n}\n.react-flow__selection {\n  z-index: 6;\n}\n.react-flow__nodesselection-rect:focus,\n.react-flow__nodesselection-rect:focus-visible {\n  outline: none;\n}\n.react-flow__edge-path {\n  stroke: var(--xy-edge-stroke, var(--xy-edge-stroke-default));\n  stroke-width: var(--xy-edge-stroke-width, var(--xy-edge-stroke-width-default));\n  fill: none;\n}\n.react-flow__connection-path {\n  stroke: var(--xy-connectionline-stroke, var(--xy-connectionline-stroke-default));\n  stroke-width: var(--xy-connectionline-stroke-width, var(--xy-connectionline-stroke-width-default));\n  fill: none;\n}\n.react-flow .react-flow__edges {\n  position: absolute;\n}\n.react-flow .react-flow__edges svg {\n    overflow: visible;\n    position: absolute;\n    pointer-events: none;\n  }\n.react-flow__edge {\n  pointer-events: visibleStroke;\n}\n.react-flow__edge.selectable {\n    cursor: pointer;\n  }\n.react-flow__edge.animated path {\n    stroke-dasharray: 5;\n    animation: dashdraw 0.5s linear infinite;\n  }\n.react-flow__edge.animated path.react-flow__edge-interaction {\n    stroke-dasharray: none;\n    animation: none;\n  }\n.react-flow__edge.inactive {\n    pointer-events: none;\n  }\n.react-flow__edge.selected,\n  .react-flow__edge:focus,\n  .react-flow__edge:focus-visible {\n    outline: none;\n  }\n.react-flow__edge.selected .react-flow__edge-path,\n  .react-flow__edge.selectable:focus .react-flow__edge-path,\n  .react-flow__edge.selectable:focus-visible .react-flow__edge-path {\n    stroke: var(--xy-edge-stroke-selected, var(--xy-edge-stroke-selected-default));\n  }\n.react-flow__edge-textwrapper {\n    pointer-events: all;\n  }\n.react-flow__edge .react-flow__edge-text {\n    pointer-events: none;\n    -webkit-user-select: none;\n       -moz-user-select: none;\n            user-select: none;\n  }\n/* Arrowhead marker styles - use CSS custom properties as default */\n.react-flow__arrowhead polyline {\n  stroke: var(--xy-edge-stroke, var(--xy-edge-stroke-default));\n}\n.react-flow__arrowhead polyline.arrowclosed {\n  fill: var(--xy-edge-stroke, var(--xy-edge-stroke-default));\n}\n.react-flow__connection {\n  pointer-events: none;\n}\n.react-flow__connection .animated {\n    stroke-dasharray: 5;\n    animation: dashdraw 0.5s linear infinite;\n  }\nsvg.react-flow__connectionline {\n  z-index: 1001;\n  overflow: visible;\n  position: absolute;\n}\n.react-flow__nodes {\n  pointer-events: none;\n  transform-origin: 0 0;\n}\n.react-flow__node {\n  position: absolute;\n  -webkit-user-select: none;\n     -moz-user-select: none;\n          user-select: none;\n  pointer-events: all;\n  transform-origin: 0 0;\n  box-sizing: border-box;\n  cursor: default;\n}\n.react-flow__node.selectable {\n    cursor: pointer;\n  }\n.react-flow__node.draggable {\n    cursor: grab;\n    pointer-events: all;\n  }\n.react-flow__node.draggable.dragging {\n      cursor: grabbing;\n    }\n.react-flow__nodesselection {\n  z-index: 3;\n  transform-origin: left top;\n  pointer-events: none;\n}\n.react-flow__nodesselection-rect {\n    position: absolute;\n    pointer-events: all;\n    cursor: grab;\n  }\n.react-flow__handle {\n  position: absolute;\n  pointer-events: none;\n  min-width: 5px;\n  min-height: 5px;\n  width: 6px;\n  height: 6px;\n  background-color: var(--xy-handle-background-color, var(--xy-handle-background-color-default));\n  border: 1px solid var(--xy-handle-border-color, var(--xy-handle-border-color-default));\n  border-radius: 100%;\n}\n.react-flow__handle.connectingfrom {\n    pointer-events: all;\n  }\n.react-flow__handle.connectionindicator {\n    pointer-events: all;\n    cursor: crosshair;\n  }\n.react-flow__handle-bottom {\n    top: auto;\n    left: 50%;\n    bottom: 0;\n    transform: translate(-50%, 50%);\n  }\n.react-flow__handle-top {\n    top: 0;\n    left: 50%;\n    transform: translate(-50%, -50%);\n  }\n.react-flow__handle-left {\n    top: 50%;\n    left: 0;\n    transform: translate(-50%, -50%);\n  }\n.react-flow__handle-right {\n    top: 50%;\n    right: 0;\n    transform: translate(50%, -50%);\n  }\n.react-flow__edgeupdater {\n  cursor: move;\n  pointer-events: all;\n}\n.react-flow__pane.selection .react-flow__panel {\n  pointer-events: none;\n}\n.react-flow__panel {\n  position: absolute;\n  z-index: 5;\n  margin: 15px;\n}\n.react-flow__panel.top {\n    top: 0;\n  }\n.react-flow__panel.bottom {\n    bottom: 0;\n  }\n.react-flow__panel.top.center, .react-flow__panel.bottom.center {\n      left: 50%;\n      transform: translateX(-15px) translateX(-50%);\n    }\n.react-flow__panel.left {\n    left: 0;\n  }\n.react-flow__panel.right {\n    right: 0;\n  }\n.react-flow__panel.left.center, .react-flow__panel.right.center {\n      top: 50%;\n      transform: translateY(-15px) translateY(-50%);\n    }\n.react-flow__attribution {\n  font-size: 10px;\n  background: var(--xy-attribution-background-color, var(--xy-attribution-background-color-default));\n  padding: 2px 3px;\n  margin: 0;\n}\n.react-flow__attribution a {\n    text-decoration: none;\n    color: #999;\n  }\n@keyframes dashdraw {\n  from {\n    stroke-dashoffset: 10;\n  }\n}\n.react-flow__edgelabel-renderer {\n  position: absolute;\n  width: 100%;\n  height: 100%;\n  pointer-events: none;\n  -webkit-user-select: none;\n     -moz-user-select: none;\n          user-select: none;\n  left: 0;\n  top: 0;\n}\n.react-flow__viewport-portal {\n  position: absolute;\n  width: 100%;\n  height: 100%;\n  left: 0;\n  top: 0;\n  -webkit-user-select: none;\n     -moz-user-select: none;\n          user-select: none;\n}\n.react-flow__minimap {\n  background: var(\n    --xy-minimap-background-color-props,\n    var(--xy-minimap-background-color, var(--xy-minimap-background-color-default))\n  );\n}\n.react-flow__minimap-svg {\n    display: block;\n  }\n.react-flow__minimap-mask {\n    fill: var(\n      --xy-minimap-mask-background-color-props,\n      var(--xy-minimap-mask-background-color, var(--xy-minimap-mask-background-color-default))\n    );\n    stroke: var(\n      --xy-minimap-mask-stroke-color-props,\n      var(--xy-minimap-mask-stroke-color, var(--xy-minimap-mask-stroke-color-default))\n    );\n    stroke-width: var(\n      --xy-minimap-mask-stroke-width-props,\n      var(--xy-minimap-mask-stroke-width, var(--xy-minimap-mask-stroke-width-default))\n    );\n  }\n.react-flow__minimap-node {\n    fill: var(\n      --xy-minimap-node-background-color-props,\n      var(--xy-minimap-node-background-color, var(--xy-minimap-node-background-color-default))\n    );\n    stroke: var(\n      --xy-minimap-node-stroke-color-props,\n      var(--xy-minimap-node-stroke-color, var(--xy-minimap-node-stroke-color-default))\n    );\n    stroke-width: var(\n      --xy-minimap-node-stroke-width-props,\n      var(--xy-minimap-node-stroke-width, var(--xy-minimap-node-stroke-width-default))\n    );\n  }\n.react-flow__background-pattern.dots {\n    fill: var(\n      --xy-background-pattern-color-props,\n      var(--xy-background-pattern-color, var(--xy-background-pattern-dots-color-default))\n    );\n  }\n.react-flow__background-pattern.lines {\n    stroke: var(\n      --xy-background-pattern-color-props,\n      var(--xy-background-pattern-color, var(--xy-background-pattern-lines-color-default))\n    );\n  }\n.react-flow__background-pattern.cross {\n    stroke: var(\n      --xy-background-pattern-color-props,\n      var(--xy-background-pattern-color, var(--xy-background-pattern-cross-color-default))\n    );\n  }\n.react-flow__controls {\n  display: flex;\n  flex-direction: column;\n  box-shadow: var(--xy-controls-box-shadow, var(--xy-controls-box-shadow-default));\n}\n.react-flow__controls.horizontal {\n    flex-direction: row;\n  }\n.react-flow__controls-button {\n    display: flex;\n    justify-content: center;\n    align-items: center;\n    height: 26px;\n    width: 26px;\n    padding: 4px;\n    border: none;\n    background: var(--xy-controls-button-background-color, var(--xy-controls-button-background-color-default));\n    border-bottom: 1px solid\n      var(\n        --xy-controls-button-border-color-props,\n        var(--xy-controls-button-border-color, var(--xy-controls-button-border-color-default))\n      );\n    color: var(\n      --xy-controls-button-color-props,\n      var(--xy-controls-button-color, var(--xy-controls-button-color-default))\n    );\n    cursor: pointer;\n    -webkit-user-select: none;\n       -moz-user-select: none;\n            user-select: none;\n  }\n.react-flow__controls-button svg {\n      width: 100%;\n      max-width: 12px;\n      max-height: 12px;\n      fill: currentColor;\n    }\n.react-flow__edge.updating .react-flow__edge-path {\n      stroke: #777;\n    }\n.react-flow__edge-text {\n    font-size: 10px;\n  }\n.react-flow__node.selectable:focus,\n  .react-flow__node.selectable:focus-visible {\n    outline: none;\n  }\n.react-flow__node-input,\n.react-flow__node-default,\n.react-flow__node-output,\n.react-flow__node-group {\n  padding: 10px;\n  border-radius: var(--xy-node-border-radius, var(--xy-node-border-radius-default));\n  width: 150px;\n  font-size: 12px;\n  color: var(--xy-node-color, var(--xy-node-color-default));\n  text-align: center;\n  border: var(--xy-node-border, var(--xy-node-border-default));\n  background-color: var(--xy-node-background-color, var(--xy-node-background-color-default));\n}\n.react-flow__node-input.selectable:hover, .react-flow__node-default.selectable:hover, .react-flow__node-output.selectable:hover, .react-flow__node-group.selectable:hover {\n      box-shadow: var(--xy-node-boxshadow-hover, var(--xy-node-boxshadow-hover-default));\n    }\n.react-flow__node-input.selectable.selected,\n    .react-flow__node-input.selectable:focus,\n    .react-flow__node-input.selectable:focus-visible,\n    .react-flow__node-default.selectable.selected,\n    .react-flow__node-default.selectable:focus,\n    .react-flow__node-default.selectable:focus-visible,\n    .react-flow__node-output.selectable.selected,\n    .react-flow__node-output.selectable:focus,\n    .react-flow__node-output.selectable:focus-visible,\n    .react-flow__node-group.selectable.selected,\n    .react-flow__node-group.selectable:focus,\n    .react-flow__node-group.selectable:focus-visible {\n      box-shadow: var(--xy-node-boxshadow-selected, var(--xy-node-boxshadow-selected-default));\n    }\n.react-flow__node-group {\n  background-color: var(--xy-node-group-background-color, var(--xy-node-group-background-color-default));\n}\n.react-flow__nodesselection-rect,\n.react-flow__selection {\n  background: var(--xy-selection-background-color, var(--xy-selection-background-color-default));\n  border: var(--xy-selection-border, var(--xy-selection-border-default));\n}\n.react-flow__nodesselection-rect:focus,\n  .react-flow__nodesselection-rect:focus-visible,\n  .react-flow__selection:focus,\n  .react-flow__selection:focus-visible {\n    outline: none;\n  }\n.react-flow__controls-button:hover {\n      background: var(\n        --xy-controls-button-background-color-hover-props,\n        var(--xy-controls-button-background-color-hover, var(--xy-controls-button-background-color-hover-default))\n      );\n      color: var(\n        --xy-controls-button-color-hover-props,\n        var(--xy-controls-button-color-hover, var(--xy-controls-button-color-hover-default))\n      );\n    }\n.react-flow__controls-button:disabled {\n      pointer-events: none;\n    }\n.react-flow__controls-button:disabled svg {\n        fill-opacity: 0.4;\n      }\n.react-flow__controls-button:last-child {\n    border-bottom: none;\n  }\n.react-flow__controls.horizontal .react-flow__controls-button {\n    border-bottom: none;\n    border-right: 1px solid\n      var(\n        --xy-controls-button-border-color-props,\n        var(--xy-controls-button-border-color, var(--xy-controls-button-border-color-default))\n      );\n  }\n.react-flow__controls.horizontal .react-flow__controls-button:last-child {\n    border-right: none;\n  }\n.react-flow__resize-control {\n  position: absolute;\n}\n.react-flow__resize-control.left,\n.react-flow__resize-control.right {\n  cursor: ew-resize;\n}\n.react-flow__resize-control.top,\n.react-flow__resize-control.bottom {\n  cursor: ns-resize;\n}\n.react-flow__resize-control.top.left,\n.react-flow__resize-control.bottom.right {\n  cursor: nwse-resize;\n}\n.react-flow__resize-control.bottom.left,\n.react-flow__resize-control.top.right {\n  cursor: nesw-resize;\n}\n/* handle styles */\n.react-flow__resize-control.handle {\n  width: 5px;\n  height: 5px;\n  border: 1px solid #fff;\n  border-radius: 1px;\n  background-color: var(--xy-resize-background-color, var(--xy-resize-background-color-default));\n  translate: -50% -50%;\n}\n.react-flow__resize-control.handle.left {\n  left: 0;\n  top: 50%;\n}\n.react-flow__resize-control.handle.right {\n  left: 100%;\n  top: 50%;\n}\n.react-flow__resize-control.handle.top {\n  left: 50%;\n  top: 0;\n}\n.react-flow__resize-control.handle.bottom {\n  left: 50%;\n  top: 100%;\n}\n.react-flow__resize-control.handle.top.left {\n  left: 0;\n}\n.react-flow__resize-control.handle.bottom.left {\n  left: 0;\n}\n.react-flow__resize-control.handle.top.right {\n  left: 100%;\n}\n.react-flow__resize-control.handle.bottom.right {\n  left: 100%;\n}\n/* line styles */\n.react-flow__resize-control.line {\n  border-color: var(--xy-resize-background-color, var(--xy-resize-background-color-default));\n  border-width: 0;\n  border-style: solid;\n}\n.react-flow__resize-control.line.left,\n.react-flow__resize-control.line.right {\n  width: 1px;\n  transform: translate(-50%, 0);\n  top: 0;\n  height: 100%;\n}\n.react-flow__resize-control.line.left {\n  left: 0;\n  border-left-width: 1px;\n}\n.react-flow__resize-control.line.right {\n  left: 100%;\n  border-right-width: 1px;\n}\n.react-flow__resize-control.line.top,\n.react-flow__resize-control.line.bottom {\n  height: 1px;\n  transform: translate(0, -50%);\n  left: 0;\n  width: 100%;\n}\n.react-flow__resize-control.line.top {\n  top: 0;\n  border-top-width: 1px;\n}\n.react-flow__resize-control.line.bottom {\n  border-bottom-width: 1px;\n  top: 100%;\n}\n.react-flow__edge-textbg {\n  fill: var(--xy-edge-label-background-color, var(--xy-edge-label-background-color-default));\n}\n.react-flow__edge-text {\n  fill: var(--xy-edge-label-color, var(--xy-edge-label-color-default));\n}\n";
 
 // src/flow.ts
@@ -11001,6 +11001,26 @@ function parseToolArgs(raw) {
     return {};
   }
 }
+function pathHintFromArgs(raw) {
+  const parsed = parseToolArgs(raw);
+  const parsedPath = firstString(parsed.file_path) ?? firstString(parsed.path);
+  if (parsedPath !== void 0) return parsedPath;
+  if (raw === void 0) return void 0;
+  const match = /"(?:file_path|path)"\s*:\s*"((?:\\.|[^"\\])*)"/.exec(raw);
+  if (match?.[1] === void 0) return void 0;
+  try {
+    const decoded = JSON.parse(`"${match[1]}"`);
+    return typeof decoded === "string" && decoded.trim() !== "" ? decoded.trim() : void 0;
+  } catch {
+    return match[1].trim() === "" ? void 0 : match[1];
+  }
+}
+function pathFromToolResult(result) {
+  if (result === void 0) return void 0;
+  const match = /<path>([^<]+)<\/path>/.exec(result);
+  const path = match?.[1]?.trim();
+  return path === void 0 || path === "" ? void 0 : path;
+}
 function toolIconKind(name) {
   if (name === "web_search") return "search";
   if (name === "web_fetch" || name === "browser") return "globe";
@@ -11049,12 +11069,12 @@ function clipTitle(text, limit = QUERY_LIMIT) {
   if (line2.length <= limit) return line2;
   return `${line2.slice(0, limit)}\u2026`;
 }
-function toolQueryDetail(name, args) {
+function toolQueryDetail(name, args, result) {
   const parsed = parseToolArgs(args);
   if (name === "web_search") return clipTitle(firstQuery(parsed));
   if (name === "web_fetch") return clipTitle(firstString(parsed.url) ?? "");
   return clipTitle(
-    firstString(parsed.query) ?? firstString(parsed.path) ?? firstString(parsed.url) ?? firstString(parsed.pattern) ?? firstString(parsed.command) ?? ""
+    firstString(parsed.query) ?? firstString(parsed.file_path) ?? firstString(parsed.path) ?? firstString(parsed.url) ?? firstString(parsed.pattern) ?? firstString(parsed.command) ?? pathHintFromArgs(args) ?? pathFromToolResult(result) ?? ""
   );
 }
 function toolQueryFull(name, args) {
@@ -11247,6 +11267,13 @@ function searchResultCount(result, sources) {
   return { count: 0, empty: false };
 }
 
+// src/client/session-canvas.ts
+function sessionCanvasHeight(layoutHeight) {
+  const content = Math.max(300, layoutHeight + 72);
+  const viewportCap = typeof window === "undefined" ? 520 : Math.round(window.innerHeight * 0.7);
+  return Math.min(content, Math.max(300, viewportCap));
+}
+
 // src/client/CeoTeamGraph.ts
 var GraphHoverContext = (0, import_react6.createContext)({
   hoveredNodeId: null,
@@ -11325,6 +11352,12 @@ ${style_default3}
   background: var(--dsw-alias-border-l4, #5a5a5a);
 }
 .magic-ceo-canvas .react-flow__attribution { display: none; }
+[data-magic-ceo-status-strip] {
+  transition: background-color 0.12s ease;
+}
+[data-magic-ceo-status-strip]:hover {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3, #2c2c38) 70%, transparent);
+}
 .magic-ceo-node-face {
   animation: magic-ceo-node-enter 0.28s ease-out both;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -11804,7 +11837,6 @@ function MemberNode({ data }) {
         })) : null,
         (0, import_react6.createElement)("span", {
           style: {
-            marginLeft: "auto",
             fontVariantNumeric: "tabular-nums",
             color: running ? ink.accent : ink.tertiary
           }
@@ -11858,10 +11890,6 @@ function CeoNode({ data }) {
     )
   );
 }
-var noopTaskBoardSubscribe = (listener) => {
-  void listener;
-  return () => void 0;
-};
 function TaskNode({ data }) {
   const statusLabel = data.task.status === "completed" ? data.t("tasks.status.completed") : data.task.status === "in_progress" ? data.t("tasks.status.in_progress") : data.t("tasks.status.pending");
   const dot = data.task.status === "completed" ? "var(--dsw-alias-state-success, #16a34a)" : data.task.status === "in_progress" ? "var(--dsw-alias-state-business-primary, #3b82f6)" : "var(--dsw-alias-border-l3, #6b6b7a)";
@@ -12121,7 +12149,7 @@ var Canvas = (0, import_react6.memo)(function Canvas2(props) {
     });
     return { nodes, edges };
   }, [layout, props.goalPreview, props.selectedCallId, props.t, sinkStatus, props.members, props.tasks, props.selectedTaskId]);
-  const height = Math.min(520, Math.max(300, layout.height + 72));
+  const height = sessionCanvasHeight(layout.height);
   return (0, import_react6.createElement)(
     "div",
     {
@@ -12224,8 +12252,8 @@ function CeoTeamGraph(props) {
   const selected3 = (0, import_react6.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
   const roster2 = (0, import_react6.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
   const taskBoard = (0, import_react6.useSyncExternalStore)(
-    props.taskBoard?.subscribe ?? noopTaskBoardSubscribe,
-    props.taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot,
+    props.taskBoard?.subscribe ?? subscribeTaskBoard,
+    props.taskBoard?.getSnapshot ?? getTaskBoardSnapshot,
     getEmptyTaskBoardSnapshot
   );
   (0, import_react6.useEffect)(() => {
@@ -12265,58 +12293,46 @@ function CeoTeamGraph(props) {
       }
     },
     (0, import_react6.createElement)(
-      "header",
+      "button",
       {
+        type: "button",
         "data-magic-ceo-status-strip": true,
+        title: expanded ? props.t("graph.fold") : props.t("graph.expand"),
+        "aria-label": expanded ? props.t("graph.fold") : props.t("graph.expand"),
+        "aria-expanded": expanded,
+        onClick: () => {
+          setExpanded((current) => !current);
+        },
         style: {
           display: "flex",
           alignItems: "center",
           gap: 8,
-          padding: "6px 12px",
+          width: "100%",
+          margin: 0,
+          padding: "8px 12px",
+          border: 0,
           borderBottom: expanded ? `1px solid ${line.subtle}` : 0,
+          borderRadius: expanded ? 0 : 12,
+          background: "transparent",
           color: ink.secondary,
-          fontSize: 13
+          fontSize: 13,
+          textAlign: "left",
+          cursor: "pointer"
         }
       },
       (0, import_react6.createElement)(StatusIcon, { status: sinkStatus }),
       (0, import_react6.createElement)("span", {
         style: { minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
       }, [progressLabel, duration].filter((item) => item !== "").join(" \xB7 ")),
-      (0, import_react6.createElement)("button", {
-        type: "button",
-        title: expanded ? props.t("graph.fold") : props.t("graph.expand"),
-        "aria-label": expanded ? props.t("graph.fold") : props.t("graph.expand"),
-        onClick: () => {
-          setExpanded((current) => !current);
-        },
+      (0, import_react6.createElement)("span", {
+        "aria-hidden": true,
         style: {
-          border: 0,
-          background: "transparent",
-          color: ink.secondary,
-          cursor: "pointer",
+          flex: "0 0 auto",
           fontSize: 14,
           lineHeight: "18px",
           padding: "2px 6px"
         }
-      }, expanded ? "\u25B4" : "\u25BE"),
-      (0, import_react6.createElement)("button", {
-        type: "button",
-        onClick: props.openWorkspace,
-        title: props.t("graph.openCanvas"),
-        "aria-label": props.t("graph.openCanvas"),
-        style: {
-          flex: "0 0 auto",
-          border: 0,
-          borderRadius: 8,
-          background: "color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 14%, transparent)",
-          color: ink.accent,
-          cursor: "pointer",
-          fontSize: 12,
-          lineHeight: "18px",
-          padding: "4px 8px",
-          fontWeight: 510
-        }
-      }, props.t("graph.openCanvas"))
+      }, expanded ? "\u25B4" : "\u25BE")
     ),
     expanded ? (0, import_react6.createElement)(
       "div",
@@ -12361,7 +12377,7 @@ function CeoTeamGraph(props) {
 }
 
 // src/client/CeoWorkspace.ts
-var import_react11 = require("react");
+var import_react12 = require("react");
 
 // src/client/CeoMemberInspector.ts
 var import_react10 = require("react");
@@ -12943,7 +12959,7 @@ function ToolStep({
   const elapsed = useRunningElapsed(running);
   const label = toolDisplayName(step.name);
   const page = isFetch ? parseFetchPage(step.result, step.args) : void 0;
-  const detail = page?.title || toolQueryDetail(step.name, step.args);
+  const detail = page?.title || toolQueryDetail(step.name, step.args, step.result);
   const query = toolQueryFull(step.name, step.args);
   const hits = isSearch ? parseSearchHits(step.result, step.sources) : [];
   const search = isSearch ? searchResultCount(step.result, step.sources) : void 0;
@@ -13179,6 +13195,7 @@ function CeoProcessTimeline({
   steps,
   live,
   hideReportContent = false,
+  collapseProcessSteps = true,
   t
 }) {
   (0, import_react8.useEffect)(() => {
@@ -13187,8 +13204,8 @@ function CeoProcessTimeline({
   const summary = summarizeProcessSteps(steps);
   const [userExpanded, setUserExpanded] = (0, import_react8.useState)(void 0);
   if (steps.length === 0 && !live) return null;
-  const expanded = userExpanded ?? timelineDefaultExpanded(summary);
-  const summaryBar = summary.total > 0 ? (0, import_react8.createElement)(
+  const expanded = collapseProcessSteps === false ? true : userExpanded ?? timelineDefaultExpanded(summary);
+  const summaryBar = collapseProcessSteps && summary.total > 0 ? (0, import_react8.createElement)(
     "button",
     {
       type: "button",
@@ -13402,6 +13419,69 @@ function MemberFailureCard({
   );
 }
 
+// src/produced-files.ts
+function pathValue(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+function writePath(args) {
+  return pathValue(args.file_path) ?? pathValue(args.path);
+}
+function editorMutationPath(args) {
+  const path = pathValue(args.path);
+  if (path === null) return null;
+  switch (args.command) {
+    case "create":
+    case "str_replace":
+    case "insert":
+      return path;
+    default:
+      return null;
+  }
+}
+function mutationPath(step) {
+  const args = parseToolArgs(step.args);
+  const hinted = pathHintFromArgs(step.args) ?? pathFromToolResult(step.result) ?? pathHintFromArgs(step.result) ?? null;
+  switch (step.name) {
+    case "write":
+    case "file_write":
+    case "file_append":
+      return writePath(args) ?? hinted;
+    case "edit":
+    case "str_replace":
+      return writePath(args) ?? hinted;
+    case "str_replace_editor":
+      return editorMutationPath(args);
+    default:
+      return null;
+  }
+}
+function producedFilesFromProcess(steps) {
+  const paths = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const step of steps) {
+    if (step.kind !== "tool" || step.status !== "ok") continue;
+    const path = mutationPath(step);
+    if (path === null || seen.has(path)) continue;
+    seen.add(path);
+    paths.push(path);
+  }
+  return paths;
+}
+function producedFileName(path) {
+  const at = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return at === -1 ? path : path.slice(at + 1);
+}
+function isAbsolutePath(path) {
+  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path) || /^[\\/]{2}[^\\/]/.test(path);
+}
+function resolveProducedPath(cwd, path) {
+  if (isAbsolutePath(path)) return path;
+  const base = cwd ?? "";
+  if (base === "") return path;
+  const separator = base.includes("\\") ? "\\" : "/";
+  return `${base.replace(/[\\/]+$/, "")}${separator}${path}`;
+}
+
 // src/client/CeoMemberInspector.ts
 var TASK_COLLAPSE_H = 144;
 var FIELD_COLLAPSE_H = 168;
@@ -13456,6 +13536,263 @@ function section(label, body, tone) {
         whiteSpace: "pre-wrap"
       }
     }, body)
+  );
+}
+var CONTEXT_CHANNEL_LABEL = {
+  task: "\u4F60\u7684\u4EFB\u52A1",
+  team_brief: "\u56E2\u961F\u5171\u8BC6",
+  steer: "\u4E2D\u9014\u6307\u793A",
+  request: "\u539F\u59CB\u8BF7\u6C42",
+  workspace: "\u5DE5\u4F5C\u533A",
+  deliverable: "\u4EA4\u4ED8\u7269\u89C4\u683C"
+};
+function contextChannelLabel(channel) {
+  if (CONTEXT_CHANNEL_LABEL[channel] !== void 0) return CONTEXT_CHANNEL_LABEL[channel];
+  if (channel.startsWith("dependency:")) {
+    const role = channel.slice("dependency:".length).trim();
+    return role === "" ? "\u524D\u7F6E\u7ED3\u679C" : `\u524D\u7F6E\u7ED3\u679C \xB7 ${role}`;
+  }
+  return channel;
+}
+function formatChars(chars) {
+  if (chars >= 1e4) return `${(chars / 1e3).toFixed(1)}k \u5B57`;
+  return `${String(chars)} \u5B57`;
+}
+function activityLabel(activity, t) {
+  if (activity === void 0) return void 0;
+  if (activity.phase === "thinking") return t("activity.thinking");
+  if (activity.phase === "waiting") return t("activity.waiting");
+  if (activity.phase === "winding_down") return t("activity.winding");
+  if (activity.toolName !== void 0 && activity.toolName.trim() !== "") return activity.toolName;
+  return t("activity.tool");
+}
+function metricRow(label, value) {
+  return (0, import_react10.createElement)(
+    "div",
+    {
+      style: {
+        display: "flex",
+        alignItems: "baseline",
+        justifyContent: "space-between",
+        gap: 12
+      }
+    },
+    (0, import_react10.createElement)("span", { style: { flex: "none", fontSize: 12, color: MUTED2 } }, label),
+    (0, import_react10.createElement)("span", {
+      style: {
+        ...wrap,
+        textAlign: "right",
+        fontSize: 12,
+        fontVariantNumeric: "tabular-nums",
+        color: PRIMARY2
+      }
+    }, value)
+  );
+}
+function RelationRow({
+  member,
+  roster: roster2,
+  onSelect
+}) {
+  const title = displayCeoSeat(member, roster2);
+  const preview = member.task.trim();
+  const clickable = onSelect !== void 0;
+  return (0, import_react10.createElement)(
+    clickable ? "button" : "div",
+    {
+      type: clickable ? "button" : void 0,
+      onClick: clickable ? () => {
+        onSelect(member);
+      } : void 0,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        width: "100%",
+        padding: 0,
+        border: 0,
+        background: "transparent",
+        color: PRIMARY2,
+        textAlign: "left",
+        cursor: clickable ? "pointer" : "default"
+      }
+    },
+    (0, import_react10.createElement)("span", {
+      style: {
+        ...wrap,
+        flex: "1 1 0",
+        minWidth: 0,
+        overflow: "hidden",
+        fontSize: 13,
+        lineHeight: "18px",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
+      }
+    }, title),
+    preview === "" ? null : (0, import_react10.createElement)("span", {
+      style: {
+        ...wrap,
+        flex: "1 1 0",
+        minWidth: 0,
+        overflow: "hidden",
+        fontSize: 12,
+        lineHeight: "18px",
+        color: MUTED2,
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
+      }
+    }, preview)
+  );
+}
+function RelationSection({
+  title,
+  members,
+  roster: roster2,
+  onSelect
+}) {
+  if (members.length === 0) return null;
+  return (0, import_react10.createElement)(
+    "div",
+    { style: { display: "flex", flexDirection: "column", gap: 6 } },
+    (0, import_react10.createElement)("div", { style: { fontSize: 12, color: MUTED2 } }, title),
+    ...members.map((item) => (0, import_react10.createElement)(RelationRow, {
+      key: item.callId,
+      member: item,
+      roster: roster2,
+      onSelect
+    }))
+  );
+}
+function ResourceSection({
+  usage,
+  t
+}) {
+  const [open, setOpen] = (0, import_react10.useState)(true);
+  const total = usage.totalTokens ?? usage.inputTokens + usage.outputTokens;
+  return (0, import_react10.createElement)(
+    "section",
+    {
+      "data-magic-ceo-usage": true,
+      style: { display: "flex", flexDirection: "column", gap: 8, minWidth: 0, marginBottom: 16 }
+    },
+    (0, import_react10.createElement)(
+      "button",
+      {
+        type: "button",
+        onClick: () => {
+          setOpen((current) => !current);
+        },
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          width: "100%",
+          padding: 0,
+          border: 0,
+          background: "transparent",
+          color: MUTED2,
+          cursor: "pointer",
+          textAlign: "left"
+        }
+      },
+      (0, import_react10.createElement)("span", { style: { fontSize: 12, fontWeight: 510 } }, t("tokens.title")),
+      (0, import_react10.createElement)("span", {
+        style: {
+          marginLeft: "auto",
+          fontSize: 12,
+          fontVariantNumeric: "tabular-nums"
+        }
+      }, t("tokens.badge", { tokens: formatTokenCount(total) }))
+    ),
+    open ? (0, import_react10.createElement)(
+      "div",
+      {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          padding: 12,
+          borderRadius: 10,
+          background: surface.layer2
+        }
+      },
+      metricRow(t("tokens.inputLabel"), formatTokenCount(usage.inputTokens)),
+      metricRow(t("tokens.outputLabel"), formatTokenCount(usage.outputTokens)),
+      usage.reasoningTokens === void 0 ? null : metricRow(t("tokens.reasoning"), formatTokenCount(usage.reasoningTokens)),
+      usage.cacheReadTokens === void 0 ? null : metricRow(t("tokens.cacheLabel"), formatTokenCount(usage.cacheReadTokens))
+    ) : null
+  );
+}
+function ContextSection({
+  channels,
+  t
+}) {
+  const [open, setOpen] = (0, import_react10.useState)(false);
+  return (0, import_react10.createElement)(
+    "section",
+    {
+      "data-magic-ceo-context": true,
+      style: { display: "flex", flexDirection: "column", gap: 8, minWidth: 0, marginBottom: 16 }
+    },
+    (0, import_react10.createElement)(
+      "button",
+      {
+        type: "button",
+        onClick: () => {
+          setOpen((current) => !current);
+        },
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          width: "100%",
+          padding: 0,
+          border: 0,
+          background: "transparent",
+          color: MUTED2,
+          cursor: "pointer",
+          textAlign: "left"
+        }
+      },
+      (0, import_react10.createElement)("span", { style: { fontSize: 12, fontWeight: 510 } }, t("context.title")),
+      (0, import_react10.createElement)("span", {
+        style: {
+          marginLeft: "auto",
+          fontSize: 12,
+          fontVariantNumeric: "tabular-nums"
+        }
+      }, t("context.segments", { count: channels.length }))
+    ),
+    open ? (0, import_react10.createElement)(
+      "div",
+      { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      ...channels.map((channel, index2) => (0, import_react10.createElement)(
+        "div",
+        {
+          key: `${channel.channel}-${String(index2)}`,
+          style: {
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "8px 10px",
+            borderRadius: 10,
+            background: surface.layer2
+          }
+        },
+        (0, import_react10.createElement)("span", {
+          style: { ...wrap, fontSize: 13, lineHeight: "18px", color: PRIMARY2 }
+        }, contextChannelLabel(channel.channel)),
+        (0, import_react10.createElement)("span", {
+          style: {
+            flex: "none",
+            fontSize: 12,
+            fontVariantNumeric: "tabular-nums",
+            color: MUTED2
+          }
+        }, `${formatChars(channel.chars)}${channel.truncated ? t("context.truncated") : ""}`)
+      ))
+    ) : null
   );
 }
 function CollapsibleTask({
@@ -13774,13 +14111,87 @@ function resumeMessageFor(runId) {
 }
 function LiveElapsedBadge({ t }) {
   const elapsed = useElapsedSeconds(true);
+  return (0, import_react10.createElement)("span", {
+    "data-magic-ceo-elapsed": true,
+    style: { flex: "none", fontSize: 12, fontVariantNumeric: "tabular-nums", color: MUTED2 }
+  }, formatElapsed(elapsed));
+}
+var PRODUCED_SHOWN_LIMIT = 6;
+function ProducedFilesSection({
+  paths,
+  onOpenFile,
+  t
+}) {
+  if (paths.length === 0) return null;
+  const shown = paths.slice(0, PRODUCED_SHOWN_LIMIT);
+  const hidden = paths.length - shown.length;
   return (0, import_react10.createElement)(
-    "span",
-    { "data-magic-ceo-elapsed": true, style: { fontVariantNumeric: "tabular-nums", opacity: 0.75 } },
-    ` \xB7 ${t("inspector.processing", { duration: formatElapsed(elapsed) })}`
+    "section",
+    {
+      "data-magic-ceo-produced": true,
+      style: { display: "flex", flexDirection: "column", gap: 8, minWidth: 0, marginBottom: 16 }
+    },
+    (0, import_react10.createElement)(
+      "div",
+      {
+        style: { display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }
+      },
+      sectionTitle(t("produced.label")),
+      (0, import_react10.createElement)("span", {
+        style: { fontSize: 12, color: MUTED2, fontVariantNumeric: "tabular-nums" }
+      }, t("produced.count", { count: String(paths.length) }))
+    ),
+    (0, import_react10.createElement)(
+      "div",
+      {
+        "data-produced-files-row": true,
+        style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, minWidth: 0 }
+      },
+      ...shown.map((path) => (0, import_react10.createElement)(
+        "button",
+        {
+          key: path,
+          type: "button",
+          title: path,
+          "aria-label": t("produced.open", { name: path }),
+          disabled: onOpenFile === void 0,
+          onClick: onOpenFile === void 0 ? void 0 : () => {
+            onOpenFile(path);
+          },
+          style: {
+            boxSizing: "border-box",
+            display: "inline-flex",
+            alignItems: "center",
+            maxWidth: "100%",
+            margin: 0,
+            padding: 0,
+            border: 0,
+            borderRadius: 4,
+            background: "transparent",
+            color: "var(--dsw-alias-link, #7aa2ff)",
+            cursor: onOpenFile === void 0 ? "default" : "pointer",
+            fontSize: 13,
+            fontWeight: 500,
+            lineHeight: "22px",
+            textAlign: "left"
+          }
+        },
+        (0, import_react10.createElement)("span", {
+          style: {
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }
+        }, producedFileName(path))
+      )),
+      hidden > 0 ? (0, import_react10.createElement)("span", {
+        style: { flex: "none", fontSize: 12, color: MUTED2, whiteSpace: "nowrap" }
+      }, t(hidden === 1 ? "produced.moreOne" : "produced.more", { count: String(hidden) })) : null
+    )
   );
 }
-function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
+function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, onBack, onSelectMember, onOpenFile, t }) {
   const process2 = member.process ?? [];
   const report = presentCeoMemberReport(member);
   const presentation = presentCeoMember({ ...member, report });
@@ -13801,6 +14212,19 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
   }));
   const showDebrief = summary !== "" || debriefDetails.length > 0;
   const showEmpty = filled.length === 0 && !member.lastMessage && process2.length === 0 && !live;
+  const livePhase = live ? activityLabel(member.activity, t) : void 0;
+  const upstream = roster2.filter(
+    (item) => member.dependsOn.includes(item.callId) || item.runId !== void 0 && member.dependsOn.includes(item.runId) || item.rawId !== void 0 && member.dependsOn.includes(item.rawId) || item.memberId !== void 0 && member.dependsOn.includes(item.memberId) || member.dependsOn.includes(item.role)
+  );
+  const downstream = roster2.filter(
+    (item) => item.callId !== member.callId && (item.dependsOn.includes(member.callId) || member.runId !== void 0 && item.dependsOn.includes(member.runId) || member.rawId !== void 0 && item.dependsOn.includes(member.rawId) || member.memberId !== void 0 && item.dependsOn.includes(member.memberId))
+  );
+  const unresolvedDepends = member.dependsOn.filter(
+    (dep) => upstream.some(
+      (item) => item.callId === dep || item.runId === dep || item.rawId === dep || item.memberId === dep || item.role === dep
+    ) === false
+  );
+  const showRelations = upstream.length > 0 || downstream.length > 0 || unresolvedDepends.length > 0;
   return (0, import_react10.createElement)(
     "aside",
     {
@@ -13818,24 +14242,36 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
     (0, import_react10.createElement)(
       "header",
       {
-        style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0, marginBottom: 16 }
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          minWidth: 0,
+          marginBottom: 12
+        }
       },
       (0, import_react10.createElement)("span", {
-        style: {
-          ...wrap,
-          flex: 1,
-          overflow: "hidden",
-          fontSize: 14,
-          fontWeight: 500,
-          lineHeight: "20px",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          color: PRIMARY2
-        }
-      }, displayCeoSeat(member, roster2)),
-      (0, import_react10.createElement)("span", {
         style: badgeStyle(presentation.viewStatus)
-      }, t(`status.${presentation.viewStatus}`))
+      }, livePhase ?? t(`status.${presentation.viewStatus}`)),
+      live ? (0, import_react10.createElement)(LiveElapsedBadge, { t }) : null,
+      member.halted === true ? (0, import_react10.createElement)("span", { style: badgeStyle("unverified") }, t("halted.badge")) : null,
+      onBack === void 0 ? null : (0, import_react10.createElement)("button", {
+        type: "button",
+        "aria-label": t("inspector.close"),
+        onClick: onBack,
+        style: {
+          marginLeft: "auto",
+          width: 28,
+          height: 28,
+          border: 0,
+          borderRadius: 99,
+          background: "transparent",
+          color: MUTED2,
+          cursor: "pointer",
+          fontSize: 16,
+          lineHeight: "28px"
+        }
+      }, "\xD7")
     ),
     failureCard !== void 0 ? (0, import_react10.createElement)(MemberFailureCard, {
       card: failureCard,
@@ -13858,45 +14294,19 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
         lineHeight: "20px",
         color: PRIMARY2
       }
-    }, t("inspector.live"), (0, import_react10.createElement)(LiveElapsedBadge, { t })) : null,
-    (0, import_react10.createElement)(CollapsibleTask, { text: member.task, t }),
-    member.dependsOn.length > 0 ? section(t("depends.on"), member.dependsOn.join(", ")) : null,
-    member.usage !== void 0 ? (0, import_react10.createElement)(
-      "div",
-      {
-        "data-magic-ceo-usage": true,
-        style: {
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 6,
-          marginBottom: 16,
-          fontVariantNumeric: "tabular-nums",
-          fontSize: 12,
-          color: MUTED2
-        }
-      },
-      (0, import_react10.createElement)("span", {
-        style: {
-          padding: "2px 8px",
-          borderRadius: 99,
-          background: surface.layer2
-        }
-      }, t("tokens.badge", {
-        tokens: formatTokenCount(
-          member.usage.totalTokens ?? member.usage.inputTokens + member.usage.outputTokens
-        )
-      })),
-      (0, import_react10.createElement)("span", null, t("tokens.input", { tokens: formatTokenCount(member.usage.inputTokens) })),
-      (0, import_react10.createElement)("span", null, t("tokens.output", { tokens: formatTokenCount(member.usage.outputTokens) })),
-      member.usage.cacheReadTokens !== void 0 ? (0, import_react10.createElement)("span", null, t("tokens.cache", { tokens: formatTokenCount(member.usage.cacheReadTokens) })) : null
-    ) : null,
-    member.contextChannels !== void 0 && member.contextChannels.length > 0 ? section(
-      t("context.title"),
-      member.contextChannels.map(
-        (channel) => `${channel.channel}: ${String(channel.chars)}${channel.truncated ? "\uFF08\u5DF2\u622A\u65AD\uFF09" : ""}`
-      ).join("\n")
-    ) : null,
-    member.redirectedNote !== void 0 ? section(t("intervene.redirected"), member.redirectedNote, "warn") : null,
+    }, t("inspector.live")) : null,
+    member.halted === true ? (0, import_react10.createElement)("div", {
+      style: {
+        marginBottom: 16,
+        padding: "10px 12px",
+        borderRadius: 12,
+        border: `0.5px solid ${WARN}`,
+        background: "color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 8%, transparent)",
+        fontSize: 13,
+        lineHeight: "20px",
+        color: WARN
+      }
+    }, t("halted.hint")) : null,
     onIntervene !== void 0 && (member.status === "running" || presentation.viewStatus === "unknown_after_restart") ? (0, import_react10.createElement)(InterveneControls, {
       member,
       send: (message) => {
@@ -13904,6 +14314,9 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       },
       t
     }) : null,
+    (0, import_react10.createElement)(CollapsibleTask, { text: member.task, t }),
+    member.contextChannels !== void 0 && member.contextChannels.length > 0 ? (0, import_react10.createElement)(ContextSection, { channels: member.contextChannels, t }) : null,
+    member.redirectedNote !== void 0 ? section(t("intervene.redirected"), member.redirectedNote, "warn") : null,
     process2.length > 0 || live ? (0, import_react10.createElement)(
       "div",
       { style: { marginBottom: 16 } },
@@ -13911,9 +14324,15 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
         steps: process2,
         live,
         hideReportContent: true,
+        collapseProcessSteps: false,
         t
       })
     ) : null,
+    (0, import_react10.createElement)(ProducedFilesSection, {
+      paths: producedFilesFromProcess(process2),
+      onOpenFile,
+      t
+    }),
     presentation.viewStatus === "unknown_after_restart" ? (0, import_react10.createElement)("div", {
       style: { marginBottom: 16, fontSize: 12, color: MUTED2 }
     }, t("inspector.unknown")) : showEmpty ? (0, import_react10.createElement)("div", {
@@ -13939,7 +14358,71 @@ function CeoMemberInspector({ member, roster: roster2 = [], onIntervene, t }) {
       details: debriefDetails,
       t
     }) : null,
-    member.answeredDecision ? section(t("decision.sent"), member.answeredDecision) : null
+    member.answeredDecision ? section(t("decision.sent"), member.answeredDecision) : null,
+    showRelations ? section(
+      t("relations.title"),
+      (0, import_react10.createElement)(
+        "div",
+        { style: { display: "flex", flexDirection: "column", gap: 12 } },
+        (0, import_react10.createElement)(RelationSection, {
+          title: t("relations.depends"),
+          members: upstream,
+          roster: roster2,
+          onSelect: onSelectMember
+        }),
+        unresolvedDepends.length > 0 ? (0, import_react10.createElement)("div", {
+          style: { ...wrap, fontSize: 12, lineHeight: "18px", color: MUTED2 }
+        }, unresolvedDepends.join(", ")) : null,
+        (0, import_react10.createElement)(RelationSection, {
+          title: t("relations.downstream"),
+          members: downstream,
+          roster: roster2,
+          onSelect: onSelectMember
+        })
+      )
+    ) : null,
+    member.usage !== void 0 ? (0, import_react10.createElement)(ResourceSection, { usage: member.usage, t }) : null
+  );
+}
+
+// src/client/MemberAvatar.ts
+var import_react11 = require("react");
+function MemberAvatar({
+  size = 28,
+  color: color2
+}) {
+  return (0, import_react11.createElement)(
+    "span",
+    {
+      "aria-hidden": true,
+      "data-magic-ceo-member-avatar": true,
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flex: "none",
+        width: size,
+        height: size,
+        color: color2 ?? ink.secondary
+      }
+    },
+    (0, import_react11.createElement)(
+      "svg",
+      {
+        width: size,
+        height: size,
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: 1.6,
+        strokeLinecap: "round",
+        strokeLinejoin: "round"
+      },
+      (0, import_react11.createElement)("circle", { cx: 12, cy: 12, r: 10 }),
+      (0, import_react11.createElement)("circle", { cx: 12, cy: 8.4, r: 2.7 }),
+      (0, import_react11.createElement)("path", { d: "M7.7 17.8c.6-2.6 2.3-4 4.3-4s3.7 1.4 4.3 4" }),
+      (0, import_react11.createElement)("path", { d: "M7.7 17.8v1.6M16.3 17.8v1.6" })
+    )
   );
 }
 
@@ -13954,12 +14437,12 @@ function nextStickState(stuck, gap) {
   return gap < STICK_ATTACH_PX;
 }
 function useStickToBottom(resetKey, followOnReset) {
-  const scrollRef = (0, import_react11.useRef)(null);
-  const contentRef = (0, import_react11.useRef)(null);
-  const stickRef = (0, import_react11.useRef)(true);
-  const followRef = (0, import_react11.useRef)(followOnReset);
+  const scrollRef = (0, import_react12.useRef)(null);
+  const contentRef = (0, import_react12.useRef)(null);
+  const stickRef = (0, import_react12.useRef)(true);
+  const followRef = (0, import_react12.useRef)(followOnReset);
   followRef.current = followOnReset;
-  const [atBottom, setAtBottom] = (0, import_react11.useState)(true);
+  const [atBottom, setAtBottom] = (0, import_react12.useState)(true);
   const applyStick = (stuck) => {
     stickRef.current = stuck;
     setAtBottom(stuck);
@@ -13973,7 +14456,7 @@ function useStickToBottom(resetKey, followOnReset) {
     applyStick(true);
     scrollToBottom();
   };
-  (0, import_react11.useEffect)(() => {
+  (0, import_react12.useEffect)(() => {
     const el = scrollRef.current;
     if (el === null) return;
     const onScroll = () => {
@@ -13989,7 +14472,7 @@ function useStickToBottom(resetKey, followOnReset) {
       el.removeEventListener("wheel", onWheel);
     };
   }, [resetKey]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react12.useEffect)(() => {
     const content = contentRef.current;
     const viewport = scrollRef.current;
     if (content === null || typeof ResizeObserver === "undefined") return;
@@ -14010,7 +14493,7 @@ function useStickToBottom(resetKey, followOnReset) {
       observer.disconnect();
     };
   }, [resetKey]);
-  (0, import_react11.useLayoutEffect)(() => {
+  (0, import_react12.useLayoutEffect)(() => {
     if (followRef.current) {
       applyStick(true);
       scrollToBottom();
@@ -14026,7 +14509,7 @@ function ToBottomButton({
   onClick,
   label
 }) {
-  return (0, import_react11.createElement)(
+  return (0, import_react12.createElement)(
     "button",
     {
       type: "button",
@@ -14052,7 +14535,7 @@ function ToBottomButton({
         cursor: "pointer"
       }
     },
-    (0, import_react11.createElement)("svg", {
+    (0, import_react12.createElement)("svg", {
       "aria-hidden": true,
       width: 16,
       height: 16,
@@ -14062,7 +14545,7 @@ function ToBottomButton({
       strokeWidth: 2,
       strokeLinecap: "round",
       strokeLinejoin: "round"
-    }, (0, import_react11.createElement)("path", { d: "m6 9 6 6 6-6" }))
+    }, (0, import_react12.createElement)("path", { d: "m6 9 6 6 6-6" }))
   );
 }
 function attentionTone(kind) {
@@ -14080,7 +14563,7 @@ function attentionPreview(member, kind) {
   return member.report?.notDone ?? member.lastMessage ?? member.task;
 }
 function rowButton(key, title, preview, meta, tone, onSelect) {
-  return (0, import_react11.createElement)(
+  return (0, import_react12.createElement)(
     "button",
     {
       key,
@@ -14100,11 +14583,12 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
         cursor: "pointer"
       }
     },
-    (0, import_react11.createElement)(
+    (0, import_react12.createElement)(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8 } },
-      (0, import_react11.createElement)("strong", { style: { fontSize: 13, fontWeight: 510 } }, title),
-      (0, import_react11.createElement)("span", {
+      (0, import_react12.createElement)(MemberAvatar, { size: 28 }),
+      (0, import_react12.createElement)("strong", { style: { fontSize: 13, fontWeight: 510, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
+      (0, import_react12.createElement)("span", {
         style: {
           marginLeft: "auto",
           fontSize: 11,
@@ -14112,7 +14596,7 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
         }
       }, meta)
     ),
-    (0, import_react11.createElement)("div", {
+    (0, import_react12.createElement)("div", {
       style: {
         fontSize: 12,
         lineHeight: "18px",
@@ -14129,17 +14613,17 @@ function rowButton(key, title, preview, meta, tone, onSelect) {
 function overview(roster2, t) {
   const attention = ceoAttentionItems(roster2);
   if (roster2.length === 0) {
-    return (0, import_react11.createElement)("div", {
+    return (0, import_react12.createElement)("div", {
       style: { fontSize: 13, lineHeight: "20px", color: ink.tertiary }
     }, t("workspace.empty"));
   }
-  return (0, import_react11.createElement)(
+  return (0, import_react12.createElement)(
     "div",
     { style: { display: "flex", flexDirection: "column", gap: 16 } },
-    attention.length > 0 ? (0, import_react11.createElement)(
+    attention.length > 0 ? (0, import_react12.createElement)(
       "section",
       { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      (0, import_react11.createElement)("div", {
+      (0, import_react12.createElement)("div", {
         style: { fontSize: 12, fontWeight: 510, color: ink.tertiary }
       }, t("attention.title")),
       ...attention.map((item) => rowButton(
@@ -14153,10 +14637,10 @@ function overview(roster2, t) {
         }
       ))
     ) : null,
-    (0, import_react11.createElement)(
+    (0, import_react12.createElement)(
       "section",
       { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      (0, import_react11.createElement)("div", {
+      (0, import_react12.createElement)("div", {
         style: { fontSize: 12, fontWeight: 510, color: ink.tertiary }
       }, t("roster.title")),
       ...roster2.map((member) => {
@@ -14175,9 +14659,9 @@ function overview(roster2, t) {
     )
   );
 }
-function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
-  const selected3 = (0, import_react11.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
-  const roster2 = (0, import_react11.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
+function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, onOpenFile, t }) {
+  const selected3 = (0, import_react12.useSyncExternalStore)(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
+  const roster2 = (0, import_react12.useSyncExternalStore)(subscribeCeoSelection, getCeoRoster, getCeoRoster);
   const tabActions = useTabInfo().tab.actions;
   const close = () => {
     if (selected3 !== null) {
@@ -14186,10 +14670,17 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
     }
     tabActions.close();
   };
-  const inspector = selected3 === null ? null : (0, import_react11.createElement)(CeoMemberInspector, {
+  const inspector = selected3 === null ? null : (0, import_react12.createElement)(CeoMemberInspector, {
     key: selected3.callId,
     member: selected3,
     roster: roster2,
+    onBack: () => {
+      selectCeoMember(null);
+    },
+    onSelectMember: (next) => {
+      selectCeoMember(next);
+    },
+    onOpenFile,
     onIntervene: sendIntervention === void 0 ? void 0 : (action, note) => {
       const runId = selected3.runId ?? selected3.rawId ?? selected3.callId;
       const message = action === "halt" ? `Call ceo_replan with halt run_id ${runId}. The member was stopped by the user; do not rewrite its work as success.` : action === "resume" ? `Call ceo_replan with resume run_id ${runId}. Redispatch this unknown_after_restart node from scratch.` : action === "retry" ? `Call ceo_replan with retry run_id ${runId}. Redispatch this failed node from scratch; keep the original task unchanged.` : action === "replan" ? `Call ceo_replan with replan run_id ${runId}. ${note}` : note;
@@ -14201,7 +14692,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
     selected3?.callId ?? sessionId ?? "",
     selected3?.status === "running"
   );
-  return (0, import_react11.createElement)(
+  return (0, import_react12.createElement)(
     "div",
     {
       "data-magic-ceo-workspace": true,
@@ -14217,7 +14708,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
         color: ink.primary
       }
     },
-    selected3 === null ? (0, import_react11.createElement)(
+    selected3 === null ? (0, import_react12.createElement)(
       "header",
       {
         style: {
@@ -14228,7 +14719,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           borderBottom: `0.5px solid ${line.subtle}`
         }
       },
-      (0, import_react11.createElement)("div", {
+      (0, import_react12.createElement)("div", {
         style: {
           overflow: "hidden",
           fontSize: 14,
@@ -14238,7 +14729,7 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           whiteSpace: "nowrap"
         }
       }, t("workspace.overview")),
-      (0, import_react11.createElement)("button", {
+      (0, import_react12.createElement)("button", {
         type: "button",
         "aria-label": t("workspace.close"),
         onClick: close,
@@ -14254,33 +14745,8 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           fontSize: 11
         }
       }, t("workspace.close"))
-    ) : (0, import_react11.createElement)(
-      "div",
-      {
-        style: {
-          display: "flex",
-          justifyContent: "flex-end",
-          padding: "8px 12px 0"
-        }
-      },
-      (0, import_react11.createElement)("button", {
-        type: "button",
-        "aria-label": t("workspace.close"),
-        onClick: close,
-        style: {
-          width: 28,
-          height: 28,
-          border: 0,
-          borderRadius: 99,
-          background: "transparent",
-          color: ink.tertiary,
-          cursor: "pointer",
-          fontSize: 16,
-          lineHeight: "28px"
-        }
-      }, "\xD7")
-    ),
-    (0, import_react11.createElement)(
+    ) : null,
+    (0, import_react12.createElement)(
       "div",
       {
         style: {
@@ -14290,31 +14756,45 @@ function CeoWorkspace({ sessionId, useTabInfo, sendIntervention, t }) {
           minHeight: 0
         }
       },
-      (0, import_react11.createElement)(
+      (0, import_react12.createElement)(
         "div",
         {
           ref: scrollRef,
           style: {
             height: "100%",
             minWidth: 0,
-            padding: selected3 === null ? 16 : "8px 16px 16px",
+            padding: selected3 === null ? 16 : "12px 16px 16px",
             overflowX: "hidden",
             overflowY: "auto"
           }
         },
-        (0, import_react11.createElement)(
+        (0, import_react12.createElement)(
           "div",
           { ref: contentRef },
           selected3 === null ? overview(roster2, t) : inspector
         )
       ),
-      selected3 !== null && atBottom === false ? (0, import_react11.createElement)(ToBottomButton, { onClick: jumpToBottom, label: t("workspace.toBottom") }) : null
+      selected3 !== null && atBottom === false ? (0, import_react12.createElement)(ToBottomButton, { onClick: jumpToBottom, label: t("workspace.toBottom") }) : null
     )
   );
 }
 
+// src/client/MemberTabTitle.ts
+var import_react13 = require("react");
+function MemberTabTitle({
+  useTabInfo
+}) {
+  const { tab } = useTabInfo();
+  return (0, import_react13.createElement)(
+    import_react13.Fragment,
+    null,
+    (0, import_react13.createElement)(MemberAvatar, { size: 16, color: ink.tertiary }),
+    tab.title
+  );
+}
+
 // src/client/TurnProcessSummary.ts
-var import_react12 = require("react");
+var import_react14 = require("react");
 
 // src/turn-summary.ts
 var EMPTY_TURN_TOOL_SUMMARY = { names: [] };
@@ -14358,8 +14838,8 @@ function selectTurnTools(snapshot2, spec) {
 
 // src/client/TurnProcessSummary.ts
 function useTickingNow(active) {
-  const [, setTick] = (0, import_react12.useState)(0);
-  (0, import_react12.useEffect)(() => {
+  const [, setTick] = (0, import_react14.useState)(0);
+  (0, import_react14.useEffect)(() => {
     if (!active) return void 0;
     const id2 = setInterval(() => {
       setTick((value) => value + 1);
@@ -14395,7 +14875,7 @@ function TurnProcessSummary({ node, turnProcess, useChat, t }) {
   }
   const label = [duration, ...parts].filter((part) => part !== null && part !== "").join(" \xB7 ");
   const finalLabel = label === "" ? t("turn.thought") : label;
-  return (0, import_react12.createElement)(
+  return (0, import_react14.createElement)(
     "button",
     {
       type: "button",
@@ -14423,7 +14903,7 @@ function TurnProcessSummary({ node, turnProcess, useChat, t }) {
         textAlign: "left"
       }
     },
-    (0, import_react12.createElement)("span", {
+    (0, import_react14.createElement)("span", {
       "aria-hidden": true,
       style: {
         flex: "0 0 auto",
@@ -14432,7 +14912,7 @@ function TurnProcessSummary({ node, turnProcess, useChat, t }) {
         transform: turnProcess.open ? "rotate(0deg)" : "rotate(-90deg)"
       }
     }, "\u25BE"),
-    (0, import_react12.createElement)("span", {
+    (0, import_react14.createElement)("span", {
       style: {
         flex: 1,
         minWidth: 0,
@@ -14633,7 +15113,7 @@ var ceoMemberReportDefinition = {
 // src/client/register.ts
 var inject = ["uiConversation", "slots", "sessions", "locale", "sidebarRightTabs", "sidebarRight", "remote", "remote.agentTeams"];
 try {
-  window.sessionStorage.setItem("magic-ceo-lib", "v7-20260912");
+  window.sessionStorage.setItem("magic-ceo-lib", "v16-20260915-produced-path");
 } catch {
 }
 var zh = {
@@ -14646,7 +15126,6 @@ var zh = {
   "graph.ceoRunning": "\u6B63\u5728\u751F\u6210\u6C47\u603B\u2026",
   "graph.ceoDone": "\u5DF2\u6C47\u603B",
   "graph.members": "{count} \u4E2A\u6210\u5458",
-  "graph.openCanvas": "\u5728\u753B\u5E03\u6253\u5F00",
   "graph.fold": "\u6536\u8D77",
   "graph.expand": "\u5C55\u5F00",
   "graph.elapsed": "\u7528\u65F6 {duration}",
@@ -14740,12 +15219,31 @@ var zh = {
   "decision.sending": "\u53D1\u9001\u4E2D",
   "decision.sent": "\u5DF2\u62CD\u677F",
   "decision.error": "\u62CD\u677F\u6CA1\u6709\u53D1\u51FA",
-  "tokens.badge": "{tokens} tokens",
+  "tokens.title": "\u8D44\u6E90\u6D88\u8017",
+  "tokens.badge": "{tokens} tok",
   "tokens.tooltip": "\u8F93\u5165 {input} \xB7 \u8F93\u51FA {output}",
   "tokens.input": "\u8F93\u5165 {tokens}",
   "tokens.output": "\u8F93\u51FA {tokens}",
   "tokens.cache": "\u7F13\u5B58 {tokens}",
-  "context.title": "\u6536\u5230\u7684\u4E0A\u4E0B\u6587\uFF08\u901A\u9053\uFF1A\u5B57\u7B26\u6570\uFF09",
+  "tokens.inputLabel": "\u8F93\u5165 token",
+  "tokens.outputLabel": "\u8F93\u51FA token",
+  "tokens.reasoning": "\u63A8\u7406",
+  "tokens.cacheLabel": "\u7F13\u5B58\u8BFB\u53D6",
+  "context.title": "\u6536\u5230\u7684\u4E0A\u4E0B\u6587",
+  "context.segments": "{count} \u6BB5",
+  "context.truncated": " \xB7 \u5DF2\u622A\u65AD",
+  "relations.title": "\u5173\u7CFB",
+  "relations.depends": "\u4F9D\u8D56",
+  "relations.downstream": "\u540E\u7EED",
+  "activity.thinking": "\u601D\u8003\u4E2D",
+  "activity.tool": "\u8C03\u7528\u5DE5\u5177",
+  "activity.waiting": "\u7B49\u5F85\u4E0A\u6E38",
+  "activity.winding": "\u6536\u5C3E\u4E2D",
+  "produced.label": "\u672C\u8F6E\u6587\u4EF6\u6539\u52A8",
+  "produced.count": "{count} \u4E2A",
+  "produced.moreOne": "+ 1 \u4E2A\u6587\u4EF6",
+  "produced.more": "+ {count} \u4E2A\u6587\u4EF6",
+  "produced.open": "\u6253\u5F00 {name}",
   "halted.badge": "\u5DF2\u505C\u6B62",
   "halted.hint": "\u8FD9\u4E2A\u6210\u5458\u88AB\u4F60\u505C\u6B62\u4E86\u3002\u7528 replace \u6216 add \u7EE7\u7EED\u8FD9\u9879\u5DE5\u4F5C\u3002",
   "intervene.title": "\u53EA\u5E72\u9884\u8FD9\u4E2A\u4EBA",
@@ -14795,7 +15293,6 @@ var en = {
   "graph.ceoRunning": "Writing the summary\u2026",
   "graph.ceoDone": "Summarized",
   "graph.members": "{count} members",
-  "graph.openCanvas": "Open in canvas",
   "graph.fold": "Collapse",
   "graph.expand": "Expand",
   "graph.elapsed": "took {duration}",
@@ -14888,12 +15385,31 @@ var en = {
   "decision.sending": "Sending",
   "decision.sent": "Decision sent",
   "decision.error": "The decision was not sent",
+  "tokens.title": "Resources",
   "tokens.badge": "{tokens} tok",
   "tokens.tooltip": "input {input} \xB7 output {output}",
   "tokens.input": "in {tokens}",
   "tokens.output": "out {tokens}",
   "tokens.cache": "cache {tokens}",
-  "context.title": "Received context (channel: chars)",
+  "tokens.inputLabel": "Input tokens",
+  "tokens.outputLabel": "Output tokens",
+  "tokens.reasoning": "Reasoning",
+  "tokens.cacheLabel": "Cache read",
+  "context.title": "Received context",
+  "context.segments": "{count} blocks",
+  "context.truncated": " \xB7 truncated",
+  "relations.title": "Relations",
+  "relations.depends": "Depends on",
+  "relations.downstream": "Follows",
+  "activity.thinking": "Thinking",
+  "activity.tool": "Calling a tool",
+  "activity.waiting": "Waiting on upstream",
+  "activity.winding": "Winding down",
+  "produced.label": "Files changed",
+  "produced.count": "{count}",
+  "produced.moreOne": "+ 1 file",
+  "produced.more": "+ {count} files",
+  "produced.open": "Open {name}",
   "halted.badge": "\u5DF2\u505C\u6B62",
   "halted.hint": "This member was stopped by the user. Replace or add a node to continue the work.",
   "intervene.title": "\u53EA\u5E72\u9884\u8FD9\u4E2A\u4EBA",
@@ -15024,9 +15540,22 @@ function registerCeoUi(ctx, components) {
       // PRD-04 §12（2026-09-13 裁定）：任务板只在画布呈现，右坞不注入任务板面。
       sendIntervention: (message) => {
         void promptSession(sessionId, message);
+      },
+      onOpenFile: (path) => {
+        const cwd = ctx.sessions.list?.getSnapshot().byId?.[sessionId]?.cwd;
+        const absolute = resolveProducedPath(cwd, path);
+        ctx.get?.("betterSidebar")?.openFile?.(
+          { sessionId, ...cwd === void 0 ? {} : { cwd } },
+          absolute,
+          producedFileName(path)
+        );
       }
     })
   }, components.workspace));
+  ctx.slots.inject("sidebar.right.pane.tab.title", () => ctx.slots.register({
+    name: "sidebar.right.pane.tab.title",
+    key: CEO_MEMBER_TAB_ID
+  }, components.tabTitle));
   try {
     window.sessionStorage.setItem("magic-ceo-apply", "done-" + String(Date.now()));
   } catch {
@@ -15040,7 +15569,8 @@ function apply(ctx) {
     row: CeoDelegateRow,
     workspace: CeoWorkspace,
     drawer: CeoDecisionDock,
-    turnProcess: TurnProcessSummary
+    turnProcess: TurnProcessSummary,
+    tabTitle: MemberTabTitle
   });
 }
 /*! Bundled license information:

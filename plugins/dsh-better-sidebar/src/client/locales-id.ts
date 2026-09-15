@@ -202,6 +202,7 @@ export const id: Record<string, string> = {
   gitDetail: 'Lihat detail perubahan',
   referenceFile: '@berkas',
   addToConversation: 'Tambahkan ke obrolan',
+  fileComment: 'Komentar',
   copyRelative: 'Salin path relatif',
   copyAbsolute: 'Salin path absolut',
   rename: 'Ganti nama',

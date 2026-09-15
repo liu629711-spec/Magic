@@ -205,6 +205,7 @@ export const ar: Record<string, string> = {
   gitDetail: 'عرض تفاصيل التغيير',
   referenceFile: '@ملف',
   addToConversation: 'إضافة إلى المحادثة',
+  fileComment: 'تعليق',
   copyRelative: 'نسخ المسار النسبي',
   copyAbsolute: 'نسخ المسار المطلق',
   rename: 'إعادة تسمية',

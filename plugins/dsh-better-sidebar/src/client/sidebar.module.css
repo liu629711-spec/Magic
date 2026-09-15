@@ -446,7 +446,15 @@ body[data-dsh-sidebar-dragging] .bottomPanel {
 
 /* An empty pane's welcome cards: a responsive grid of compact cards — as
    many per row as the pane width allows; rows that cannot fit the pane
-   height are clipped (never scrolled or squeezed smaller). */
+   height are clipped (never scrolled or squeezed smaller).
+   Magic local patch (2026-09-14): the card grid is no longer rendered (the
+   bottom workbench is terminal-only); .paneEmpty keeps the empty branch a
+   flex-filling no-op surface. */
+.paneEmpty {
+  flex: 1;
+  min-height: 0;
+}
+
 .paneEmptyCards {
   flex: 1;
   min-height: 0;

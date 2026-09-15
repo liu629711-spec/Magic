@@ -41,6 +41,15 @@ export interface FileNotesStore {
 
 const STORAGE_PREFIX = 'dsh-sidenote:filenotes:v1:'
 
+/** Two rows are the same note when every user-facing field matches. */
+function sameNote(a: FileNote, b: FileNote): boolean {
+  return a.sessionId === b.sessionId
+    && a.kind === b.kind
+    && a.header === b.header
+    && a.quote === b.quote
+    && (a.note ?? '') === (b.note ?? '')
+}
+
 function revive(value: unknown): FileNote | null {
   if (typeof value !== 'object' || value === null) return null
   const r = value as Record<string, unknown>
@@ -71,28 +80,6 @@ export function createFileNotesStore(
     ? (typeof localStorage !== 'undefined' ? localStorage : null)
     : storage
 
-  if (store != null) {
-    try {
-      const keys: string[] = []
-      for (let i = 0; i < store.length; i += 1) {
-        const key = store.key(i)
-        if (typeof key === 'string' && key.startsWith(STORAGE_PREFIX)) keys.push(key)
-      }
-      for (const key of keys) {
-        const parsed: unknown = JSON.parse(store.getItem(key) ?? 'null')
-        if (!Array.isArray(parsed)) continue
-        for (const raw of parsed) {
-          const item = revive(raw)
-          if (item === null) continue
-          items.push(item)
-          nextId = Math.max(nextId, item.id + 1)
-        }
-      }
-    } catch (error) {
-      console.warn('[dsh-sidenote] 文件片段持久化读取失败（按空起步）:', error)
-    }
-  }
-
   const emit = (): void => {
     version += 1
     for (const listener of listeners) listener()
@@ -105,6 +92,45 @@ export function createFileNotesStore(
       else store.setItem(STORAGE_PREFIX + sessionId, JSON.stringify(rows))
     } catch (error) {
       console.warn('[dsh-sidenote] 文件片段持久化写入失败:', error)
+    }
+  }
+
+  if (store != null) {
+    try {
+      const keys: string[] = []
+      for (let i = 0; i < store.length; i += 1) {
+        const key = store.key(i)
+        if (typeof key === 'string' && key.startsWith(STORAGE_PREFIX)) keys.push(key)
+      }
+      const foldedSessions = new Set<string>()
+      for (const key of keys) {
+        const parsed: unknown = JSON.parse(store.getItem(key) ?? 'null')
+        if (!Array.isArray(parsed)) continue
+        for (const raw of parsed) {
+          const item = revive(raw)
+          if (item === null) continue
+          // 折叠历史重复行（旧版本 add 无去重写入的脏数据）：保留最小 id，
+          // sent 取并集；被折叠的会话回写一次持久化。
+          const dup = items.find(prev => sameNote(prev, item))
+          if (dup !== undefined) {
+            foldedSessions.add(item.sessionId)
+            if (item.id < dup.id) {
+              items = items.map(prev => prev === dup
+                ? { ...item, sent: dup.sent === true || item.sent === true ? true : item.sent }
+                : prev)
+              nextId = Math.max(nextId, item.id + 1)
+            } else if (item.sent === true && dup.sent !== true) {
+              items = items.map(prev => prev === dup ? { ...prev, sent: true } : prev)
+            }
+            continue
+          }
+          items.push(item)
+          nextId = Math.max(nextId, item.id + 1)
+        }
+      }
+      for (const sessionId of foldedSessions) persist(sessionId)
+    } catch (error) {
+      console.warn('[dsh-sidenote] 文件片段持久化读取失败（按空起步）:', error)
     }
   }
 
@@ -121,6 +147,15 @@ export function createFileNotesStore(
       return items.filter(item => item.sessionId === sessionId && item.sent !== true)
     },
     add(sessionId, seed) {
+      // 内容去重：同一会话里 kind/header/quote/note 完全相同的条目只存一份。
+      // 提交路径可能因双击/重试触发两次 add，重复卡片即源于此；已有行保持
+      // 原 id 与 sent 状态（重发窗口内不重复拼进协议块）。
+      const existing = items.find(item => item.sessionId === sessionId
+        && item.kind === seed.kind
+        && item.header === seed.header
+        && item.quote === seed.quote
+        && item.note === (seed.note !== undefined && seed.note.trim() !== '' ? seed.note : undefined))
+      if (existing !== undefined) return existing
       const item: FileNote = {
         id: nextId,
         sessionId,
@@ -137,9 +172,12 @@ export function createFileNotesStore(
       return item
     },
     remove(sessionId, id) {
-      const before = items.length
-      items = items.filter(item => !(item.sessionId === sessionId && item.id === id))
-      if (items.length === before) return
+      const target = items.find(item => item.sessionId === sessionId && item.id === id)
+      if (target === undefined) return
+      // 按 id 删除目标行，再兜底清掉同内容残留（历史重复未折叠时的
+      // 幸存行）：保证卡片上的「删除」一次点击即清空该评论。
+      items = items.filter(item => !(item.sessionId === sessionId
+        && (item.id === id || (item.id !== target.id && sameNote(item, target)))))
       persist(sessionId)
       emit()
     },

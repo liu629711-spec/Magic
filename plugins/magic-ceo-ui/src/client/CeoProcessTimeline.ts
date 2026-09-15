@@ -22,6 +22,11 @@ export interface CeoProcessTimelineProps {
   steps: readonly CeoProcessStep[]
   live: boolean
   hideReportContent?: boolean
+  /**
+   * AgentCore RunDetailBody 右坞：`collapseProcessSteps={false}`，过程不折成摘要行。
+   * 缺省 true，留给主会话 turn 摘要那种需要收过程的面。
+   */
+  collapseProcessSteps?: boolean
   t: (key: string, params?: Record<string, unknown>) => string
 }
 
@@ -595,7 +600,7 @@ function ToolStep({
   const elapsed = useRunningElapsed(running)
   const label = toolDisplayName(step.name)
   const page = isFetch ? parseFetchPage(step.result, step.args) : undefined
-  const detail = page?.title || toolQueryDetail(step.name, step.args)
+  const detail = page?.title || toolQueryDetail(step.name, step.args, step.result)
   const query = toolQueryFull(step.name, step.args)
   const hits = isSearch ? parseSearchHits(step.result, step.sources) : []
   const search = isSearch ? searchResultCount(step.result, step.sources) : undefined
@@ -863,6 +868,7 @@ export function CeoProcessTimeline({
   steps,
   live,
   hideReportContent = false,
+  collapseProcessSteps = true,
   t,
 }: CeoProcessTimelineProps) {
   useEffect(() => { ensurePulseCss() }, [])
@@ -870,8 +876,10 @@ export function CeoProcessTimeline({
   const summary = summarizeProcessSteps(steps)
   const [userExpanded, setUserExpanded] = useState<boolean | undefined>(undefined)
   if (steps.length === 0 && !live) return null
-  const expanded = userExpanded ?? timelineDefaultExpanded(summary)
-  const summaryBar = summary.total > 0
+  const expanded = collapseProcessSteps === false
+    ? true
+    : (userExpanded ?? timelineDefaultExpanded(summary))
+  const summaryBar = collapseProcessSteps && summary.total > 0
     ? h('button', {
       type: 'button',
       'data-magic-ceo-process-summary': true,

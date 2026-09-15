@@ -46,6 +46,35 @@ function clip(text: string, limit: number): string {
   return `${text.slice(0, limit)}…`
 }
 
+/**
+ * Write/edit JSON is mostly file content. Clipping the raw string at ARGS_LIMIT
+ * yields invalid JSON, so the client cannot read `file_path`. Keep the path
+ * (and editor command) when the full arguments do not fit.
+ */
+function clipToolArgs(raw: string): string {
+  if (raw.length <= ARGS_LIMIT) return raw
+  let parsed: Record<string, unknown> | undefined
+  try {
+    parsed = asRecord(JSON.parse(raw))
+  } catch {
+    parsed = undefined
+  }
+  if (parsed !== undefined) {
+    const compact: Record<string, string> = {}
+    if (typeof parsed.file_path === 'string' && parsed.file_path.trim() !== '') {
+      compact.file_path = parsed.file_path
+    }
+    if (typeof parsed.path === 'string' && parsed.path.trim() !== '') {
+      compact.path = parsed.path
+    }
+    if (typeof parsed.command === 'string' && parsed.command.trim() !== '') {
+      compact.command = parsed.command
+    }
+    if (Object.keys(compact).length > 0) return JSON.stringify(compact)
+  }
+  return clip(raw, ARGS_LIMIT)
+}
+
 function textFromBlocks(content: unknown): string {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return ''
@@ -198,7 +227,7 @@ function applyEvent(mirror: Mirror, event: ChildSessionEvent): void {
     const name = typeof data?.name === 'string' ? data.name : 'tool'
     emitPhase(mirror, 'tool', name)
     if (toolCallId === '') return
-    const args = typeof data?.arguments === 'string' ? clip(data.arguments, ARGS_LIMIT) : undefined
+    const args = typeof data?.arguments === 'string' ? clipToolArgs(data.arguments) : undefined
     emit(mirror, {
       kind: 'tool-start',
       toolCallId,

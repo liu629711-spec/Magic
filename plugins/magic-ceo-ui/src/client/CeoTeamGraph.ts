@@ -23,7 +23,7 @@ import { ceoFlowMemberId, ceoTeamSinkStatus, createRosterMerger, layoutCeoTeamFl
 import { waitingOnOf } from '../failure-card.ts'
 import { formatElapsed, useElapsedSeconds } from './elapsed.ts'
 import { parseCeoMemberReport } from '../team.ts'
-import { getEmptyTaskBoardSnapshot, selectCeoTask, type TaskBoardSnapshot } from './task-board-store.ts'
+import { getEmptyTaskBoardSnapshot, getTaskBoardSnapshot, selectCeoTask, subscribeTaskBoard, type TaskBoardSnapshot } from './task-board-store.ts'
 import { toolDisplayName } from '../processView.ts'
 import {
   debriefSummaryOf,
@@ -35,6 +35,7 @@ import {
   type CeoTeamView,
 } from '../team.ts'
 import { getCeoRoster, getSelectedCeoMember, publishCeoTeam, selectCeoMember, subscribeCeoSelection } from './selection.ts'
+import { sessionCanvasHeight } from './session-canvas.ts'
 import { ink, line, surface } from './theme.ts'
 
 export interface CeoTeamGraphTaskBoard {
@@ -184,6 +185,12 @@ ${xyflowCss}
   background: var(--dsw-alias-border-l4, #5a5a5a);
 }
 .magic-ceo-canvas .react-flow__attribution { display: none; }
+[data-magic-ceo-status-strip] {
+  transition: background-color 0.12s ease;
+}
+[data-magic-ceo-status-strip]:hover {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3, #2c2c38) 70%, transparent);
+}
 .magic-ceo-node-face {
   animation: magic-ceo-node-enter 0.28s ease-out both;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -716,7 +723,6 @@ function MemberNode({ data }: NodeProps<Node<MemberNodeData>>) {
         : null,
       h('span', {
         style: {
-          marginLeft: 'auto',
           fontVariantNumeric: 'tabular-nums',
           color: running ? ink.accent : ink.tertiary,
         },
@@ -776,11 +782,6 @@ function CeoNode({ data }: NodeProps<Node<CeoNodeData>>) {
     ...handles('ceo'),
     ),
   )
-}
-
-const noopTaskBoardSubscribe = (listener: () => void): (() => void) => {
-  void listener
-  return () => undefined
 }
 
 type TaskNodeData = {
@@ -967,6 +968,7 @@ const CANVAS_FIT_VIEW = { padding: 0.2, minZoom: 0.35, maxZoom: 1.6 } as const
  *
  * 只在「首次量到真实尺寸」时补正一次：之后保留用户自己的平移/缩放。
  */
+
 function RefitWhenMeasured(): null {
   const { fitView } = useReactFlow()
   const width = useStore(state => state.width)
@@ -1098,7 +1100,7 @@ const Canvas = memo(function Canvas(props: {
     return { nodes, edges }
   }, [layout, props.goalPreview, props.selectedCallId, props.t, sinkStatus, props.members, props.tasks, props.selectedTaskId])
 
-  const height = Math.min(520, Math.max(300, layout.height + 72))
+  const height = sessionCanvasHeight(layout.height)
 
   return h('div', {
     className: 'magic-ceo-canvas',
@@ -1204,8 +1206,8 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
   const selected = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember)
   const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster)
   const taskBoard = useSyncExternalStore(
-    props.taskBoard?.subscribe ?? noopTaskBoardSubscribe,
-    props.taskBoard?.getSnapshot ?? getEmptyTaskBoardSnapshot,
+    props.taskBoard?.subscribe ?? subscribeTaskBoard,
+    props.taskBoard?.getSnapshot ?? getTaskBoardSnapshot,
     getEmptyTaskBoardSnapshot,
   )
   useEffect(() => { props.taskBoard?.reload() }, [props.taskBoard])
@@ -1245,55 +1247,43 @@ export function CeoTeamGraph(props: CeoTeamGraphProps) {
       background: surface.layer2,
     },
   },
-    h('header', {
+    h('button', {
+      type: 'button',
       'data-magic-ceo-status-strip': true,
+      title: expanded ? props.t('graph.fold') : props.t('graph.expand'),
+      'aria-label': expanded ? props.t('graph.fold') : props.t('graph.expand'),
+      'aria-expanded': expanded,
+      onClick: () => { setExpanded(current => !current) },
       style: {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '6px 12px',
+        width: '100%',
+        margin: 0,
+        padding: '8px 12px',
+        border: 0,
         borderBottom: expanded ? `1px solid ${line.subtle}` : 0,
+        borderRadius: expanded ? 0 : 12,
+        background: 'transparent',
         color: ink.secondary,
         fontSize: 13,
+        textAlign: 'left',
+        cursor: 'pointer',
       },
     },
       h(StatusIcon, { status: sinkStatus }),
       h('span', {
         style: { minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
       }, [progressLabel, duration].filter(item => item !== '').join(' · ')),
-      h('button', {
-        type: 'button',
-        title: expanded ? props.t('graph.fold') : props.t('graph.expand'),
-        'aria-label': expanded ? props.t('graph.fold') : props.t('graph.expand'),
-        onClick: () => { setExpanded(current => !current) },
+      h('span', {
+        'aria-hidden': true,
         style: {
-          border: 0,
-          background: 'transparent',
-          color: ink.secondary,
-          cursor: 'pointer',
+          flex: '0 0 auto',
           fontSize: 14,
           lineHeight: '18px',
           padding: '2px 6px',
         },
       }, expanded ? '▴' : '▾'),
-      h('button', {
-        type: 'button',
-        onClick: props.openWorkspace,
-        title: props.t('graph.openCanvas'),
-        'aria-label': props.t('graph.openCanvas'),
-        style: {
-          flex: '0 0 auto',
-          border: 0,
-          borderRadius: 8,
-          background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 14%, transparent)',
-          color: ink.accent,
-          cursor: 'pointer',
-          fontSize: 12,
-          lineHeight: '18px',
-          padding: '4px 8px',
-          fontWeight: 510,
-        },
-      }, props.t('graph.openCanvas')),
     ),
     expanded
       ? h('div', { style: { display: 'flex', flexDirection: 'column' } },

@@ -1,3 +1,4 @@
+import { producedFileName, resolveProducedPath } from '../produced-files.ts'
 import { ceoMemberReportDefinition, ceoTeamDefinition } from './definition.ts'
 import type { TaskBoardApi } from './task-board-data.ts'
 import { getTaskBoardSnapshot, reloadTaskBoard, subscribeTaskBoard } from './task-board-store.ts'
@@ -7,7 +8,7 @@ import { displayCeoSeat } from '../team.ts'
 export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.agentTeams']
 
 // 模块加载标记：用于确认浏览器拿到的是否为新构建（排查 lib 缓存）。
-try { window.sessionStorage.setItem('magic-ceo-lib', 'v7-20260912') } catch { /* 忽略 */ }
+try { window.sessionStorage.setItem('magic-ceo-lib', 'v16-20260915-produced-path') } catch { /* 忽略 */ }
 
 export const zh = {
   'graph.title': 'CEO 编排图',
@@ -19,7 +20,6 @@ export const zh = {
   'graph.ceoRunning': '正在生成汇总…',
   'graph.ceoDone': '已汇总',
   'graph.members': '{count} 个成员',
-  'graph.openCanvas': '在画布打开',
   'graph.fold': '收起',
   'graph.expand': '展开',
   'graph.elapsed': '用时 {duration}',
@@ -113,12 +113,31 @@ export const zh = {
   'decision.sending': '发送中',
   'decision.sent': '已拍板',
   'decision.error': '拍板没有发出',
-  'tokens.badge': '{tokens} tokens',
+  'tokens.title': '资源消耗',
+  'tokens.badge': '{tokens} tok',
   'tokens.tooltip': '输入 {input} · 输出 {output}',
   'tokens.input': '输入 {tokens}',
   'tokens.output': '输出 {tokens}',
   'tokens.cache': '缓存 {tokens}',
-  'context.title': '收到的上下文（通道：字符数）',
+  'tokens.inputLabel': '输入 token',
+  'tokens.outputLabel': '输出 token',
+  'tokens.reasoning': '推理',
+  'tokens.cacheLabel': '缓存读取',
+  'context.title': '收到的上下文',
+  'context.segments': '{count} 段',
+  'context.truncated': ' · 已截断',
+  'relations.title': '关系',
+  'relations.depends': '依赖',
+  'relations.downstream': '后续',
+  'activity.thinking': '思考中',
+  'activity.tool': '调用工具',
+  'activity.waiting': '等待上游',
+  'activity.winding': '收尾中',
+  'produced.label': '本轮文件改动',
+  'produced.count': '{count} 个',
+  'produced.moreOne': '+ 1 个文件',
+  'produced.more': '+ {count} 个文件',
+  'produced.open': '打开 {name}',
   'halted.badge': '已停止',
   'halted.hint': '这个成员被你停止了。用 replace 或 add 继续这项工作。',
   'intervene.title': '只干预这个人',
@@ -169,7 +188,6 @@ export const en = {
   'graph.ceoRunning': 'Writing the summary…',
   'graph.ceoDone': 'Summarized',
   'graph.members': '{count} members',
-  'graph.openCanvas': 'Open in canvas',
   'graph.fold': 'Collapse',
   'graph.expand': 'Expand',
   'graph.elapsed': 'took {duration}',
@@ -262,12 +280,31 @@ export const en = {
   'decision.sending': 'Sending',
   'decision.sent': 'Decision sent',
   'decision.error': 'The decision was not sent',
+  'tokens.title': 'Resources',
   'tokens.badge': '{tokens} tok',
   'tokens.tooltip': 'input {input} · output {output}',
   'tokens.input': 'in {tokens}',
   'tokens.output': 'out {tokens}',
   'tokens.cache': 'cache {tokens}',
-  'context.title': 'Received context (channel: chars)',
+  'tokens.inputLabel': 'Input tokens',
+  'tokens.outputLabel': 'Output tokens',
+  'tokens.reasoning': 'Reasoning',
+  'tokens.cacheLabel': 'Cache read',
+  'context.title': 'Received context',
+  'context.segments': '{count} blocks',
+  'context.truncated': ' · truncated',
+  'relations.title': 'Relations',
+  'relations.depends': 'Depends on',
+  'relations.downstream': 'Follows',
+  'activity.thinking': 'Thinking',
+  'activity.tool': 'Calling a tool',
+  'activity.waiting': 'Waiting on upstream',
+  'activity.winding': 'Winding down',
+  'produced.label': 'Files changed',
+  'produced.count': '{count}',
+  'produced.moreOne': '+ 1 file',
+  'produced.more': '+ {count} files',
+  'produced.open': 'Open {name}',
   'halted.badge': '已停止',
   'halted.hint': 'This member was stopped by the user. Replace or add a node to continue the work.',
   'intervene.title': '只干预这个人',
@@ -316,7 +353,7 @@ export interface CeoUiContext {
   }
   sessions: {
     open: (id: string) => void
-    list?: { getSnapshot: () => { current?: string } }
+    list?: { getSnapshot: () => { current?: string; byId?: Record<string, { cwd?: string } | undefined> } }
     binding?: (id: string) => {
       session?: {
         prompt?: (
@@ -355,6 +392,9 @@ export interface CeoUiContext {
   sidebarRight: {
     openTab: (kind: string, options?: { params?: unknown }) => void
   }
+  get?: (name: string) => {
+    openFile?: (scope: { sessionId: string; cwd?: string }, path: string, title?: string) => void
+  } | undefined
   slots: {
     inject: (name: string, factory: () => unknown) => unknown
     register: (spec: Record<string, unknown>, component: unknown) => unknown
@@ -368,7 +408,7 @@ export const CEO_MEMBER_TAB_ID = '@magic/dsh-ceo-ui/member-workspace'
 
 export function registerCeoUi(
   ctx: CeoUiContext,
-  components: { graph: unknown; row: unknown; workspace: unknown; drawer: unknown; turnProcess: unknown },
+  components: { graph: unknown; row: unknown; workspace: unknown; drawer: unknown; turnProcess: unknown; tabTitle: unknown },
 ) {
   ctx.uiConversation.events.register(ceoTeamDefinition)
   ctx.uiConversation.events.register(ceoMemberReportDefinition)
@@ -400,7 +440,9 @@ export function registerCeoUi(
     key: 'ceo-team',
     locale: 'magicCeo',
     inject: () => ({
-      openWorkspace: () => { ctx.sidebarRight.openTab(CEO_MEMBER_TAB_KIND) },
+      openWorkspace: () => {
+        ctx.sidebarRight.openTab(CEO_MEMBER_TAB_KIND)
+      },
       sessionId: ctx.sessions.list?.getSnapshot().current,
       taskBoard: taskBoardHandle,
     }),
@@ -474,7 +516,21 @@ export function registerCeoUi(
       sessionId,
       // PRD-04 §12（2026-09-13 裁定）：任务板只在画布呈现，右坞不注入任务板面。
       sendIntervention: (message: string) => { void promptSession(sessionId, message) },
+      onOpenFile: (path: string) => {
+        const cwd = ctx.sessions.list?.getSnapshot().byId?.[sessionId]?.cwd
+        const absolute = resolveProducedPath(cwd, path)
+        ctx.get?.('betterSidebar')?.openFile?.(
+          { sessionId, ...cwd === undefined ? {} : { cwd } },
+          absolute,
+          producedFileName(path),
+        )
+      },
     }),
   }, components.workspace))
+  // 对齐「开始」tab：chip 走 sidebar.right.pane.tab.title，图标画在标题文字前。
+  ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+    name: 'sidebar.right.pane.tab.title',
+    key: CEO_MEMBER_TAB_ID,
+  }, components.tabTitle))
   try { window.sessionStorage.setItem('magic-ceo-apply', 'done-' + String(Date.now())) } catch { /* 忽略 */ }
 }

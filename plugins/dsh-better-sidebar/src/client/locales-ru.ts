@@ -200,6 +200,7 @@ export const ru: Record<string, string> = {
   gitDetail: 'Просмотр изменений',
   referenceFile: '@файл',
   addToConversation: 'Добавить в диалог',
+  fileComment: 'Комментарий',
   copyRelative: 'Копировать относительный путь',
   copyAbsolute: 'Копировать абсолютный путь',
   rename: 'Переименовать',
