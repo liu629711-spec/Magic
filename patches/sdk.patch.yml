@@ -1,0 +1,49 @@
+# Load the Magic product plugins into a DSH **sdk** profile.
+#
+# 与 web.patch.yml 的差异：本文件只挂 Magic 自研产品插件（host 侧）+ 官方
+# Agent Teams 服务层 + 会话检索工具，不含任何 web/客户端专属挂载
+# （better-sidebar / sidenote / 汉化 / univer / optimizer / browser 三行——
+# 它们 inject webServer 或 webRuntime，在 sdk profile 下永远 pending，
+# 导致 assertEntriesActivated 启动失败）。
+# 供 tools/sdk-smoke 及未来自有桌面客户端经 dsh-sdk-client 的 patches 使用。
+#
+# 用法：
+#   dsh --profile sdk --patch <absolute-path-to-this-file>
+
+# ── 官方 Agent Teams 层（服务 only，与 web.patch.yml 形态 A' 一致）───────────
+- insert:
+    - id: agent-team
+      name: ../reference-project/deepseek-harness/packages/experimental/agent-team/lib/index.js
+      config:
+        maxMembers: 32
+        maxTasks: 256
+        maxPendingMessagesPerMember: 64
+        maxMessageBytes: 65536
+        disposalTimeoutMs: 5000
+
+# ── 会话历史检索（同 web.patch.yml）──────────────────────────────────────────
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-query.sqlite')
+    openAt: first-search
+
+- insert:
+    - id: tool-session-query
+      name: ../reference-project/deepseek-harness/packages/session-query/tool-session-query/src/index.ts
+
+# ── Magic 产品插件层 ─────────────────────────────────────────────────────────
+- insert:
+    - id: magic-work-mode
+      name: ../plugins/magic-work-mode/src/index.ts
+    - id: magic-ledger
+      name: ../plugins/magic-ledger/src/index.ts
+    - id: magic-memory
+      name: ../plugins/magic-memory/src/index.ts
+    - id: magic-consult
+      name: ../plugins/magic-consult/src/index.ts
+    - id: magic-devtools
+      name: ../plugins/magic-devtools/src/index.ts
+    - id: magic-export
+      name: ../plugins/magic-export/src/index.ts
+    - id: magic-ceo
+      name: ../plugins/magic-ceo/src/index.ts
