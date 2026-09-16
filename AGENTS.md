@@ -12,17 +12,21 @@
 
 ## 当前架构
 
-`main` 是 DSH 插件工作区。Magic 产品能力以 Cordis 插件形式接入 DSH，不重新实现 Agent 执行底座，也不把 DSH 改成独立桌面应用后再反向接插件。
+`main` 是 DSH 插件工作区。Magic 产品能力以 Cordis 插件形式接入 DSH，不重新实现 Agent 执行底座。
+
+产品交付形态（2026-09-16 用户裁定，PRD-01 §2.1）：**自有 Tauri 桌面客户端**（对标 Codex，界面基准 `stitch_codex_ui_clone/`）+ DSH 后台 runtime。客户端经 `dsh-sdk-client`（主干，`patches/sdk.patch.yml`）驱动 runtime，审批/文件等界面能力按需补充 Remote 通道（`dsh web` 网关）；`dsh web` 自带界面降级为开发调试通道。技术细节与验证证据见 `docs/02-实现/09-自有客户端架构.md`。旧 `old-design` 分支的 Tauri 实现仅作历史追溯，不构成约束。
 
 | 内容 | 路径 | 用途 |
 | --- | --- | --- |
-| Magic 产品规则 | `docs/01-产品/PRD-01` 至 `PRD-05` | 唯一正式 PRD |
+| Magic 产品规则 | `docs/01-产品/PRD-01`、`PRD-02`、`PRD-04`、`PRD-05` | 唯一正式 PRD |
 | Magic 插件 | `plugins/` | 自研 DSH 插件 |
-| DSH 加载补丁 | `patches/web.patch.yml` | web profile overlay |
+| web 调试通道 overlay | `patches/web.patch.yml` | `dsh web` 调试 + Remote 网关宿主 |
+| 自有客户端 runtime overlay | `patches/sdk.patch.yml` | Tauri 客户端经 SDK 驱动的 runtime 挂载清单 |
+| 界面设计基准 | `stitch_codex_ui_clone/` | 自有客户端设计系统与界面稿（唯一视觉基准） |
 | 参考项目 | `reference-project/` | 本地源码研究，不提交第三方完整仓 |
-| 旧桌面实现 | `old-design` 分支 | 归档，不作为当前实现 |
+| 旧桌面实现 | `old-design` 分支 | 归档，仅追溯，不作为当前实现或复用来源 |
 
-CEO 模式和工程模式是两个独立插件。使用 CEO 不等于建立工程；建立工程必须用户明确确认。
+工程模式已从产品中移除（2026-09-15 用户裁定）：`magic-engineering` 插件与 PRD-03 已删除，不做长期工程组织。CEO 模式是唯一的协作组织方式。
 
 ## 修改规则
 

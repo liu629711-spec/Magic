@@ -16,7 +16,7 @@
 3. 用户方向错了要纠正，不要只服从。
 4. 产品语义只以 docs/01-产品/PRD-01 至 PRD-05 为准。不要新建平行 PRD。产品变更先改对应既有 PRD。
 5. main 是 DSH 插件工作区。Magic 以 Cordis 插件叠在 DSH 上，不复制 DSH 的 session / tool / agent-loop，也不把 DSH 改成独立桌面应用再反向接插件。
-6. CEO 模式 ≠ 建立工程。工程必须用户明确确认。PRD-03 暂缓。
+6. 工程模式已于 2026-09-15 移除（插件与 PRD-03 已删除）；CEO 是唯一协作组织方式。
 
 # 先读（按这个顺序）
 
@@ -45,7 +45,6 @@ Magic 产品层（已挂）：
 - plugins/magic-ceo-ui
 
 有意不挂：
-- plugins/magic-engineering（仓里有，不进 patch）
 - 没有 plugins/magic-consult
 
 对齐底座：
@@ -126,7 +125,7 @@ Windows 注意：DSH 的 apps/cli/node_modules 可能 Filename too long，与跟
   原因：无 parent 的顶层会话默认是 lead（agent-team/src/roster.ts:92-115），工具安装门槛是 tryMembership 有定义就装（tool-agent-team/src/index.ts:397-399）。两者相乘 ⇒ 每个普通会话都看到 Team 工具
 - 不把 CEO 派活迁到 spawnTeammate / 官方 mailbox
 - 不把检查器迁到 rightbar，也不先做画布内面板，除非用户选定
-- 不挂 magic-engineering
+- 不重建 magic-engineering / PRD-03（2026-09-15 用户裁定移除）
 - 不做 Python 波次 CHECKPOINT / SCOPE / lease
 - 子代理不要 ask_user
 - 不要 NoteWall / debate / playbooks

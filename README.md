@@ -2,11 +2,11 @@
 
 Magic is a product layer on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). DSH owns agent execution, tools, files, terminals, sessions, storage, and workspaces. Magic owns work mode, orchestration, the delivery contract, memory, task ledger, responsibility, and delivery.
 
-This `main` branch is a DSH plugin workspace. The previous Rust/Tauri desktop stack is archived on [`old-design`](https://github.com/liu629711-spec/Magic/tree/old-design). Engineering organization is postponed.
+This `main` branch is a DSH plugin workspace. The previous Rust/Tauri desktop stack is archived on [`old-design`](https://github.com/liu629711-spec/Magic/tree/old-design).
 
 ## Product
 
-Canonical product rules live in `docs/01-产品/PRD-01` through `PRD-05`; the document map is in [`docs/README.md`](docs/README.md). PRD-03 (engineering organization) is **deferred**. Technical implementation constraints and the AgentCore capability map live in [`docs/02-实现`](docs/02-实现).
+Canonical product rules live in `docs/01-产品/PRD-01`, `PRD-02`, `PRD-04`, and `PRD-05`; the document map is in [`docs/README.md`](docs/README.md). Technical implementation constraints and the AgentCore capability map live in [`docs/02-实现`](docs/02-实现).
 
 | Plugin | Product meaning | User command |
 | --- | --- | --- |
@@ -18,9 +18,8 @@ Canonical product rules live in `docs/01-产品/PRD-01` through `PRD-05`; the do
 | `@magic/dsh-consult` | Unified on-demand retrieval (memory topics + rules) | `consult` |
 | `@magic/dsh-devtools` | Developer tools: archive pack/extract, whitelisted git ops | `archive_create`, `archive_extract`, `git_ops` |
 | `@magic/dsh-export` | Deliverable export (md → docx/pdf) | `md_to_docx`, `md_to_pdf` |
-| `@magic/dsh-engineering` | Long-lived engineering organization (deferred, not loaded) | — |
 
-CEO mode does not create engineering. Engineering is postponed and needs a separate explicit decision before it is restarted.
+Engineering organization was removed from the product on 2026-09-15 (plugin and PRD-03 deleted); CEO is the only collaboration mode.
 
 ## Layout
 
@@ -33,7 +32,6 @@ plugins/magic-memory         scoped memory plugin
 plugins/magic-consult        unified on-demand retrieval plugin
 plugins/magic-devtools       developer tools plugin
 plugins/magic-export         deliverable export plugin
-plugins/magic-engineering    engineering plugin (deferred, not loaded)
 plugins/magic-browser        retired first-cut agent browser (Playwright + live canvas) — UNMOUNTED 2026-09-13; retro in docs/02-实现/08-自研浏览器插件.md
 plugins/dsh-better-sidebar   vendored community sidebar workbench (MIT; upstream omdsh-dev/DSH-better-sidebar)
 plugins/dsh-univer-office    vendored Univer Office integration (Apache-2.0; upstream dream-num/dsh-univer-office; standalone nested workspace — install/build inside its dir)
@@ -51,7 +49,7 @@ tools/contract-smoke         contract smoke check (static, zero-dependency)
 
 ## Run
 
-DSH must already be installed (`npx @deepseek-ai/dsh` or a source checkout). The overlay loads work-mode, the CEO host plugin, and the CEO team graph; engineering is postponed.
+DSH must already be installed (`npx @deepseek-ai/dsh` or a source checkout). The overlay loads work-mode, the CEO host plugin, and the CEO team graph.
 
 The plugin row in `patches/web.patch.yml` is a path relative to that file, not an npm package name. `--patch` itself is resolved from the current working directory.
 

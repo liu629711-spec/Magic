@@ -38,7 +38,7 @@ dsh: 0.1.5-rc.2 / c291e7961a
 - id: magic-work-mode / magic-ledger / magic-memory / magic-ceo / magic-ceo-ui
 ```
 
-`tool-agent-team` 不在树中。`magic-engineering` 不在树中。
+`tool-agent-team` 不在树中。`magic-engineering` 已于 2026-09-15 移除。
 
 相对路径由 `anchorInsertedPluginNames` 转成 `file://`（`DSH/packages/boot/app-boot/src/index.ts`）。`--dump-config` 只算配置、不 import 包（`DSH/apps/cli/src/args.ts`）——能预检插入顺序，**查不出包解析失败**。
 
