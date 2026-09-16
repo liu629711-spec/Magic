@@ -1,4 +1,5 @@
 packages:
+  - apps/magic-desktop
   - plugins/*
   # dsh-univer-office 是自包含 monorepo（自带 pnpm-workspace.yaml/lockfile/
   # packageManager），按嵌套独立工作区维护，不并入根 workspace：
