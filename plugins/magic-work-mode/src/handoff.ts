@@ -54,7 +54,7 @@ function journalMembers(data: unknown): WorkModeHandoffMember[] {
   })
 }
 
-/** Snapshot of the latest CEO plan/journal on this session. Not an engineering ledger. */
+/** Snapshot of the latest CEO plan/journal on this session. */
 export function workModeHandoffOf(session: PersistSession | undefined): WorkModeHandoff {
   const events = session?.snapshotEvents?.() ?? []
   let summary: string | undefined
@@ -89,7 +89,6 @@ export function describeWorkModeConfirm(
   const lines = [
     WORK_MODE_CONFIRM_PREFIX,
     `Current work mode: ${fromLabel}. Next session default would be ${toLabel}.`,
-    'Old run facts stay as they are. This does not create or close an engineering organization.',
   ]
   if (handoff.summary !== undefined) lines.push(`Goal: ${handoff.summary}`)
   if (handoff.members.length > 0) {

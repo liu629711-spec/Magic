@@ -103,7 +103,6 @@ const CEO_GRAPH_RULES = [
   '- When the graph yields (a member blocked or a bind_after_deps node ready), report that state to the user in your reply before doing anything else. If the tool receipts fail so you cannot see the graph, say so and ask before finishing the delivery yourself — silently replacing the graph with manual work is forbidden.',
   '- A bind_after_deps node waits until its producers finish, then the graph yields. Call ceo_replan binds to finalize it before it starts.',
   '- Use ceo_replan on the same graph to bind, steer queued nodes, add nodes, continue a blocked member, replace a failed node, or stop the remaining tail. Do not call ceo_delegate again for that graph.',
-  '- Using CEO does not create an engineering organization.',
 ]
 
 export function ceoModePrompt(mode: 'agent' | 'ceo'): string {

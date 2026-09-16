@@ -71,7 +71,6 @@ function explainMode(mode: WorkMode): string[] {
     return [
       'The session lead owns division of labor, dependencies, reporting, blockers, and a single delivery.',
       'Members are working agents, not reduced tools.',
-      'Using CEO does not create an engineering organization.',
     ]
   }
   return [

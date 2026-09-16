@@ -106,8 +106,6 @@ export function workModePrompt(mode: WorkMode): string {
       '- Current work mode: CEO. This session (or this input) is already CEO. Do not behave as a solo agent.',
       '- You are the session lead: divide work, track dependencies, report blockers, and deliver one result.',
       '- Members are working agents, not reduced tools.',
-      '- Using CEO does not create an engineering organization.',
-      '- Creating an engineering organization requires a separate explicit user confirmation.',
     ].join('\n')
   }
   return [
@@ -117,7 +115,6 @@ export function workModePrompt(mode: WorkMode): string {
     '- Enter CEO only when the user explicitly asks for CEO or the session default is CEO.',
     '- A once-CEO choice applies only to the current input. After that input is queued, return to the session default.',
     '- CEO organizes work packages and reports a single result. It is not a permanent organization.',
-    '- Creating an engineering organization requires a separate explicit user confirmation.',
   ].join('\n')
 }
 
