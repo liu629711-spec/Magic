@@ -1,0 +1,20 @@
+/* 对话区壳布局（vendor 组件样式全部来自 dsh-chat 的 CSS Module；这里只有壳）。
+ * 内容列宽与 DSH web 对齐：--dsh-chat-content-width（tokens.css，748px）。 */
+
+.flow {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.flowInner {
+  display: flex;
+  flex-direction: column;
+  max-width: var(--dsh-chat-content-width);
+  margin-inline: auto;
+  padding: 24px 16px 32px;
+}
+
+.flowItem {
+  padding-block: 2px;
+}

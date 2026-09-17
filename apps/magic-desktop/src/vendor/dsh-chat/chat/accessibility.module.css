@@ -1,0 +1,10 @@
+/* vendored from @deepseek-ai/dsh-client-ui-chat@0.1.5-rc.2 client/chat/accessibility.module.css */
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

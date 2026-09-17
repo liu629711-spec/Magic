@@ -1,0 +1,75 @@
+/* vendored token bridge for @deepseek-ai/dsh-client-ui-chat@0.1.5-rc.2 +
+ * @deepseek-ai/dsh-client-ui-tool@0.1.5-rc.2 client CSS（Magic 客户端复用）。
+ *
+ * 桥法照 better-sidebar/tokens.css：扫描搬入的 *.module.css 实际引用的令牌，
+ * 已由 better-sidebar 桥定义的（--dsw-alias-bg-base、--dsw-alias-border-l1/l2、
+ * --dsw-alias-label-primary/secondary/tertiary、--dsw-alias-interactive-bg-hover、
+ * --dsw-alias-state-error/warn/business-primary、--ds-font-family-code 等）不再
+ * 重复定义；这里只补 ui-chat / ui-tool 的 CSS 额外引用、而 better-sidebar 未
+ * 覆盖的令牌。暗色取值按源包 ui-theme design-platform.css 的
+ * body[data-ds-dark-theme] 桥到 Magic stitch 暗色 token（取具体值，便于
+ * getComputedStyle 解析）。
+ *
+ * 两层作用域（与 better-sidebar 相同）：
+ * - `.vendor-dsh-chat`：vendor 组件挂载点作用域（换肤覆写留口）。
+ * - `:root, body`：兜底（值必须是具体值，不能是 var() 嵌套引用）。 */
+
+:root,
+body {
+  /* ── 内容字号轴（ui-theme 的 body 发布轴）── */
+  --dsh-content-font-size: 14px;
+  --dsh-content-font-delta: 0px;
+  --dsh-content-font-size-secondary: 13px; /* 源：min(size-1px, max(13px, size-2px))，取默认值 */
+  --dsh-content-font-delta-secondary: 0px;
+
+  /* ── 消息列宽（ConversationRoot 发布；未挂载时的兜底与源 fallback 一致）── */
+  --dsh-chat-content-width: 748px;
+
+  /* ── 描边 ── */
+  --dsw-alias-border-l3: rgba(255, 255, 255, 0.16); /* 源暗色 border-l3 */
+
+  /* ── 文本 ── */
+  --dsw-alias-label-caption: #8c909f; /* 源暗色 neutral-bluish-600，桥到 stitch outline */
+  --dsw-alias-label-primary-dimmed: #c2c6d6; /* 源暗色 neutral-bluish-100，近似 on-surface-variant */
+
+  /* ── 交互 ── */
+  --dsw-alias-interactive-bg-hover-solid: #353638; /* 源暗色 neutral-bluish-800 */
+
+  /* ── 代码块面 ── */
+  --dsw-alias-markdown-code-block: #1b1b1d; /* 源暗色 neutral-bluish-900 */
+
+  /* ── specific 面 ── */
+  --dsw-specific-bubble: #2c2c2e; /* 源暗色 neutral-bluish-850（用户气泡底） */
+  --dsw-specific-input-major: #2c2c2e; /* 源暗色 neutral-bluish-850（文件卡底） */
+
+  /* ── 字体（font 简写）── */
+  --dsw-font-markdown-code-block-small: 400 11px/16px 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --dsw-font-xs-13: 400 13px/20px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-sm-13: 400 13px/18px Inter, 'Segoe UI', system-ui, sans-serif; /* 近似行高 */
+
+  /* ── primitives 的可重绑定字号缝（终端卡在行内渲染时的默认值）── */
+  --dsl-terminal-line-height: 18px;
+  --dsl-terminal-output-max-height: 224px;
+}
+
+/* 挂载点作用域：vendor 组件挂在 .vendor-dsh-chat 内即可整体换肤；
+   当前值与兜底层一致，后续可整体覆写（如亮色 skin）。 */
+.vendor-dsh-chat {
+  --dsh-content-font-size: 14px;
+  --dsh-content-font-delta: 0px;
+  --dsh-content-font-size-secondary: 13px;
+  --dsh-content-font-delta-secondary: 0px;
+  --dsh-chat-content-width: 748px;
+  --dsw-alias-border-l3: rgba(255, 255, 255, 0.16);
+  --dsw-alias-label-caption: #8c909f;
+  --dsw-alias-label-primary-dimmed: #c2c6d6;
+  --dsw-alias-interactive-bg-hover-solid: #353638;
+  --dsw-alias-markdown-code-block: #1b1b1d;
+  --dsw-specific-bubble: #2c2c2e;
+  --dsw-specific-input-major: #2c2c2e;
+  --dsw-font-markdown-code-block-small: 400 11px/16px 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --dsw-font-xs-13: 400 13px/20px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-sm-13: 400 13px/18px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsl-terminal-line-height: 18px;
+  --dsl-terminal-output-max-height: 224px;
+}

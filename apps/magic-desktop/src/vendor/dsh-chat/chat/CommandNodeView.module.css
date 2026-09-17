@@ -1,0 +1,6 @@
+/* 收敛自 @deepseek-ai/dsh-client-ui-chat@0.1.5-rc.2 client/chat/ChatView.module.css
+   的 .callRow（ChatView.tsx 布局壳未搬，指令行渲染仅使用该规则）。 */
+
+.callRow {
+  border-radius: 6px;
+}
