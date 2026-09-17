@@ -1,7 +1,10 @@
 /**
  * 右栏静态假数据。出处：stitch_codex_ui_clone/codex_01_stream_autonomous_flow/code.html L344
  * （审查 tab 的文件 diff 列表）。M1 静态落地，M2 接 Remote workspaceFiles 变更流后替换。
+ * diff 内容格式：components/CodeBlock.tsx 的 DiffRow（stitch UI/diff.txt 设计，2026-09-17 裁定）。
  */
+
+import type { DiffRow } from "../components/CodeBlock";
 
 export type InspectorTabId =
   | "review"
@@ -26,8 +29,6 @@ export const inspectorTabs: InspectorTab[] = [
   { id: "chat", label: "侧边聊天", icon: "forum", disabled: true },
 ];
 
-export type DiffLine = { kind: "hunk" | "add" | "del"; text: string };
-
 export type ChangedFile = {
   path: string;
   add: number;
@@ -37,7 +38,8 @@ export type ChangedFile = {
   iconClass: string;
   /** 展开卡文件头图标（设计稿 session.ts=data_object，primary 色） */
   headerIcon?: string;
-  lines?: DiffLine[];
+  /** 展开后的统一 diff（CodeBlock Diff 视图）；未给 = 无内容可展开 */
+  rows?: DiffRow[];
 };
 
 export const changedFiles: ChangedFile[] = [
@@ -48,14 +50,59 @@ export const changedFiles: ChangedFile[] = [
     icon: "data_object",
     iconClass: "text-primary",
     headerIcon: "data_object",
-    lines: [
-      { kind: "hunk", text: '@@ -12,6 +12,12 @@ import { Redis } from "ioredis";' },
-      { kind: "add", text: 'import { Cluster } from "ioredis";' },
-      { kind: "add", text: "export const SESSION_TTL_SEC = 60 * 60 * 24 * 7;" },
-      { kind: "hunk", text: "@@ -88,5 +94,14 @@ export async function purgeSession" },
-      { kind: "del", text: "  await redis.del(`session:${id}`);" },
-      { kind: "add", text: "  await redisCluster.del(`{sess:usr}:${id}`);" },
-      { kind: "add", text: '  metrics.increment("session.purged.cluster");' },
+    rows: [
+      {
+        old: 12,
+        cur: 12,
+        type: "ctx",
+        pieces: [{ text: 'import { Redis } from "ioredis";' }],
+      },
+      {
+        old: null,
+        cur: 13,
+        type: "add",
+        pieces: [{ text: 'import { Cluster } from "ioredis";' }],
+      },
+      {
+        old: null,
+        cur: 14,
+        type: "add",
+        pieces: [{ text: "export const SESSION_TTL_SEC = 60 * 60 * 24 * 7;" }],
+      },
+      {
+        old: 88,
+        cur: 94,
+        type: "ctx",
+        pieces: [{ text: "export async function purgeSession(id: string) {" }],
+      },
+      {
+        old: 89,
+        cur: null,
+        type: "del",
+        pieces: [
+          { text: "  await redis.del(" },
+          { text: "`session:${id}`", change: "del" },
+          { text: ");" },
+        ],
+      },
+      {
+        old: null,
+        cur: 95,
+        type: "add",
+        pieces: [
+          { text: "  await " },
+          { text: "redisCluster", change: "add" },
+          { text: ".del(" },
+          { text: "`{sess:usr}:${id}`", change: "add" },
+          { text: ");" },
+        ],
+      },
+      {
+        old: null,
+        cur: 96,
+        type: "add",
+        pieces: [{ text: '  metrics.increment("session.purged.cluster");' }],
+      },
     ],
   },
   {

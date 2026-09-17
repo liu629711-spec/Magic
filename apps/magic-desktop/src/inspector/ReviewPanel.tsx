@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Icon } from "../sidebar/Icon";
-import { changedFiles, type ChangedFile, type DiffLine } from "./mock-data";
+import { CodeBlock } from "../components/CodeBlock";
+import { changedFiles, type ChangedFile } from "./mock-data";
 
 /**
  * 审查 tab（Code Diff / Review Dock）。
  * 出处：stitch_codex_ui_clone/codex_01_stream_autonomous_flow/code.html L344
  * （工具条 + 文件 diff 列表 + 底部提交区），M1 静态落地。
- * 2026-09-17 用户裁定：底部提交区不显示「由 Codex 生成的提交说明」小字。
+ * 2026-09-17 用户裁定：底部提交区不显示「由 Codex 生成的提交说明」小字；
+ * 展开卡的 diff 主体换用 stitch UI/diff.txt 的浅色 CodeBlock 设计（中栏+右栏统一）。
  */
 export function ReviewPanel() {
   // 默认与设计稿一致：仅 session.ts 展开
@@ -121,11 +123,10 @@ function FileDiffCard({
             />
           </div>
         </div>
-        {file.lines?.length ? (
-          <div className="p-space-xs font-body-sm text-body-sm space-y-0.5 overflow-x-auto">
-            {file.lines.map((line, i) => (
-              <DiffRow key={i} line={line} firstHunk={i === 0} />
-            ))}
+        {file.rows?.length ? (
+          /* 浅色 CodeBlock 卡（stitch UI/diff.txt 设计）；不传 filename，文件名由上方头行承载 */
+          <div className="p-space-xs">
+            <CodeBlock variant="Diff" diff={file.rows} className="w-full" />
           </div>
         ) : null}
       </div>
@@ -147,35 +148,6 @@ function FileDiffCard({
         <span className="text-tertiary">+{file.add}</span>
         <span className="text-error">-{file.del}</span>
       </div>
-    </div>
-  );
-}
-
-function DiffRow({ line, firstHunk }: { line: DiffLine; firstHunk: boolean }) {
-  if (line.kind === "hunk") {
-    return (
-      <div
-        className={`flex items-center px-1 py-0.5 text-outline text-[11px] font-code-inline bg-surface-container-lowest ${
-          firstHunk ? "" : "mt-1"
-        }`}
-      >
-        <span>{line.text}</span>
-      </div>
-    );
-  }
-  const add = line.kind === "add";
-  return (
-    <div
-      className={`flex items-center px-1 py-0.5 font-code-inline text-[11px] ${
-        add
-          ? "bg-tertiary-container/15 text-tertiary"
-          : "bg-error-container/15 text-error"
-      }`}
-    >
-      <span className="w-4 select-none">{add ? "+" : "-"}</span>
-      <span className={add ? "text-on-surface" : "text-on-error-container"}>
-        {line.text}
-      </span>
     </div>
   );
 }

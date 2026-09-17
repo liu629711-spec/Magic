@@ -101,3 +101,39 @@
 .animate-emerald-bloom {
   animation: emeraldBloom 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
+
+/* ── CodeBlock 浅色代码面板（stitch_codex_ui_clone/UI/diff.txt 照搬浅色，2026-09-17 用户裁定） ──
+   原设计未附主题变量值，以下浅色值为落地补定（GitHub diff 风格中性色），变量自足不依赖全局暗色主题。 */
+.magic-codeblock {
+  --cb-surface: #ffffff;
+  --cb-ink: #1f2328;
+  --cb-ink-2: #424a53;
+  --cb-ink-3: #8c919c;
+  --cb-line: #e4e7ec;
+  --cb-hover: #f3f4f6;
+  --cb-green: #1a7f37;
+  --cb-red: #cf222e;
+  --cb-green-tint: rgba(26, 127, 55, 0.07);
+  --cb-red-tint: rgba(207, 34, 46, 0.07);
+  --cb-orange: #953800;
+  --cb-accent-ink: #0550ae;
+  --cb-radius: 12px;
+  --cb-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.1);
+  color: var(--cb-ink-2);
+}
+
+.cb-surface { background: var(--cb-surface); }
+.cb-card { border-radius: var(--cb-radius); box-shadow: var(--cb-shadow); }
+.cb-border { border-color: var(--cb-line); }
+.cb-ink { color: var(--cb-ink); }
+.cb-ink2 { color: var(--cb-ink-2); }
+.cb-ink3 { color: var(--cb-ink-3); }
+.cb-green { color: var(--cb-green); }
+.cb-red { color: var(--cb-red); }
+.cb-tint-add { background: var(--cb-green-tint); }
+.cb-tint-del { background: var(--cb-red-tint); }
+.cb-gutter-line { background: var(--cb-line); }
+.cb-hover { transition: background-color 100ms; }
+.cb-hover:hover { background: var(--cb-hover); }
+.cb-copy:hover { color: var(--cb-ink); }
+.cb-mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
