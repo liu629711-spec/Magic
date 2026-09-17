@@ -10,9 +10,31 @@
     "tokens": "node scripts/extract-tokens.mjs"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.5-rc.2",
+    "@shikijs/langs": "^4.4.3",
+    "@types/mdast": "^4.0.4",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "anser": "^2.3.5",
+    "clsx": "^2.1.1",
+    "katex": "^0.16.47",
+    "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-gfm": "^3.1.0",
+    "mdast-util-math": "^3.0.0",
+    "micromark-core-commonmark": "^2.0.3",
+    "micromark-extension-gfm": "^3.0.0",
+    "micromark-extension-math": "^3.1.0",
+    "micromark-factory-space": "^2.0.1",
+    "micromark-util-character": "^2.1.1",
+    "micromark-util-classify-character": "^2.0.1",
+    "micromark-util-sanitize-uri": "^2.0.1",
+    "micromark-util-symbol": "^2.0.1",
+    "micromark-util-types": "^2.0.2",
     "motion": "^13.3.0",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "react-icons": "5.7.0",
+    "shiki": "^4.4.3"
   },
   "devDependencies": {
     "@types/react": "18.3.31",
