@@ -1,0 +1,1558 @@
+/* vendored from codex-ui@0.1.0（用户确认可用）src/components/ConversationView/ConversationView.module.css
+ * 结构/布局/交互零改动；全部颜色值已提取为 --cv-* 语义令牌（定义见 conversation/tokens.css，
+ * 默认暗色、跟随 Magic 界面；.vendor-cv-light 为原始浅色覆写表）。 */
+
+.shell {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: 44px minmax(0, 1fr) auto;
+  background: var(--cv-bg); /* 原 #fff */
+  color: var(--cv-ink); /* 原 #1f1f1f */
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+}
+
+.connectionPanel {
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 14px;
+  pointer-events: none;
+}
+
+.viewToolbar,
+.statusToolbar {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.statusToolbar {
+  justify-content: flex-end;
+}
+
+.viewButton {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--cv-ink-muted); /* 原 #2a2a2a（sync 段 #8f8f8f） */
+  cursor: pointer;
+  padding: 0;
+}
+
+.viewButton svg,
+.sendButton svg,
+.statusIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.viewButton:hover,
+.viewButtonActive {
+  background: var(--cv-bg-hover); /* 原 #f3f3f3 */
+}
+
+.viewButton:disabled {
+  color: var(--cv-ink-faint); /* 原 #c7c7c7 */
+  cursor: not-allowed;
+}
+
+.viewButton:disabled:hover {
+  background: transparent;
+}
+
+.status {
+  display: inline-flex;
+  max-width: 220px;
+  height: 28px;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--cv-status-bg); /* 原 #f4f4f4（sync 段 #f7f7f7） */
+  color: var(--cv-status-ink); /* 原 #5b5b5b（sync 段 #777） */
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status[data-kind='ok'] {
+  background: var(--cv-ok-bg); /* 原 #eaf7ee */
+  color: var(--cv-ok); /* 原 #2f8d46 */
+}
+
+.status[data-kind='pending'] {
+  background: var(--cv-pending-bg); /* 原 #edf2ff */
+  color: var(--cv-pending); /* 原 #3867d6 */
+}
+
+.status[data-kind='warn'] {
+  background: var(--cv-warn-bg); /* 原 #fff6e6 */
+  color: var(--cv-warn); /* 原 #b56a00 */
+}
+
+.status[data-kind='error'] {
+  background: var(--cv-error-bg); /* 原 #fff1f0 */
+  color: var(--cv-error); /* 原 #c7342f */
+}
+
+.statusIcon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--cv-ink-muted); /* 原 #8a8a8a（sync 段 #8f8f8f） */
+  cursor: help;
+  line-height: 1;
+  outline: none;
+}
+
+.statusIcon:hover,
+.statusIcon:focus-visible {
+  background: var(--cv-bg-hover); /* 原 #f3f3f3 */
+  color: var(--cv-ink); /* 原 #333（sync 段 #1f1f1f） */
+}
+
+.statusIcon[data-kind='error'] {
+  color: var(--cv-error); /* 原 #c7342f */
+}
+
+.statusClickable {
+  cursor: pointer;
+}
+
+.statusPopoverButton {
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.statusPopover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: min(300px, calc(100vw - 32px));
+  gap: 8px;
+  border: 1px solid var(--cv-border); /* 原 #e4e4e4 */
+  border-radius: 12px;
+  background: var(--cv-bg); /* 原 #fff */
+  box-shadow: var(--cv-shadow-pop); /* 原 rgba(0,0,0,0.12) */
+  color: var(--cv-ink-secondary); /* 原 #555 */
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 12px 14px;
+  text-align: left;
+  white-space: normal;
+}
+
+.statusPopover strong {
+  color: var(--cv-ink); /* 原 #222 */
+  font-size: 13px;
+}
+
+.sessionDrawerWrap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 25;
+  width: clamp(280px, 26vw, 320px);
+  max-width: calc(100% - 28px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-104%);
+  transition:
+    transform 340ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 240ms ease-out;
+  will-change: transform, opacity;
+}
+
+.sessionDrawerWrapOpen {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition:
+    transform 460ms cubic-bezier(0.18, 1.16, 0.24, 1),
+    opacity 260ms ease-out;
+}
+
+.sessionDrawer {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--cv-border-soft); /* 原 #ececec */
+  background: var(--cv-bg-drawer); /* 原 rgba(255,255,255,0.98)（sync 段 rgba(250,250,250,0.98)） */
+  box-shadow: var(--cv-shadow-drawer); /* 原 12px 0 28px rgba(0,0,0,0.06)（sync 段 8px 0 24px rgba(0,0,0,0.05)） */
+  padding: 56px 16px 22px;
+}
+
+.sessionWorkspacePath {
+  flex-shrink: 0;
+  overflow: hidden;
+  border-bottom: 1px solid var(--cv-border-soft); /* 原 #f1f1f1 */
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0 4px 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionList {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 12px 0 0;
+  scrollbar-width: thin;
+}
+
+.sessionTab {
+  display: grid;
+  width: 100%;
+  min-height: 36px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cv-ink-secondary); /* 原 #444 */
+  cursor: pointer;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.sessionTab:hover {
+  background: var(--cv-bg-hover); /* 原 #f6f6f6 */
+}
+
+.sessionTab:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+.sessionTab:disabled:not(.sessionTabActive):hover {
+  background: transparent;
+}
+
+.sessionTitle,
+.sessionTitleText,
+.sessionTab small {
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cv-ink-secondary); /* 原 #444 */
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.sessionTitleText {
+  display: block;
+}
+
+.sessionTab small {
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.sessionTabActive {
+  background: var(--cv-bg-active); /* 原 #f1f1f1 */
+}
+
+.sessionTabActive .sessionTitleText {
+  color: var(--cv-ink); /* 原 #1f1f1f */
+  font-weight: 760;
+}
+
+.sessionSubagentBadge {
+  flex-shrink: 0;
+  border-radius: 5px;
+  background: var(--cv-bg-active); /* 原 #f1f1f1 */
+  color: var(--cv-ink-muted); /* 原 #8a8a8a */
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  padding: 3px 5px;
+}
+
+.sessionEmpty {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.workspace {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0 28px;
+}
+
+.workspaceWithActivity {
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
+}
+
+.messages {
+  display: flex;
+  box-sizing: border-box;
+  min-width: 0;
+  flex-direction: column;
+  gap: 22px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 42px max(12px, calc((100% - 880px) / 2)) 34px;
+}
+
+.messageWindowNotice {
+  display: flex;
+  justify-content: center;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  color: var(--cv-ink-muted); /* 原 #9a9a9a（sync 段 #b4b4b4） */
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.message {
+  box-sizing: border-box;
+  width: min(880px, 100%);
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.message_user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.message_streaming {
+  opacity: 0.9;
+}
+
+.bubble {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.message_user .bubble {
+  width: fit-content;
+  max-width: min(520px, 72%);
+  border-radius: 22px;
+  background: var(--cv-bg-bubble); /* 原 #f2f2f2 */
+  padding: 11px 16px;
+}
+
+.message_assistant .bubble {
+  max-width: 100%;
+}
+
+.message_system,
+.message_tool,
+.message_approval {
+  width: min(820px, 100%);
+}
+
+.message_system .bubble,
+.message_tool .bubble,
+.message_approval .bubble {
+  border: 1px solid var(--cv-border-soft); /* 原 #ececec */
+  border-radius: 10px;
+  background: var(--cv-bg-card); /* 原 #fafafa */
+  padding: 12px 14px;
+}
+
+.messageLabel {
+  margin-bottom: 7px;
+  color: var(--cv-ink-muted); /* 原 #878787 */
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.content {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--cv-ink); /* 原 #1f1f1f */
+  font-size: 15px;
+  line-height: 1.74;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message_assistant .content {
+  white-space: normal;
+}
+
+.content p,
+.content h3 {
+  margin: 0;
+}
+
+.content p + p,
+.content p + h3,
+.content h3 + p,
+.content .codeCard + p,
+.content p + .codeCard {
+  margin-top: 18px;
+}
+
+.content h3 {
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.content pre {
+  margin: 0;
+  overflow: auto;
+  font: 13px/1.58 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.codeCard {
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--cv-bg-code); /* 原 #f0f0f0 */
+}
+
+.codeLabel {
+  color: var(--cv-ink-muted); /* 原 #797979 */
+  font-size: 13px;
+  line-height: 1;
+  padding: 12px 14px 0;
+}
+
+.codeCard pre {
+  padding: 18px 14px 16px;
+}
+
+.approvalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.approvalActions button {
+  min-height: 34px;
+  border: 1px solid var(--cv-border-strong); /* 原 #d9d9d9 */
+  border-radius: 7px;
+  background: var(--cv-bg); /* 原 #fff */
+  color: var(--cv-ink); /* 原 #222 */
+  cursor: pointer;
+  padding: 0 12px;
+}
+
+.approvalActions button:first-child {
+  border-color: var(--cv-btn-primary-bg); /* 原 #1f1f1f */
+  background: var(--cv-btn-primary-bg); /* 原 #1f1f1f */
+  color: var(--cv-btn-primary-ink); /* 原 #fff */
+}
+
+.approvalNote {
+  color: var(--cv-ink-secondary); /* 原 #777 */
+  font-size: 13px;
+}
+
+.activityPanel {
+  align-self: start;
+  width: 100%;
+  margin-top: 24px;
+  border: 1px solid var(--cv-border-soft); /* 原 #ececec */
+  border-radius: 18px;
+  background: var(--cv-bg-panel); /* 原 rgba(255,255,255,0.94) */
+  box-shadow: var(--cv-shadow-panel); /* 原 rgba(0,0,0,0.07) */
+  padding: 22px 24px;
+}
+
+.activityPanel section + section {
+  margin-top: 18px;
+  border-top: 1px solid var(--cv-border-soft); /* 原 #eee */
+  padding-top: 18px;
+}
+
+.panelHeading {
+  display: flex;
+  width: 100%;
+  min-height: auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--cv-ink-muted); /* 原 #8a8a8a */
+  padding: 0;
+  text-align: left;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.panelHeading span {
+  color: var(--cv-ink-secondary); /* 原 #777 */
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 0.7;
+}
+
+.activityPanel h2,
+.activityPanel p,
+.activityPanel ul {
+  margin: 0;
+}
+
+.activityPanel h2 {
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.activityPanel p,
+.activityPanel li {
+  color: var(--cv-ink-secondary); /* 原 #777 */
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.activityPanel ul {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+
+.composer {
+  background: linear-gradient(180deg, transparent, var(--cv-bg) 26%); /* 原 rgba(255,255,255,0) → #fff */
+  padding: 0 28px 22px;
+}
+
+.promptWrap {
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  width: min(880px, 100%);
+  min-height: 56px;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 12px;
+  align-items: center;
+  margin: 0 auto;
+  border: 1px solid var(--cv-border); /* 原 #e5e5e5（sync 段 #e8e8e8） */
+  border-radius: 22px;
+  background: var(--cv-bg-drawer); /* 原 rgba(255,255,255,0.98)（sync 段 #f9f9f9） */
+  box-shadow: var(--cv-shadow-prompt); /* 原 rgba(0,0,0,0.05) */
+  padding: 10px 12px 10px 24px;
+}
+
+.promptWrap:focus-within {
+  border-color: var(--cv-border-strong); /* 原 #d8d8d8（sync 段 #d9d9d9） */
+  box-shadow:
+    var(--cv-shadow-lift), /* 原 rgba(0,0,0,0.07) */
+    var(--cv-focus-ring); /* 原 rgba(0,0,0,0.03) */
+}
+
+.readOnlyComposer {
+  display: flex;
+  box-sizing: border-box;
+  width: min(880px, 100%);
+  min-height: 56px;
+  align-items: center;
+  margin: 0 auto;
+  border: 1px solid var(--cv-border-soft); /* 原 #eeeeee */
+  border-radius: 22px;
+  background: var(--cv-bg); /* 原 #fff（sync 段 #f9f9f9） */
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+  font-size: 15px;
+  font-weight: 400;
+  padding: 0 28px;
+}
+
+.sendButton {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  place-items: center;
+  align-self: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cv-btn-primary-bg); /* 原 #222（sync 段 #1a1a1a） */
+  color: var(--cv-btn-primary-ink); /* 原 #fff */
+  cursor: pointer;
+  padding: 0;
+}
+
+.sendButton:disabled {
+  background: var(--cv-btn-disabled-bg); /* 原 #d9d9d9（sync 段 #e8e8e8） */
+  cursor: not-allowed;
+}
+
+.promptWrap textarea {
+  min-height: 28px;
+  max-height: 84px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  overflow-y: hidden;
+  background: transparent;
+  color: var(--cv-ink); /* 原 #1f1f1f（sync 段 #111） */
+  line-height: 28px;
+  padding: 0;
+}
+
+.promptWrap textarea::placeholder {
+  color: var(--cv-ink-muted); /* 原 #8e8e8e */
+}
+
+.promptWrap textarea:disabled {
+  background: transparent;
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+  cursor: not-allowed;
+  opacity: 1;
+  -webkit-text-fill-color: var(--cv-ink-muted); /* 原 #9a9a9a */
+}
+
+.slashMenu {
+  position: absolute;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  left: 12px;
+  z-index: 30;
+  overflow: hidden;
+  border: 1px solid var(--cv-border); /* 原 #e4e4e4 */
+  border-radius: 14px;
+  background: var(--cv-bg); /* 原 #fff */
+  box-shadow: var(--cv-shadow-pop); /* 原 rgba(0,0,0,0.12)（sync 段 0 14px 36px rgba(0,0,0,0.1)） */
+}
+
+.slashOption {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  justify-items: start;
+  border: 0;
+  border-bottom: 1px solid var(--cv-border-soft); /* 原 #f0f0f0 */
+  border-radius: 0;
+  background: var(--cv-bg); /* 原 #fff */
+  cursor: pointer;
+  padding: 9px 12px;
+  text-align: left;
+}
+
+.slashOption:hover {
+  background: var(--cv-bg-hover); /* 原 #f7f7f7 */
+}
+
+.slashOption:last-child {
+  border-bottom: 0;
+}
+
+.slashOption span {
+  color: var(--cv-ink); /* 原 #242424 */
+  font: 13px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.slashOption small {
+  color: var(--cv-ink-muted); /* 原 #7f7f7f */
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    padding: 0 18px;
+  }
+
+  .workspaceWithActivity {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .activityPanel {
+    position: absolute;
+    top: 8px;
+    right: 18px;
+    z-index: 15;
+    width: min(clamp(320px, 50vw, 520px), calc(100vw - 36px));
+  }
+
+  .composer {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    padding: 0 14px;
+  }
+
+  .messages {
+    gap: 18px;
+    padding-top: 34px;
+  }
+
+  .message_user .bubble {
+    max-width: min(520px, 86%);
+  }
+
+  .composer {
+    padding-right: 14px;
+    padding-bottom: 14px;
+    padding-left: 14px;
+  }
+
+  .promptWrap {
+    min-height: 54px;
+    grid-template-columns: minmax(0, 1fr) 36px;
+    padding-left: 18px;
+  }
+}
+
+/* Latest Codex desktop conversation surface sync. */
+.connectionPanel {
+  align-items: center;
+  padding: 6px 16px;
+}
+
+.viewToolbar,
+.statusToolbar {
+  gap: 6px;
+}
+
+.viewButton,
+.statusIcon {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border-radius: 10px;
+  color: var(--cv-ink-muted); /* 原 #8f8f8f */
+}
+
+.viewButton:hover,
+.viewButtonActive,
+.statusIcon:hover,
+.statusIcon:focus-visible {
+  background: var(--cv-bg-hover); /* 原 #f3f3f3 */
+  color: var(--cv-ink); /* 原 #1f1f1f */
+}
+
+.status {
+  max-width: 200px;
+  height: 26px;
+  background: var(--cv-status-bg); /* 原 #f7f7f7 */
+  color: var(--cv-status-ink); /* 原 #777 */
+}
+
+.sessionDrawerWrap {
+  width: clamp(260px, 24vw, 300px);
+}
+
+.sessionDrawer {
+  background: var(--cv-bg-drawer); /* 原 rgba(250,250,250,0.98) */
+  box-shadow: var(--cv-shadow-drawer); /* 原 8px 0 24px rgba(0,0,0,0.05) */
+}
+
+.workspace {
+  padding: 0;
+}
+
+.workspaceWithActivity {
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 16px;
+  padding-right: 16px;
+}
+
+.messages {
+  width: 100%;
+  max-width: 768px;
+  margin: 0 auto;
+  gap: 24px;
+  padding: 32px 24px 40px;
+}
+
+.messageWindowNotice {
+  width: 100%;
+  color: var(--cv-ink-faint); /* 原 #b4b4b4 */
+}
+
+.messageItem {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.messageItemUser {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.messageItemAssistant {
+  display: block;
+}
+
+.messageItemTool {
+  margin-top: -18px;
+  margin-bottom: -18px;
+  padding-left: 20px;
+}
+
+.messageItemApproval,
+.messageItemSystem {
+  display: flex;
+  justify-content: center;
+}
+
+.userBubble {
+  max-width: 85%;
+  overflow-wrap: anywhere;
+  border-radius: 16px;
+  background: var(--cv-bg-bubble); /* 原 #f2f2f2 */
+  color: var(--cv-ink); /* 原 #0d0d0d */
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+}
+
+.assistantContent {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--cv-ink); /* 原 #0d0d0d */
+  font-size: 14px;
+  line-height: 1.75;
+  padding: 16px 20px;
+  word-break: break-word;
+}
+
+.assistantContent p,
+.assistantContent h1,
+.assistantContent h2,
+.assistantContent h3,
+.assistantContent h4,
+.assistantContent ul,
+.assistantContent ol,
+.assistantContent pre,
+.assistantContent blockquote {
+  margin-top: 0;
+}
+
+.assistantContent p {
+  margin-bottom: 14px;
+}
+
+.assistantContent p:last-child,
+.assistantContent ul:last-child,
+.assistantContent ol:last-child,
+.assistantContent pre:last-child {
+  margin-bottom: 0;
+}
+
+.assistantContent h1,
+.assistantContent h2,
+.assistantContent h3,
+.assistantContent h4 {
+  color: var(--cv-ink); /* 原 #111 */
+  font-weight: 700;
+  line-height: 1.35;
+  margin-bottom: 10px;
+}
+
+.assistantContent h1 {
+  font-size: 22px;
+}
+
+.assistantContent h2 {
+  font-size: 19px;
+}
+
+.assistantContent h3 {
+  font-size: 17px;
+}
+
+.assistantContent h4 {
+  font-size: 15px;
+}
+
+.assistantContent ul,
+.assistantContent ol {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding-left: 22px;
+}
+
+.assistantContent li {
+  padding-left: 2px;
+}
+
+.assistantContent strong {
+  font-weight: 700;
+}
+
+.assistantContent a {
+  color: var(--cv-link); /* 原 #0b57d0 */
+  text-decoration: none;
+}
+
+.assistantContent a:hover {
+  text-decoration: underline;
+}
+
+.assistantContent blockquote {
+  border-left: 3px solid var(--cv-border); /* 原 #e5e5e5 */
+  color: var(--cv-ink-secondary); /* 原 #666 */
+  margin-bottom: 14px;
+  padding: 2px 0 2px 14px;
+}
+
+.assistantContent hr {
+  height: 1px;
+  border: 0;
+  background: var(--cv-border-soft); /* 原 #ececec */
+  margin: 20px 0;
+}
+
+.assistantContent :not(pre) > code {
+  border-radius: 5px;
+  background: var(--cv-bg-chip); /* 原 #f3f3f3 */
+  color: var(--cv-ink); /* 原 #111 */
+  font: 0.92em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 2px 5px;
+}
+
+.assistantContent pre {
+  position: relative;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--cv-bg-code); /* 原 #f4f4f4 */
+  color: var(--cv-ink); /* 原 #111 */
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  margin-bottom: 14px;
+  padding: 32px 14px 14px;
+  white-space: pre;
+}
+
+.assistantContent pre[data-lang]::before {
+  position: absolute;
+  top: 9px;
+  left: 14px;
+  color: var(--cv-ink-muted); /* 原 #8a8a8a */
+  content: attr(data-lang);
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  text-transform: lowercase;
+}
+
+.assistantContent pre code {
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+}
+
+.assistantContent :global(.file-link) {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--cv-bg-chip); /* 原 #f4f4f4 */
+  color: var(--cv-ink-secondary); /* 原 #333 */
+  font: 0.92em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 2px 6px;
+  text-overflow: ellipsis;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.assistantTyping > *:last-child {
+  animation: codexShimmer 1.8s linear infinite;
+  background: linear-gradient(90deg, var(--cv-shimmer-a) 0%, var(--cv-shimmer-b) 38%, var(--cv-shimmer-a) 76%); /* 原 #333 → #aaa → #333 */
+  background-clip: text;
+  background-size: 240% 100%;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.toolSummaryBlock {
+  width: fit-content;
+  max-width: min(100%, 680px);
+}
+
+.toolSummaryLine {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  color: var(--cv-ink-muted); /* 原 #8a8a8a */
+  font-size: 13px;
+  line-height: 1.3;
+  padding: 2px 8px;
+}
+
+.toolSummaryClickable {
+  cursor: pointer;
+}
+
+.toolSummaryClickable:hover {
+  background: var(--cv-bg-hover); /* 原 #f6f6f6 */
+  color: var(--cv-ink-secondary); /* 原 #555 */
+}
+
+.toolSummaryIcon {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+}
+
+.toolSummaryText,
+.detailItemLabel {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolSummaryChevron,
+.detailItemChevron,
+.turnFoldChevron {
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  place-items: center;
+  transition: transform 160ms ease;
+}
+
+.toolSummaryChevronOpen,
+.detailItemChevronOpen {
+  transform: rotate(90deg);
+}
+
+.toolSummaryDetails {
+  display: grid;
+  gap: 3px;
+  list-style: none;
+  margin: 2px 0 0 24px;
+  padding: 0;
+}
+
+.toolSummaryDetailItem {
+  min-width: 0;
+}
+
+.detailItemHeader {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 24px;
+  align-items: center;
+  gap: 7px;
+  border-radius: 7px;
+  color: var(--cv-ink-muted); /* 原 #999 */
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 2px 7px;
+}
+
+.detailItemClickable {
+  cursor: pointer;
+}
+
+.detailItemClickable:hover {
+  background: var(--cv-bg-hover); /* 原 #f7f7f7 */
+  color: var(--cv-ink-secondary); /* 原 #666 */
+}
+
+.shellOutputBlock {
+  overflow: hidden;
+  max-width: min(680px, calc(100vw - 80px));
+  border: 1px solid var(--cv-border); /* 原 #e8e8e8 */
+  border-radius: 8px;
+  background: var(--cv-bg-card); /* 原 #fbfbfb */
+  margin: 6px 0 8px 7px;
+}
+
+.shellOutputHeader {
+  border-bottom: 1px solid var(--cv-border-soft); /* 原 #eeeeee */
+  color: var(--cv-ink-muted); /* 原 #8a8a8a */
+  font-size: 11px;
+  font-weight: 650;
+  padding: 7px 10px;
+}
+
+.shellOutputContent {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  color: var(--cv-ink-secondary); /* 原 #2f2f2f */
+  font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.shellPrompt,
+.shellSuccess {
+  color: var(--cv-ok); /* 原 #2e8b57 */
+}
+
+.shellError {
+  color: var(--cv-error); /* 原 #c7342f */
+}
+
+.shellOutputFooter {
+  border-top: 1px solid var(--cv-border-soft); /* 原 #eeeeee */
+  font-size: 11px;
+  padding: 7px 10px;
+}
+
+.turnFoldWrapper {
+  display: grid;
+  gap: 8px;
+}
+
+.turnFoldBlock {
+  margin-left: 20px;
+}
+
+.turnFoldHeader {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  color: var(--cv-ink-muted); /* 原 #8a8a8a */
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+  padding: 2px 8px;
+}
+
+.turnFoldHeader:hover {
+  background: var(--cv-bg-hover); /* 原 #f6f6f6 */
+  color: var(--cv-ink-secondary); /* 原 #555 */
+}
+
+.turnFoldLabel {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.turnFoldChevronOpen {
+  transform: rotate(180deg);
+}
+
+.turnFoldContent {
+  display: grid;
+  gap: 18px;
+  overflow: hidden;
+  transition:
+    max-height 220ms ease,
+    opacity 180ms ease;
+}
+
+.turnFoldContentOpen {
+  max-height: 999px;
+  opacity: 1;
+  padding-top: 8px;
+}
+
+.turnFoldContentClosed {
+  max-height: 0;
+  opacity: 0;
+}
+
+.turnFoldContent .messageItemAssistant .assistantContent {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.turnFoldContent .messageItemTool {
+  margin-top: -8px;
+  margin-bottom: -8px;
+}
+
+.memoryReferenceBlock {
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 20px 8px;
+}
+
+.memoryReferenceHeader {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--cv-ink-muted); /* 原 #8b8f94 */
+  cursor: pointer;
+  font: 400 14px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  padding: 0;
+  text-align: left;
+}
+
+.memoryReferenceHeader:hover {
+  color: var(--cv-ink); /* 原 #333 */
+}
+
+.memoryReferenceChevron {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  color: var(--cv-ink-muted); /* 原 #8b8f94 */
+}
+
+.memoryReferenceList {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.memoryReferenceItem {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.memoryReferenceTitle {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--cv-ink-secondary); /* 原 #4f5358 */
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.memoryReferenceFile {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memoryReferenceLines {
+  flex-shrink: 0;
+  color: var(--cv-ink-faint); /* 原 #aeb4ba */
+}
+
+.memoryReferenceNote {
+  overflow-wrap: anywhere;
+  color: var(--cv-ink-muted); /* 原 #8b8f94 */
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.systemText {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  background: var(--cv-bg-card); /* 原 #fafafa */
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.approvalBlock {
+  width: 100%;
+  max-width: 680px;
+  border: 1px solid var(--cv-border); /* 原 #e8e8e8 */
+  border-radius: 10px;
+  background: var(--cv-bg-card); /* 原 #fafafa */
+  padding: 12px;
+}
+
+.approvalPre {
+  overflow: auto;
+  margin: 0;
+  color: var(--cv-ink-secondary); /* 原 #333 */
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.approvalBtn,
+.approvalBtnPrimary {
+  min-height: 32px;
+  border: 1px solid var(--cv-border-strong); /* 原 #d9d9d9 */
+  border-radius: 7px;
+  background: var(--cv-bg); /* 原 #fff */
+  color: var(--cv-ink); /* 原 #222 */
+  cursor: pointer;
+  padding: 0 12px;
+}
+
+.approvalBtnPrimary {
+  border-color: var(--cv-btn-primary-bg); /* 原 #1f1f1f */
+  background: var(--cv-btn-primary-bg); /* 原 #1f1f1f */
+  color: var(--cv-btn-primary-ink); /* 原 #fff */
+}
+
+.streamingIndicator {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  padding-left: 20px;
+}
+
+.streamingIndicatorText,
+.shimmerText {
+  animation: codexShimmer 1.8s linear infinite;
+  background: linear-gradient(90deg, var(--cv-shimmer-a) 0%, var(--cv-shimmer-b) 38%, var(--cv-shimmer-a) 76%); /* 原 #8a8a8a → #d0d0d0 → #8a8a8a */
+  background-clip: text;
+  background-size: 240% 100%;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.streamingIndicatorText {
+  font-size: 13px;
+}
+
+.activityPanel {
+  margin-top: 16px;
+  border-radius: 12px;
+  box-shadow: none;
+  padding: 18px;
+}
+
+.composer {
+  background: var(--cv-bg); /* 原 #fff */
+  padding: 0 24px 24px;
+}
+
+.promptWrap {
+  width: 100%;
+  max-width: 768px;
+  min-height: 52px;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 8px;
+  align-items: end;
+  border-color: var(--cv-border); /* 原 #e8e8e8 */
+  border-radius: 24px;
+  background: var(--cv-bg-inset); /* 原 #f9f9f9 */
+  box-shadow: none;
+  padding: 8px 8px 8px 20px;
+}
+
+.promptWrap:focus-within {
+  border-color: var(--cv-border-strong); /* 原 #d9d9d9 */
+  box-shadow: var(--cv-focus-ring); /* 原 rgba(0,0,0,0.03) */
+}
+
+.promptWrap textarea {
+  min-height: 24px;
+  max-height: 200px;
+  color: var(--cv-ink); /* 原 #111 */
+  font-size: 15px;
+  line-height: 24px;
+  padding: 6px 0;
+}
+
+.steerCard {
+  display: grid;
+  min-height: 42px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--cv-border-soft); /* 原 #ececec */
+  border-radius: 18px;
+  background: var(--cv-bg); /* 原 #fff */
+  box-shadow: var(--cv-shadow-soft); /* 原 rgba(0,0,0,0.04) */
+  color: var(--cv-ink-secondary); /* 原 #666 */
+  font-size: 14px;
+  line-height: 20px;
+  padding: 9px 12px;
+}
+
+.steerCardText {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.steerCardText span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.steerCardArrow {
+  flex: 0 0 auto;
+  color: var(--cv-ink-muted); /* 原 #8a8a8a */
+  font-size: 15px;
+  line-height: 1;
+}
+
+.steerCardBadge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--cv-ink-secondary); /* 原 #666 */
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.readOnlyComposer {
+  width: 100%;
+  max-width: 768px;
+  min-height: 52px;
+  border-color: var(--cv-border-soft); /* 原 #eeeeee */
+  border-radius: 24px;
+  background: var(--cv-bg-inset); /* 原 #f9f9f9 */
+  color: var(--cv-ink-muted); /* 原 #9a9a9a */
+  padding: 0 20px;
+}
+
+.sendButton {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  align-self: end;
+  background: var(--cv-btn-primary-bg); /* 原 #1a1a1a */
+}
+
+.sendButton:disabled {
+  background: var(--cv-btn-disabled-bg); /* 原 #e8e8e8 */
+  color: var(--cv-ink-faint); /* 原 #b4b4b4 */
+}
+
+.loadingIcon {
+  animation: codexSpin 0.9s linear infinite;
+}
+
+.slashMenu {
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  border-radius: 12px;
+  box-shadow: var(--cv-shadow-pop); /* 原 0 14px 36px rgba(0,0,0,0.1) */
+}
+
+@keyframes codexShimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes codexSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1100px) {
+  .workspace,
+  .workspaceWithActivity {
+    grid-template-columns: 1fr;
+    padding: 0;
+  }
+
+  .composer {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+}
+
+@media (max-width: 760px) {
+  .connectionPanel {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .messages {
+    gap: 20px;
+    padding: 28px 14px 34px;
+  }
+
+  .assistantContent {
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+
+  .memoryReferenceBlock {
+    margin-right: 4px;
+    margin-left: 4px;
+  }
+
+  .messageItemTool,
+  .turnFoldBlock,
+  .streamingIndicator {
+    padding-left: 0;
+    margin-left: 0;
+  }
+
+  .userBubble {
+    max-width: 88%;
+  }
+
+  .composer {
+    padding: 0 14px 14px;
+  }
+
+  .promptWrap,
+  .readOnlyComposer {
+    min-height: 52px;
+  }
+
+  .shellOutputBlock {
+    max-width: calc(100vw - 36px);
+  }
+}

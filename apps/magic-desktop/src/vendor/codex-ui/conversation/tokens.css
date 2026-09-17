@@ -1,0 +1,156 @@
+/* vendored token bridge for codex-ui@0.1.0（用户确认可用）ConversationView
+ * 模式照抄 apps/magic-desktop/src/vendor/better-sidebar/tokens.css：
+ * - 源 CSS（conversation/ConversationView.module.css）的全部颜色已提取为 --cv-* 语义令牌，
+ *   组件零改动，换主题只换本文件变量表。
+ * - 两层作用域：`:root, body` 兜底（值必须是具体色值，不能 var() 嵌套）+ `.vendor-cv` 挂载点作用域。
+ * - 默认值为暗色（跟随 Magic 界面，stitch token 见 apps/magic-desktop/src/theme/tokens.css）。
+ * - `.vendor-cv-light` 保留原始浅色值覆写表，供将来亮色界面切换。
+ * 标注「近似」的令牌在 stitch token 里没有严格对应项，取了合理近似值。 */
+
+:root,
+body {
+  /* ── 背景层（原 #fff / rgba 白系面板底 → stitch surface 家族）── */
+  --cv-bg: #1f1f23; /* 面板/页面底（原 #fff，近似 surface-container） */
+  --cv-bg-drawer: rgba(27, 27, 31, 0.98); /* 会话抽屉/输入胶囊半透明底（原 rgba(255,255,255,0.98)、rgba(250,250,250,0.98)） */
+  --cv-bg-panel: rgba(27, 27, 31, 0.94); /* 信息面板半透明底（原 rgba(255,255,255,0.94)） */
+  --cv-bg-hover: #292a2d; /* 悬停底（原 #f3f3f3 / #f6f6f6 / #f7f7f7，surface-container-high） */
+  --cv-bg-active: #343538; /* 选中项/徽标底（原 #f1f1f1，surface-container-highest） */
+  --cv-bg-bubble: #292a2d; /* 用户气泡底（原 #f2f2f2，近似） */
+  --cv-bg-inset: #1b1b1f; /* 输入框/只读输入条内嵌底（原 #f9f9f9，近似 surface-container-low） */
+  --cv-bg-card: #1b1b1f; /* 系统消息/审批卡/Shell 输出卡底（原 #fafafa / #fbfbfb，近似） */
+  --cv-bg-code: #0d0e11; /* 代码块底（原 #f4f4f4 / #f0f0f0，近似 surface-container-lowest） */
+  --cv-bg-chip: #292a2d; /* 行内代码 / 文件链接 chip 底（原 #f3f3f3 / #f4f4f4，近似） */
+
+  /* ── 描边 ── */
+  --cv-border: #424754; /* 常规边框（原 #e4e4e4 / #e5e5e5 / #e8e8e8，outline-variant） */
+  --cv-border-soft: #3a3e48; /* 弱边框（原 #ececec / #eeeeee / #f0f0f0，近似） */
+  --cv-border-strong: #8c909f; /* 焦点/按钮边框（原 #d8d8d8 / #d9d9d9，outline） */
+
+  /* ── 文本 ── */
+  --cv-ink: #e3e2e6; /* 主文字（原 #1f1f1f / #0d0d0d / #111 / #242424 / #2a2a2a，on-surface） */
+  --cv-ink-secondary: #c2c6d6; /* 次文字（原 #5b5b5b / #555 / #666 / #777 / #4f5358 / #2f2f2f / #333，on-surface-variant） */
+  --cv-ink-muted: #8c909f; /* 弱文字（原 #9a9a9a / #8a8a8a / #878787 / #8e8e8e / #8f8f8f / #8b8f94 / #797979 / #7f7f7f / #999，outline） */
+  --cv-ink-faint: #6f7480; /* 最弱文字/禁用文字（原 #b4b4b4 / #c7c7c7 / #aeb4ba，近似） */
+
+  /* ── 主按钮（原页面上的深色主按钮 #1f1f1f/#222/#1a1a1a + 白字，暗色下反相为亮底深字）── */
+  --cv-btn-primary-bg: #e3e2e6; /* 近似 inverse-surface（stitch inverse-surface） */
+  --cv-btn-primary-ink: #1a1b1e; /* 近似 on inverse-surface */
+  --cv-btn-disabled-bg: #343538; /* 禁用按钮底（原 #d9d9d9 / #e8e8e8，近似 surface-container-highest） */
+
+  /* ── 状态胶囊 ── */
+  --cv-status-bg: #292a2d; /* 中性状态底（原 #f4f4f4→sync #f7f7f7，近似） */
+  --cv-status-ink: #c2c6d6; /* 中性状态字（原 #5b5b5b→sync #777） */
+  --cv-ok: #4edea3; /* ok 字色（stitch tertiary） */
+  --cv-ok-bg: rgba(78, 222, 163, 0.14); /* ok 底（对应色 14% 透明度） */
+  --cv-pending: #adc6ff; /* pending 字色（stitch primary，近似） */
+  --cv-pending-bg: rgba(173, 198, 255, 0.14); /* pending 底（对应色 14% 透明度） */
+  --cv-warn: #e5c07b; /* warn 字色（近似，stitch 无 warn，沿用 one-dark 黄） */
+  --cv-warn-bg: rgba(229, 192, 123, 0.14); /* warn 底（对应色 14% 透明度） */
+  --cv-error: #ffb4ab; /* error 字色（stitch error） */
+  --cv-error-bg: rgba(255, 180, 171, 0.14); /* error 底（对应色 14% 透明度） */
+
+  /* ── 链接 ── */
+  --cv-link: #adc6ff; /* 链接色（原 #0b57d0，stitch primary，近似） */
+
+  /* ── 阴影 / 焦点光环（暗色下加深；焦点环改 primary 光环，近似） ── */
+  --cv-focus-ring: 0 0 0 3px rgba(173, 198, 255, 0.18); /* 原 rgba(0,0,0,0.03) */
+  --cv-shadow-pop: 0 16px 42px rgba(0, 0, 0, 0.5); /* 浮层阴影（原 rgba(0,0,0,0.12)/rgba(0,0,0,0.1)） */
+  --cv-shadow-drawer: 8px 0 24px rgba(0, 0, 0, 0.35); /* 抽屉阴影（原 rgba(0,0,0,0.05)/rgba(0,0,0,0.06)） */
+  --cv-shadow-panel: 0 14px 38px rgba(0, 0, 0, 0.35); /* 信息面板阴影（原 rgba(0,0,0,0.07)） */
+  --cv-shadow-prompt: 0 8px 24px rgba(0, 0, 0, 0.3); /* 输入框阴影（原 rgba(0,0,0,0.05)） */
+  --cv-shadow-lift: 0 10px 26px rgba(0, 0, 0, 0.35); /* 输入框聚焦阴影（原 rgba(0,0,0,0.07)） */
+  --cv-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3); /* steerCard 微阴影（原 rgba(0,0,0,0.04)） */
+
+  /* ── 流光渐变（streaming/shimmer 文字，两端）── */
+  --cv-shimmer-a: #8c909f; /* 暗端（原 #333 / #8a8a8a） */
+  --cv-shimmer-b: #e3e2e6; /* 亮端（原 #aaa / #d0d0d0） */
+}
+
+/* 挂载点作用域：组件挂在 .vendor-cv 内即可整体换肤；当前值与兜底层一致。 */
+.vendor-cv {
+  --cv-bg: #1f1f23;
+  --cv-bg-drawer: rgba(27, 27, 31, 0.98);
+  --cv-bg-panel: rgba(27, 27, 31, 0.94);
+  --cv-bg-hover: #292a2d;
+  --cv-bg-active: #343538;
+  --cv-bg-bubble: #292a2d;
+  --cv-bg-inset: #1b1b1f;
+  --cv-bg-card: #1b1b1f;
+  --cv-bg-code: #0d0e11;
+  --cv-bg-chip: #292a2d;
+  --cv-border: #424754;
+  --cv-border-soft: #3a3e48;
+  --cv-border-strong: #8c909f;
+  --cv-ink: #e3e2e6;
+  --cv-ink-secondary: #c2c6d6;
+  --cv-ink-muted: #8c909f;
+  --cv-ink-faint: #6f7480;
+  --cv-btn-primary-bg: #e3e2e6;
+  --cv-btn-primary-ink: #1a1b1e;
+  --cv-btn-disabled-bg: #343538;
+  --cv-status-bg: #292a2d;
+  --cv-status-ink: #c2c6d6;
+  --cv-ok: #4edea3;
+  --cv-ok-bg: rgba(78, 222, 163, 0.14);
+  --cv-pending: #adc6ff;
+  --cv-pending-bg: rgba(173, 198, 255, 0.14);
+  --cv-warn: #e5c07b;
+  --cv-warn-bg: rgba(229, 192, 123, 0.14);
+  --cv-error: #ffb4ab;
+  --cv-error-bg: rgba(255, 180, 171, 0.14);
+  --cv-link: #adc6ff;
+  --cv-focus-ring: 0 0 0 3px rgba(173, 198, 255, 0.18);
+  --cv-shadow-pop: 0 16px 42px rgba(0, 0, 0, 0.5);
+  --cv-shadow-drawer: 8px 0 24px rgba(0, 0, 0, 0.35);
+  --cv-shadow-panel: 0 14px 38px rgba(0, 0, 0, 0.35);
+  --cv-shadow-prompt: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --cv-shadow-lift: 0 10px 26px rgba(0, 0, 0, 0.35);
+  --cv-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --cv-shimmer-a: #8c909f;
+  --cv-shimmer-b: #e3e2e6;
+}
+
+/* 浅色覆写表：保留 codex-ui 原始浅色值，供将来亮色模式（挂 .vendor-cv-light 即切换）。 */
+.vendor-cv.vendor-cv-light,
+.vendor-cv-light {
+  --cv-bg: #ffffff; /* 原 #fff */
+  --cv-bg-drawer: rgba(255, 255, 255, 0.98); /* 原 rgba(255,255,255,0.98)（sync 段为 rgba(250,250,250,0.98)） */
+  --cv-bg-panel: rgba(255, 255, 255, 0.94); /* 原 rgba(255,255,255,0.94) */
+  --cv-bg-hover: #f3f3f3; /* 原 #f3f3f3 / #f6f6f6 / #f7f7f7 */
+  --cv-bg-active: #f1f1f1; /* 原 #f1f1f1 */
+  --cv-bg-bubble: #f2f2f2; /* 原 #f2f2f2 */
+  --cv-bg-inset: #f9f9f9; /* 原 #f9f9f9 */
+  --cv-bg-card: #fafafa; /* 原 #fafafa / #fbfbfb */
+  --cv-bg-code: #f4f4f4; /* 原 #f4f4f4（代码块）/ #f0f0f0（codeCard） */
+  --cv-bg-chip: #f3f3f3; /* 原 #f3f3f3（行内代码）/ #f4f4f4（file-link） */
+  --cv-border: #e5e5e5; /* 原 #e4e4e4 / #e5e5e5 / #e8e8e8 */
+  --cv-border-soft: #eeeeee; /* 原 #ececec / #eeeeee / #f0f0f0 */
+  --cv-border-strong: #d9d9d9; /* 原 #d8d8d8 / #d9d9d9 */
+  --cv-ink: #1f1f1f; /* 原 #1f1f1f / #0d0d0d / #111 / #242424 / #2a2a2a */
+  --cv-ink-secondary: #5b5b5b; /* 原 #5b5b5b / #555 / #666 / #777 / #4f5358 / #2f2f2f / #333 */
+  --cv-ink-muted: #9a9a9a; /* 原 #9a9a9a / #8a8a8a / #878787 / #8e8e8e / #8f8f8f / #8b8f94 / #797979 / #7f7f7f / #999 */
+  --cv-ink-faint: #b4b4b4; /* 原 #b4b4b4 / #c7c7c7 / #aeb4ba */
+  --cv-btn-primary-bg: #1f1f1f; /* 原 #1f1f1f / #222 / #1a1a1a */
+  --cv-btn-primary-ink: #ffffff; /* 原 #fff */
+  --cv-btn-disabled-bg: #d9d9d9; /* 原 #d9d9d9 / #e8e8e8 */
+  --cv-status-bg: #f4f4f4; /* 原 #f4f4f4（sync 段 #f7f7f7） */
+  --cv-status-ink: #5b5b5b; /* 原 #5b5b5b（sync 段 #777） */
+  --cv-ok: #2f8d46; /* 原 #2f8d46 */
+  --cv-ok-bg: #eaf7ee; /* 原 #eaf7ee */
+  --cv-pending: #3867d6; /* 原 #3867d6 */
+  --cv-pending-bg: #edf2ff; /* 原 #edf2ff */
+  --cv-warn: #b56a00; /* 原 #b56a00 */
+  --cv-warn-bg: #fff6e6; /* 原 #fff6e6 */
+  --cv-error: #c7342f; /* 原 #c7342f */
+  --cv-error-bg: #fff1f0; /* 原 #fff1f0 */
+  --cv-link: #0b57d0; /* 原 #0b57d0 */
+  --cv-focus-ring: 0 0 0 3px rgba(0, 0, 0, 0.03); /* 原 rgba(0,0,0,0.03) */
+  --cv-shadow-pop: 0 16px 42px rgba(0, 0, 0, 0.12); /* 原 rgba(0,0,0,0.12) */
+  --cv-shadow-drawer: 8px 0 24px rgba(0, 0, 0, 0.06); /* 原 rgba(0,0,0,0.05)/rgba(0,0,0,0.06) */
+  --cv-shadow-panel: 0 14px 38px rgba(0, 0, 0, 0.07); /* 原 rgba(0,0,0,0.07) */
+  --cv-shadow-prompt: 0 8px 24px rgba(0, 0, 0, 0.05); /* 原 rgba(0,0,0,0.05) */
+  --cv-shadow-lift: 0 10px 26px rgba(0, 0, 0, 0.07); /* 原 rgba(0,0,0,0.07) */
+  --cv-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04); /* 原 rgba(0,0,0,0.04) */
+  --cv-shimmer-a: #333333; /* 原 #333 / #8a8a8a */
+  --cv-shimmer-b: #aaaaaa; /* 原 #aaa / #d0d0d0 */
+}
