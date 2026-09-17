@@ -1,4 +1,4 @@
-// Magic 自有客户端对话区壳（M1 静态）。
+﻿// Magic 自有客户端对话区壳（M1 静态）。
 // 替代 DSH ui-chat 的 ChatView.tsx + ChatNodeSeat.tsx + renderSlot 注册表：
 // 消息流容器 + kind→组件分发 + Turn-process 折叠逻辑（照 ChatNodeSeat.tsx:38-148
 // 的逻辑移植；per-key 可观察份额改为整窗快照直读）。渲染组件全部来自 vendor/dsh-chat。
@@ -36,6 +36,7 @@ import type {
   TurnProcessOwnerProps,
   TurnTailChatData,
   UseChat,
+  ChatNodeOwnerProps,
 } from '../vendor/dsh-chat/index.ts'
 import { makeRenderToolview } from './tool-views.tsx'
 // 换肤点（2026-09-17 会话区对齐 Magic 组合 web 端）：折叠头换 magic-ceo-ui 已验收的
@@ -57,7 +58,7 @@ const renderToolview = makeRenderToolview(ct)
 const SESSION_ID = 'magic-local-session'
 const CWD = 'd:/Harmess/Magic'
 
-const openFile = (): void => {}
+const openFile = (_path: string, _options?: unknown): void => {}
 const openSkill = (_name: string): void => {}
 const inspectCall = (_callId: string): void => {}
 const forkAt = (_seq: number): void => {}
@@ -90,10 +91,11 @@ interface SeatProps {
   useChat: UseChat
   turnTail: TurnTailChatData | undefined
   producedByTurn: ReadonlyMap<number, readonly string[]>
+  fileMentions: ChatNodeOwnerProps['fileMentions']
 }
 
 /** 一个 Chat 节点的座位：Turn-process 折叠推导 + 分发（照 ChatNodeSeat 逻辑移植）。 */
-function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail, producedByTurn }: SeatProps) {
+function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail, producedByTurn, fileMentions }: SeatProps) {
   const spec = presentation?.spec
   const processOpen = spec !== undefined && open
   const setOpenThis = useCallback((next: boolean) => {
@@ -128,7 +130,7 @@ function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail, produc
   }, [processMember, setOpenThis])
   const wrapperRef = useSearchableHidden(processHidden, revealProcess)
 
-  const body = renderNode(node, { turnProcess, turnTail, useChat, producedByTurn })
+  const body = renderNode(node, { turnProcess, turnTail, useChat, producedByTurn, fileMentions })
   return (
     <div
       ref={wrapperRef}
@@ -150,11 +152,12 @@ interface RenderContext {
   turnTail: TurnTailChatData | undefined
   useChat: UseChat
   producedByTurn: ReadonlyMap<number, readonly string[]>
+  fileMentions: ChatNodeOwnerProps['fileMentions']
 }
 
 /** kind→组件分发（替代 renderSlot 键控注册表；base 货币 + node + t）。 */
 function renderNode(node: ChatNode, ctx: RenderContext) {
-  const base = { ...ownerBase, sessionId: SESSION_ID, t }
+  const base = { ...ownerBase, sessionId: SESSION_ID, t, fileMentions: ctx.fileMentions }
   switch (node.kind) {
     case 'user':
     case 'steering':
@@ -302,6 +305,25 @@ export function ChatFlow({ store }: { store: ChatSessionStore }) {
     return map
   }, [snapshot])
 
+  // 正文文件引用 chip（2026-09-17 收尾）：把本轮产出路径解析进 MarkdownText 的
+  // inline-code 提及缝——正文里提到 `App.tsx` 等即变为可点文件 chip。
+  const fileMentions = useMemo<ChatNodeOwnerProps['fileMentions']>(() => {
+    return (owner) => {
+      const paths = producedByTurn.get(owner.turn) ?? []
+      if (paths.length === 0) return undefined
+      return {
+        resolve: (value: string) => {
+          const hit = paths.find(p => p === value
+            || p.endsWith(`/${value}`)
+            || p.slice(Math.max(0, p.lastIndexOf('/') + 1)) === value)
+          if (hit === undefined) return undefined
+          const name = hit.slice(Math.max(0, hit.lastIndexOf('/') + 1))
+          return { open: () => { openFile(hit) }, label: name, title: hit }
+        },
+      }
+    }
+  }, [producedByTurn])
+
   // Turn-process 展开状态（DSH 存 chat store；本地为组件状态，按轮）。
   const [openTurns, setOpenTurnsState] = useState<ReadonlySet<number>>(() => new Set())
   const setOpenTurn = useCallback((turn: number, open: boolean) => {
@@ -353,6 +375,7 @@ export function ChatFlow({ store }: { store: ChatSessionStore }) {
                 useChat={useChat}
                 turnTail={turn === undefined ? undefined : turnTails.get(turn)}
                 producedByTurn={producedByTurn}
+                fileMentions={fileMentions}
               />
             )
           })}

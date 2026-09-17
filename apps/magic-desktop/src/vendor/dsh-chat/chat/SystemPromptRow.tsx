@@ -30,6 +30,8 @@ export function SystemPromptRow({ text, update = false, t }: SystemPromptRowProp
   const [open, setOpen] = useState(false)
   return (
     <DisclosureRow
+      // 换肤点（2026-09-17 用户裁定）：关闭 hover chevron 预览，与 ToolRow 一致。
+      previewChevron={false}
       className={css.root}
       icon={<IconBrowseOutline16 size={14} />}
       chevronClassName={css.chevron}

@@ -43,6 +43,8 @@ export function GenericCommandCard({ node, t, runningSummary }: GenericCommandCa
       {state === 'running' && <span className={a11yCss.visuallyHidden}>{t('row.running')}</span>}
       {state === 'error' && <span className={a11yCss.visuallyHidden}>{t('row.failed')}</span>}
       <DisclosureRow
+      // 换肤点（2026-09-17 用户裁定）：关闭 hover chevron 预览，与 ToolRow 一致。
+      previewChevron={false}
         rowClassName={css.row}
         leadingClassName={css.leading}
         titleClassName={css.title}

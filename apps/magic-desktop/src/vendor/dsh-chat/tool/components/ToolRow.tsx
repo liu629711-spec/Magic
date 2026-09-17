@@ -166,6 +166,10 @@ export function ToolRow({
     <div className={css.root} data-variant={variant} data-tool={toolName} data-state={state}>
       {status !== null && <span className={css.visuallyHidden}>{status}</span>}
       <DisclosureRow
+        // 换肤点（2026-09-17 用户裁定）：关闭 hover 时的 chevron 预览（DSH 原生
+        // previewChevron 会把闲置图标交叉淡化为向下箭头，被误读为「已展开」）。
+        // 收起态恒显工具图标，点开后由 DisclosureRow 显示向下 chevron。
+        previewChevron={false}
         rowClassName={css.row}
         leadingClassName={css.leading}
         titleClassName={css.title}

@@ -28,6 +28,8 @@ export function ContextInjectionRow({ content, source, provenance, form, t }: Co
 
   return (
     <DisclosureRow
+      // 换肤点（2026-09-17 用户裁定）：关闭 hover chevron 预览，与 ToolRow 一致。
+      previewChevron={false}
       className={css.root}
       icon={provenance.role === 'recall'
         ? <span data-context-recall-icon><ReferenceIcon kind="session" /></span>
