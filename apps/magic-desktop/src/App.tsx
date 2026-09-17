@@ -157,6 +157,16 @@ export function App() {
     [web.sessions],
   );
 
+  // 会话工作目录（右键菜单「复制路径」用，2026-09-17 用户裁定）
+  const sessionCwds = useMemo<Record<string, string>>(
+    () => Object.fromEntries(
+      web.sessions
+        .filter(row => row.cwd !== undefined && row.cwd.length > 0)
+        .map(row => [row.sessionId, row.cwd as string]),
+    ),
+    [web.sessions],
+  );
+
   // web 模式：任务区 = 全部会话按最近时间倒序（「最近」语义；新建任务即排第一）
   const remoteTaskSessions = useMemo<string[] | undefined>(() => {
     if (!backendMode || web.status !== "ready") return undefined;
@@ -318,6 +328,7 @@ export function App() {
             : undefined
         }
         recentLimit={recentLimit}
+        sessionCwds={backendMode ? sessionCwds : undefined}
       />
       <div className="pl-[260px] h-full flex">
         <main className="flex-1 min-w-0 bg-surface">

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { DragEvent as ReactDragEvent, ReactNode } from "react";
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { Icon } from "./Icon";
 import { Folder3DIcon } from "./Folder3DIcon";
 import { SearchPalette, type PaletteSession } from "./SearchPalette";
@@ -107,7 +107,7 @@ type DropHandlers = {
  *    打开文件夹/搜索文件与设置组 M1 无后端，置灰占位）。
  * 回退时删掉 RowActions 中 pin、拖拽 handlers、SearchPalette 引用即可。
  */
-export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenSettings, assigned, onAssign, recentLimit = 20 }: {
+export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenSettings, assigned, onAssign, recentLimit = 20, sessionCwds }: {
   activeSessionId: string
   onOpenSession: (id: string) => void
   onForkSession: (sourceId: string, forkId: string) => void
@@ -120,6 +120,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   assigned?: Record<string, string>
   /** web 后端模式：拖拽改变归属（null = 退回最近任务区） */
   onAssign?: (sessionId: string, workspaceId: string | null) => void
+  /** web 后端模式：会话工作目录（右键「复制路径」用） */
+  sessionCwds?: Record<string, string>
   /** web 后端模式：会话 id → 显示名（session/list 的 title 投影） */
   labels?: Record<string, string>
   /** web 后端模式：重命名走 session/rename；缺省=本地覆盖（mock 模式） */
@@ -202,13 +204,17 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   }, [sectionOrder]);
   const sectionDragRef = useRef<SectionId | null>(null);
   const [sectionHint, setSectionHint] = useState<{ id: SectionId; before: boolean } | null>(null);
+  // 拖拽中的分区（其余分区显示虚线落点框，2026-09-17 用户裁定改善拖动体验）
+  const [draggingSection, setDraggingSection] = useState<SectionId | null>(null);
   const sectionDnd = (id: SectionId) => ({
     onDragStart: (e: ReactDragEvent) => {
       sectionDragRef.current = id;
-      e.dataTransfer.effectAllowed = "move";
+      setDraggingSection(id);
+      if (e.dataTransfer !== null) e.dataTransfer.effectAllowed = "move";
     },
     onDragEnd: () => {
       sectionDragRef.current = null;
+      setDraggingSection(null);
       setSectionHint(null);
     },
     onDragOver: (e: ReactDragEvent) => {
@@ -239,6 +245,13 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
         ? "shadow-[inset_0_2px_0_0_var(--color-primary)]"
         : "shadow-[inset_0_-2px_0_0_var(--color-primary)]"
       : "";
+  /** 分区外框（2026-09-17 用户裁定）：拖拽时其余分区显示虚线落点框，拖入即交换/插入。 */
+  const sectionFrameClass = (id: SectionId): string => {
+    if (draggingSection === id) return "opacity-40";
+    if (draggingSection === null) return "";
+    if (sectionHint?.id === id) return "outline outline-2 outline-dashed outline-primary/70";
+    return "outline outline-1 outline-dashed outline-outline/25";
+  };
 
   // 搜索任务（裁定 19 图四）
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -370,8 +383,10 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
 
   const onRowDragStart = (e: ReactDragEvent, key: string, base: string, section: "pinned" | "ws" | "task", wsId?: string, task?: PinTask) => {
     dragRef.current = { key, base, task, from: locate(key, section, wsId) };
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", base);
+    if (e.dataTransfer !== null) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", base);
+    }
   };
 
   const onRowDragOver = (e: ReactDragEvent, key: string) => {
@@ -457,6 +472,44 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
       y: Math.min(rect.bottom + 4, window.innerHeight - 128),
     });
   };
+
+  // 右键菜单 + 标记未读（2026-09-17 用户裁定：会话右键弹出完整操作菜单，参考 Codex）
+  const [unread, setUnread] = useState<Record<string, boolean>>({});
+  const onRowContextMenu = (
+    e: ReactMouseEvent,
+    key: string,
+    base: string,
+    section: "pinned" | "ws" | "task",
+    wsId?: string,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRowMenu({
+      key,
+      base,
+      section,
+      wsId,
+      x: Math.max(8, Math.min(e.clientX, window.innerWidth - 184)),
+      y: Math.min(e.clientY, window.innerHeight - 400),
+    });
+  };
+  const copyText = (text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => setRowMenu(null),
+      () => window.alert("复制失败：剪贴板不可用"),
+    );
+  };
+  const openRow = (key: string, base: string) => {
+    setUnread((s) => {
+      if (s[key] !== true) return s;
+      const next = { ...s };
+      delete next[key];
+      return next;
+    });
+    onOpenSession(base);
+  };
+  const menuPinnedItem = rowMenu !== null ? pinned.find((p) => p.key === rowMenu.key) : undefined;
+  const menuCwd = rowMenu !== null ? sessionCwds?.[rowMenu.key] : undefined;
 
   /** 全局唯一会话名（App 会话存储按标题为键，跨分区不可重名）。 */
   const uniqueTitle = (base: string) => {
@@ -611,8 +664,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             /* 置顶区（2026-09-17 用户裁定）：两种模式都保留；无「拖动会话到此处」占位、
                默认收起；分区头可拖拽重排 */
             { id: "pinned" as const, node: (
+              <div key="pinned" className={`rounded-lg transition-opacity ${sectionFrameClass("pinned")}`}>
               <Section
-                key="pinned"
                 label="置顶任务"
                 open={sectionOpen.pinned}
                 onToggle={() => toggleSection("pinned")}
@@ -637,8 +690,9 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                       acknowledge(item.task.id);
                     }
                     // v2 联动：置顶任务行也切换对话区（id 即标题，无 mock 时为空白会话）
-                    onOpenSession(item.base);
+                    openRow(item.key, item.base);
                   }}
+                  onContextMenu={(e) => onRowContextMenu(e, item.key, item.base, "pinned")}
                   onDragStart={(e) => onRowDragStart(e, item.key, item.base, "pinned", undefined, item.task)}
                   onDragEnd={onDragEnd}
                   onDragOver={(e) => onRowDragOver(e, item.key)}
@@ -667,13 +721,13 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                     onOpen={(rect) => openRowMenu(item.key, item.base, "pinned", undefined, rect)}
                   />
                 </a>
-              );
-            })}
+              ); })}
               </Section>
+              </div>
             ) },
             { id: "projects" as const, node: (
+              <div key="projects" className={`rounded-lg transition-opacity ${sectionFrameClass("projects")}`}>
               <Section
-                key="projects"
                 label="项目"
                 open={sectionOpen.projects}
                 onToggle={() => toggleSection("projects")}
@@ -747,8 +801,9 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                               draggable
                               onClick={(e) => {
                                 e.preventDefault();
-                                onOpenSession(s);
+                                openRow(s, s);
                               }}
+                              onContextMenu={(e) => onRowContextMenu(e, s, s, "ws", ws.id)}
                               onDragStart={(e) => onRowDragStart(e, s, s, "ws", ws.id)}
                               onDragEnd={onDragEnd}
                               onDragOver={(e) => onRowDragOver(e, s)}
@@ -760,7 +815,12 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                               }`}
                             >
                               {dropIndicator(s)}
-                              <span className={`${rowLabel} min-w-0`}>{title}</span>
+                              <span className="flex items-center gap-1.5 min-w-0">
+                                {unread[s] === true ? (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                                ) : null}
+                                <span className={`${rowLabel} min-w-0`}>{title}</span>
+                              </span>
                               <RowActions
                                 label={title}
                                 pinned={false}
@@ -776,13 +836,14 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
               );
             })}
               </Section>
+              </div>
             ) },
             /* 最近任务区（2026-09-17 用户裁定）：mock 模式=本地任务；web 模式=未归属工作区
                的真实会话（新建任务默认落这里）；列表自适应填充到左栏底部，超出滚动 +
                底部悬浮滚动提示；渲染条数上限由设置页控制 */
             { id: "tasks" as const, node: (
+              <div key="tasks" className={`rounded-lg transition-opacity ${sectionFrameClass("tasks")}`}>
               <Section
-                key="tasks"
                 label="最近任务"
                 open={sectionOpen.tasks}
                 onToggle={() => toggleSection("tasks")}
@@ -806,8 +867,9 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                   draggable
                   onClick={(e) => {
                     e.preventDefault();
-                    onOpenSession(key);
+                    openRow(key, key);
                   }}
+                  onContextMenu={(e) => onRowContextMenu(e, key, key, "task")}
                   onDragStart={(e) => onRowDragStart(e, key, key, "task")}
                   onDragEnd={onDragEnd}
                   onDragOver={(e) => onRowDragOver(e, key)}
@@ -819,7 +881,10 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                   }`}
                 >
                   {showMockSections ? dropIndicator(key) : null}
-                  <span className="flex items-center min-w-0">
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    {unread[key] === true ? (
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                    ) : null}
                     <span className={rowLabel}>{title}</span>
                   </span>
                   <RowActions
@@ -837,6 +902,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
               </div>
             ) : null}
               </Section>
+              </div>
             ) },
           ]
             .slice()
@@ -851,7 +917,9 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
           onCreate={createProject}
         />
       ) : null}
-      {/* 会话行操作菜单（裁定 18）：三项对齐 web 端 ui-workspace（重命名/分叉/归档） */}
+      {/* 会话行操作菜单（裁定 18/23）：⋯ 按钮与行右键共用。参考 Codex 右键菜单（用户图二）：
+          纯前端可用的已接真实行为；壳/轨迹相关能力（分屏、资源管理器、任务/日志路径、
+          前往配置、调用轨迹、反馈）置灰标注待接。 */}
       {rowMenu ? (
         <>
           <div
@@ -864,19 +932,64 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
           />
           <div
             role="menu"
-            className="fixed z-[71] min-w-[148px] rounded-lg border border-surface-container-highest bg-surface-container py-1 shadow-[0_8px_24px_-4px_rgba(0,0,0,0.6)]"
+            className="fixed z-[71] min-w-[176px] rounded-lg border border-surface-container-highest bg-surface-container py-1 shadow-[0_8px_24px_-4px_rgba(0,0,0,0.6)]"
             style={{ left: rowMenu.x, top: rowMenu.y }}
           >
+            {menuPinnedItem !== undefined ? (
+              <MenuItem
+                icon="push_pin"
+                filled
+                label="取消置顶"
+                onClick={() => {
+                  unpinRow(menuPinnedItem);
+                  setRowMenu(null);
+                }}
+              />
+            ) : (
+              <MenuItem
+                icon="push_pin"
+                label="置顶任务"
+                onClick={() => {
+                  pinRow(rowMenu.key, rowMenu.base, rowMenu.section, rowMenu.wsId);
+                  setRowMenu(null);
+                }}
+              />
+            )}
             <MenuItem
               icon="edit"
-              label="重命名"
+              label="重命名任务"
               onClick={() => {
                 setRenameTarget({ key: rowMenu.key, title: titleOf(rowMenu.key, rowMenu.base) });
                 setRowMenu(null);
               }}
             />
+            <MenuItem icon="archive" label="归档任务" onClick={() => archiveRow(rowMenu)} />
+            <MenuItem
+              icon="mark_email_unread"
+              label="标记为未读"
+              onClick={() => {
+                setUnread((s) => ({ ...s, [rowMenu.key]: true }));
+                setRowMenu(null);
+              }}
+            />
+            <MenuItem icon="splitscreen" label="在分屏打开" disabled />
+            <MenuDivider />
+            <MenuItem icon="folder_open" label="在资源管理器中打开" disabled />
+            <MenuItem
+              icon="content_copy"
+              label="复制路径"
+              disabled={menuCwd === undefined || menuCwd.length === 0}
+              onClick={() => copyText(menuCwd ?? "")}
+            />
+            <MenuItem icon="content_copy" label="复制任务路径" disabled />
+            <MenuItem icon="content_copy" label="复制日志路径" disabled />
+            <MenuItem icon="content_copy" label="复制会话 ID" onClick={() => copyText(rowMenu.key)} />
+            <MenuItem icon="settings" label="前往配置" disabled />
+            <MenuDivider />
+            <MenuItem icon="route" label="查看调用轨迹" disabled />
+            <MenuItem icon="flag" label="反馈问题" disabled />
+            <MenuDivider />
             <MenuItem icon="call_split" label="分叉会话" onClick={() => forkRow(rowMenu)} />
-            <MenuItem icon="archive" label="归档会话" onClick={() => archiveRow(rowMenu)} />
           </div>
         </>
       ) : null}
@@ -1113,7 +1226,7 @@ function Section({
   headerClass?: string;
 }) {
   return (
-    <div className={grow === true ? "flex flex-col flex-1 min-h-0" : undefined}>
+    <div className={grow === true && open ? "flex flex-col flex-1 min-h-0" : undefined}>
       <div
         onClick={onToggle}
         draggable={headerProps !== undefined}
@@ -1358,23 +1471,35 @@ function RowActions({ label, pinned, onTogglePin, onOpen }: {
   );
 }
 
-/** 操作菜单项（重命名/分叉会话/归档会话）。 */
-function MenuItem({ icon, label, onClick }: {
+/** 操作菜单项（裁定 18/23：置顶/重命名/归档/未读/复制…；disabled=待接能力置灰）。 */
+function MenuItem({ icon, label, onClick, disabled, filled }: {
   icon: string;
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
+  disabled?: boolean;
+  filled?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
-      onClick={onClick}
-      className="flex w-full items-center gap-2 px-3 h-8 text-[13px] text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors text-left cursor-pointer"
+      disabled={disabled === true}
+      onClick={disabled === true ? undefined : onClick}
+      className={`flex w-full items-center gap-2 px-3 h-8 text-[13px] transition-colors text-left ${
+        disabled === true
+          ? "text-outline/45 cursor-not-allowed"
+          : "text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface cursor-pointer"
+      }`}
     >
-      <Icon name={icon} className="text-[16px] shrink-0" />
+      <Icon name={icon} filled={filled} className="text-[16px] shrink-0" />
       <span className="truncate">{label}</span>
     </button>
   );
+}
+
+/** 菜单分隔线（裁定 23）。 */
+function MenuDivider() {
+  return <div className="my-1 h-px bg-surface-container-highest/60" />;
 }
 
 /** 重命名会话弹窗（对齐 web 端 ui-workspace rename.session.title 弹窗形态：输入框 + 取消/重命名）。 */
