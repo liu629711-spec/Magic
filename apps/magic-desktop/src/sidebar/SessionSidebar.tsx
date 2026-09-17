@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Icon } from "./Icon";
+import { Folder3DIcon } from "./Folder3DIcon";
 import {
   initialWorkspaces,
   navItems,
@@ -43,13 +44,13 @@ export function SessionSidebar() {
     Object.fromEntries(initialWorkspaces.map((ws) => [ws.id, ws.expanded])),
   );
   const [dialogOpen, setDialogOpen] = useState(false);
-  // 会话状态覆盖层：点击完成/中断的会话行后恢复 idle（2026-09-16 用户裁定）
-  const [statusOverride, setStatusOverride] = useState<Record<string, SessionStatus>>({});
+  // 点击完成/中断的会话行后，前置提示整个去掉变成纯文本行（2026-09-17 用户裁定，图二）
+  const [acknowledged, setAcknowledged] = useState<Record<string, boolean>>({});
 
-  const statusOf = (id: string, fallback?: SessionStatus): SessionStatus =>
-    statusOverride[id] ?? fallback ?? "idle";
-  const clearStatus = (id: string) =>
-    setStatusOverride((s) => ({ ...s, [id]: "idle" }));
+  const statusOf = (task: (typeof pinnedTasks)[number]): SessionStatus | "ack" =>
+    acknowledged[task.id] ? "ack" : task.status ?? "idle";
+  const acknowledge = (id: string) =>
+    setAcknowledged((s) => ({ ...s, [id]: true }));
 
   const toggleSection = (key: "pinned" | "projects" | "tasks") =>
     setSectionOpen((s) => ({ ...s, [key]: !s[key] }));
@@ -86,7 +87,7 @@ export function SessionSidebar() {
             onToggle={() => toggleSection("pinned")}
           >
             {pinnedTasks.map((task) => {
-              const status = statusOf(task.id, task.status);
+              const status = statusOf(task);
               return (
                 <a
                   key={task.id}
@@ -95,7 +96,7 @@ export function SessionSidebar() {
                   onClick={(e) => {
                     if (status === "completed" || status === "interrupted") {
                       e.preventDefault();
-                      clearStatus(task.id);
+                      acknowledge(task.id);
                     }
                   }}
                   className={`${row} ${
@@ -111,9 +112,9 @@ export function SessionSidebar() {
                       <StoppedPen />
                     ) : status === "completed" ? (
                       <CompletedCheck />
-                    ) : (
+                    ) : status === "idle" ? (
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${task.dot}`} />
-                    )}
+                    ) : null}
                     <span className={rowLabel}>{task.title}</span>
                   </span>
                 </a>
@@ -149,12 +150,9 @@ export function SessionSidebar() {
                     className="group flex items-center justify-between h-8 pl-2 pr-1 rounded-xl text-on-surface-variant transition-[background-color,color,transform] duration-150 active:scale-[0.98] cursor-pointer hover:bg-surface-container-low hover:text-on-surface w-full"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <Icon
-                        name={open ? "folder_open" : "folder"}
-                        className="text-[16px] shrink-0"
-                      />
-                      <span className={rowLabel}>{ws.name}</span>
-                    </div>
+                        <Folder3DIcon open={open} />
+                        <span className={rowLabel}>{ws.name}</span>
+                      </div>
                     <button
                       type="button"
                       title="添加新会话"

@@ -81,7 +81,8 @@
   animation: tipGlow 0.9s ease-in-out infinite;
 }
 
-/* 完成态「墨凝收笔与翡翠微绽」（来源：用户提供的会话状态规范 code.html 方案一，420ms 绽放一次后静止） */
+/* 完成态「墨凝收笔与翡翠微绽」（来源：用户提供的会话状态规范 code.html 方案一）。
+   2026-09-17 裁定：循环播放以持续提醒用户已完成，点击会话行后消失。 */
 @keyframes emeraldBloom {
   0% {
     transform: scale(0.92);
@@ -98,5 +99,5 @@
 }
 
 .animate-emerald-bloom {
-  animation: emeraldBloom 420ms cubic-bezier(0.16, 1, 0.3, 1) 1;
+  animation: emeraldBloom 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
