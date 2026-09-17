@@ -102,9 +102,28 @@
   animation: emeraldBloom 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
-/* ── CodeBlock 浅色代码面板（stitch_codex_ui_clone/UI/diff.txt 照搬浅色，2026-09-17 用户裁定） ──
-   原设计未附主题变量值，以下浅色值为落地补定（GitHub diff 风格中性色），变量自足不依赖全局暗色主题。 */
+/* ── CodeBlock 代码面板（stitch_codex_ui_clone/UI/diff.txt，2026-09-17 用户裁定）──
+   结构/交互照搬 diff.txt；配色 2026-09-17 二次裁定：跟随界面暗色自适应（变量化，主题切换只换变量表，组件零改动）。
+   暗色值为落地补定（以 stitch 暗色 token 为基准）；浅色表保留（.cb-theme-light，供将来亮色界面切换）。 */
 .magic-codeblock {
+  --cb-surface: #1f1f23; /* surface-container */
+  --cb-ink: #e3e2e6; /* on-surface */
+  --cb-ink-2: #c2c6d6; /* on-surface-variant */
+  --cb-ink-3: #8c909f; /* outline */
+  --cb-line: #343538; /* surface-container-highest */
+  --cb-hover: #292a2d; /* surface-container-high */
+  --cb-green: #4edea3; /* tertiary */
+  --cb-red: #ffb4ab; /* error */
+  --cb-green-tint: rgba(78, 222, 163, 0.12);
+  --cb-red-tint: rgba(255, 180, 171, 0.1);
+  --cb-orange: #e8a262;
+  --cb-accent-ink: #adc6ff; /* primary */
+  --cb-radius: 12px;
+  --cb-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  color: var(--cb-ink-2);
+}
+
+.cb-theme-light {
   --cb-surface: #ffffff;
   --cb-ink: #1f2328;
   --cb-ink-2: #424a53;
@@ -117,7 +136,6 @@
   --cb-red-tint: rgba(207, 34, 46, 0.07);
   --cb-orange: #953800;
   --cb-accent-ink: #0550ae;
-  --cb-radius: 12px;
   --cb-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.1);
   color: var(--cb-ink-2);
 }

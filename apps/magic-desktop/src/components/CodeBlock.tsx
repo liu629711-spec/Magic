@@ -1,12 +1,12 @@
 import { useCallback, useState, type ReactNode } from "react";
 
 /**
- * CodeBlock 浅色代码面板。
- * 出处：stitch_codex_ui_clone/UI/diff.txt（用户提供的组件设计，2026-09-17 裁定照搬浅色，
- * 中栏对话流与右栏审查 diff 卡共用）。结构/交互与 diff.txt 一致：
+ * CodeBlock 代码面板。
+ * 出处：stitch_codex_ui_clone/UI/diff.txt（用户提供的组件设计）。结构/交互与 diff.txt 一致：
  *  · Code 视图——行号列表 + Copy 按钮
  *  · Diff 视图——old/new 双行号 gutter、+/− 竖条、删除行斜纹、词级 add/del 高亮
- * 浅色主题变量见 index.css `.magic-codeblock`（值为落地补定，diff.txt 未附）。
+ * 配色 2026-09-17 用户裁定：跟随界面暗色自适应——全部颜色走 CSS 变量
+ * （index.css `.magic-codeblock` 暗色基准表；`.cb-theme-light` 浅色表供将来亮色界面切换，组件零改动）。
  */
 
 export type CodePiece = { text: string; change?: "add" | "del" };
