@@ -17,12 +17,14 @@ import type {
 
 export interface ChatRenderState {
   readonly snapshot: ChatSnapshot
+  /** 本地已提交、等待回包（M1 无回包流；SDK 接线后由 turn/end 或首个回包事件收口）。 */
+  readonly awaitingReply: boolean
 }
 
 export class ChatSessionStore {
   private entries: SessionEventLikeEntry[] = []
   private readonly listeners = new Set<() => void>()
-  private state: ChatRenderState = { snapshot: EMPTY_CHAT_SNAPSHOT }
+  private state: ChatRenderState = { snapshot: EMPTY_CHAT_SNAPSHOT, awaitingReply: false }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
@@ -51,7 +53,8 @@ export class ChatSessionStore {
     this.publish()
   }
 
-  /** 本地提交回声：M1 静态阶段把用户消息折叠进窗口（SDK 接线前无真实回包）。 */
+  /** 本地提交回声：M1 静态阶段把用户消息折叠进窗口（SDK 接线前无真实回包）。
+      提交后进入等待回包态（驱动流尾鼓楼动画；回包事件到达即收口）。 */
   submit(text: string): void {
     let maxSeq = 0
     for (const entry of this.entries) {
@@ -70,10 +73,19 @@ export class ChatSessionStore {
       },
       surfaceOp: 'append',
     } as SessionEvent)
+    this.state = { ...this.state, awaitingReply: true }
+    notifySubscribers(this.listeners, 'chat-session-store')
+  }
+
+  /** 回包事件收口等待态（SDK 接线后由 session.event 流驱动）。 */
+  settleReply(): void {
+    if (!this.state.awaitingReply) return
+    this.state = { ...this.state, awaitingReply: false }
+    notifySubscribers(this.listeners, 'chat-session-store')
   }
 
   private publish(): void {
-    this.state = { snapshot: foldChatSnapshot(this.entries) }
+    this.state = { ...this.state, snapshot: foldChatSnapshot(this.entries) }
     notifySubscribers(this.listeners, 'chat-session-store')
   }
 }

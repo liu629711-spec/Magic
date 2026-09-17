@@ -15,7 +15,6 @@ import {
   ToolCallTree,
   TurnErrorNodeView,
   TurnMaxTokensNodeView,
-  TurnProcessNodeView,
   TurnTailNodeView,
   TURN_PROCESS_INDEPENDENT_KINDS,
   UnknownNodeView,
@@ -38,7 +37,13 @@ import type {
   UseChat,
 } from '../vendor/dsh-chat/index.ts'
 import { makeRenderToolview } from './tool-views.tsx'
-import { Composer } from './Composer.tsx'
+// 换肤点（2026-09-17 会话区对齐 Magic 组合 web 端）：折叠头换 magic-ceo-ui 已验收的
+// TurnProcessSummary（codex 式「已处理 2m27s · 已探索 2 项」）。回退时还原
+// MagicTurnProcessHeader（对齐画廊 ToolChips 的计数头）或 vendored TurnProcessNodeView。
+import { MagicTurnProcessSummary, type MagicTurnProcessSummaryProps } from './MagicTurnProcessSummary.tsx'
+import PromptBar from '../vendor/stitch-chat/PromptBar.tsx'
+import { ComposerStats, TurnTailPills } from './TurnPills.tsx'
+import { InkTowerLoader } from './InkTowerLoader.tsx'
 import type { ChatSessionStore } from './chat-store.ts'
 import css from './ChatFlow.module.css'
 
@@ -187,10 +192,38 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
     case 'turn-max-tokens':
       return <TurnMaxTokensNodeView {...base} node={node} />
     case 'turn-process':
+      // 换肤点（2026-09-17 会话区对齐 Magic 组合 web 端）：折叠头换 magic-ceo-ui
+      // 已验收的 TurnProcessSummary（codex 式摘要行）；展开后的工具卡保持 DSH
+      // ToolCallTree。回退时还原本目录 MagicTurnProcessHeader 或 vendored TurnProcessNodeView。
       if (ctx.turnProcess === undefined) return null
-      return <TurnProcessNodeView {...base} node={node} turnProcess={ctx.turnProcess} />
-    case 'turn-tail':
-      return <TurnTailNodeView {...base} node={node} forkAt={forkAt} useChat={ctx.useChat} />
+      return (
+        <MagicTurnProcessSummary
+          node={node as ChatNode<'turn-process'>}
+          turnProcess={ctx.turnProcess}
+          useChat={ctx.useChat as MagicTurnProcessSummaryProps['useChat']}
+        />
+      )
+    case 'turn-tail': {
+      // 轮尾 pill（2026-09-17 会话区对齐 web 端）：用量/用时挂 vendored usageAction 缝。
+      const tailLocation = node.location
+      const tailTurn = tailLocation.kind === 'turn' ? tailLocation.turn : undefined
+      const tailData = (node as ChatNode<'turn-tail'>).data
+      return (
+        <TurnTailNodeView
+          {...base}
+          node={node}
+          forkAt={forkAt}
+          useChat={ctx.useChat}
+          usageAction={(
+            <TurnTailPills
+              turnTail={tailData}
+              startTime={tailTurn?.start?.time}
+              endTime={tailTurn?.end?.time}
+            />
+          )}
+        />
+      )
+    }
     case 'unknown':
       return <UnknownNodeView {...base} node={node} />
     default: {
@@ -246,6 +279,8 @@ export function ChatFlow({ store }: { store: ChatSessionStore }) {
     if (el !== null && stickRef.current) el.scrollTop = el.scrollHeight
   }, [snapshot])
 
+  const awaitingReply = state.awaitingReply
+
   return (
     <div className="vendor-dsh-chat flex h-full flex-col bg-surface text-on-surface">
       <div
@@ -275,9 +310,20 @@ export function ChatFlow({ store }: { store: ChatSessionStore }) {
               />
             )
           })}
+          {/* 运行中状态行（2026-09-17 用户裁定）：毛笔画鼓楼动画 +「绘画中」，
+              位置同 DSH TurnStatus（流末尾左对齐）；提交后等待回包期间常驻。 */}
+          {awaitingReply && <InkTowerLoader />}
         </div>
       </div>
-      <Composer onSubmit={text => store.submit(text)} />
+      <div className="shrink-0" data-composer-seat>
+        <div className="mx-auto w-full max-w-[var(--dsh-chat-content-width)] px-4 pb-4 pt-3">
+          {/* 换肤点（2026-09-17 对话区 v2）：输入条换画廊 PromptBar（demo=false 嵌入；
+              听写占位=裁定 4、扫光保留=裁定 2）。回退时还原本目录 Composer.tsx。 */}
+          <PromptBar demo={false} onSend={text => store.submit(text)} />
+          {/* 会话统计条（2026-09-17 对齐 web 端 StatsPills）：无统计数据的会话不渲染。 */}
+          <ComposerStats snapshot={snapshot} />
+        </div>
+      </div>
     </div>
   )
 }

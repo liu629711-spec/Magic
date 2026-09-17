@@ -155,3 +155,59 @@
 .cb-hover:hover { background: var(--cb-hover); }
 .cb-copy:hover { color: var(--cb-ink); }
 .cb-mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+/* ── 画廊令牌桥（stitch-chat 组件：PromptBar/ThinkingState 等，2026-09-17 对话区 v2 皮肤）──
+   设计稿画廊令牌 → Magic stitch 暗色 token 映射。RGB 通道格式支持 Tailwind 透明度
+   修饰符（bg-line/70 等）；亮色主题将来只换本变量表，画廊组件零改动。 */
+:root {
+  --gl-ink: 227 226 230;        /* on-surface */
+  --gl-ink-2: 194 198 214;      /* on-surface-variant */
+  --gl-ink-3: 140 144 159;      /* outline */
+  --gl-line: 66 71 84;          /* outline-variant */
+  --gl-line-strong: 140 144 159; /* outline */
+  --gl-hover: 41 42 45;         /* surface-container-high */
+  --gl-hover-2: 47 48 52;       /* hover 强化档 */
+  --gl-inset: 27 27 31;         /* surface-container-low */
+  --gl-field: 31 31 35;         /* surface-container */
+  --gl-canvas: 18 19 22;        /* background */
+  --gl-green: 78 222 163;       /* tertiary */
+  --gl-red: 255 180 171;        /* error */
+  --gl-orange: 232 162 98;      /* 语法高亮字符串色（stitch 无橙，落地补定） */
+  --gl-accent: 173 198 255;     /* primary */
+}
+
+/* 画廊组件 style 内联引用的纯色变量（组件零改动要求名字原样存在）。
+   作用域限定在 vendor 挂载点，避免全局污染。 */
+.vendor-dsh-chat {
+  --ink: rgb(var(--gl-ink));
+  --ink-2: rgb(var(--gl-ink-2));
+  --ink-3: rgb(var(--gl-ink-3));
+  --line: rgb(var(--gl-line));
+  --line-strong: rgb(var(--gl-line-strong));
+  --surface: rgb(var(--gl-canvas));
+  --canvas: rgb(var(--gl-canvas));
+  --orange: rgb(var(--gl-orange));
+  --accent-ink: rgb(var(--gl-accent));
+  --green: rgb(var(--gl-green));
+  --red: rgb(var(--gl-red));
+}
+
+/* 画廊组件工具类 */
+.source-avatar {
+  object-fit: cover;
+  background: rgb(var(--gl-field));
+}
+.animated-underline {
+  text-decoration: underline transparent;
+  text-underline-offset: 2px;
+  transition: text-decoration-color 150ms ease;
+}
+.animated-underline:hover {
+  text-decoration-color: currentColor;
+}
+
+/* 听写均衡器动效（PromptBar 听写按钮，裁定 4：占位保留动效） */
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}

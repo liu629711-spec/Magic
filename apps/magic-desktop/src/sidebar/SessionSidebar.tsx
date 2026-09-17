@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Icon } from "./Icon";
 import { Folder3DIcon } from "./Folder3DIcon";
@@ -32,8 +32,13 @@ const actionBtn =
  * 3) 工作区行无展开箭头，点击行切换会话显隐，悬浮显示「添加新会话」按钮；
  * 4) 项目分组的 + 打开「创建项目」弹窗，创建后加入项目列表；
  * 5) 会话行为整行文本行（无图标、无缩进线）。
+ * 2026-09-17 对话区 v2 联动：点击会话行切换对话区（onOpenSession），
+ * 新建任务/添加会话开空白对话；active 会话行高亮。M1 静态：会话 id 即标题字符串。
  */
-export function SessionSidebar() {
+export function SessionSidebar({ activeSessionId, onOpenSession }: {
+  activeSessionId: string
+  onOpenSession: (id: string) => void
+}) {
   const [sectionOpen, setSectionOpen] = useState({
     pinned: false,
     projects: false,
@@ -46,6 +51,8 @@ export function SessionSidebar() {
   const [dialogOpen, setDialogOpen] = useState(false);
   // 点击完成/中断的会话行后，前置提示整个去掉变成纯文本行（2026-09-17 用户裁定，图二）
   const [acknowledged, setAcknowledged] = useState<Record<string, boolean>>({});
+  // v2 联动：新建会话序号（仅命名展示用）
+  const newSessionSeq = useRef(0);
 
   const statusOf = (task: (typeof pinnedTasks)[number]): SessionStatus | "ack" =>
     acknowledged[task.id] ? "ack" : task.status ?? "idle";
@@ -57,14 +64,20 @@ export function SessionSidebar() {
   const toggleWs = (id: string) => setWsOpen((s) => ({ ...s, [id]: !s[id] }));
 
   const addSession = (id: string) => {
+    newSessionSeq.current += 1;
+    const title = `新会话 ${newSessionSeq.current}`;
     setWorkspaces((ws) =>
       ws.map((w) =>
-        w.id === id
-          ? { ...w, sessions: [...w.sessions, `新会话 ${w.sessions.length + 1}`] }
-          : w,
+        w.id === id ? { ...w, sessions: [...w.sessions, title] } : w,
       ),
     );
     setWsOpen((s) => ({ ...s, [id]: true }));
+    onOpenSession(title);
+  };
+
+  const newSession = () => {
+    newSessionSeq.current += 1;
+    onOpenSession(`新会话 ${newSessionSeq.current}`);
   };
 
   const createProject = (name: string) => {
@@ -80,7 +93,7 @@ export function SessionSidebar() {
       <div className="flex flex-col h-full overflow-hidden">
         <Header />
         <div className="flex-1 overflow-y-auto px-space-sm pb-space-sm space-y-space-md">
-          <NavList />
+          <NavList onNewSession={newSession} />
           <Section
             label="置顶任务"
             open={sectionOpen.pinned}
@@ -94,13 +107,15 @@ export function SessionSidebar() {
                   href="#"
                   aria-current={task.current ? "page" : undefined}
                   onClick={(e) => {
+                    e.preventDefault();
                     if (status === "completed" || status === "interrupted") {
-                      e.preventDefault();
                       acknowledge(task.id);
                     }
+                    // v2 联动：置顶任务行也切换对话区（id 即标题，无 mock 时为空白会话）
+                    onOpenSession(task.title);
                   }}
                   className={`${row} ${
-                    status === "running" || task.current
+                    task.title === activeSessionId || status === "running" || task.current
                       ? "bg-surface-container-low text-on-surface"
                       : "hover:bg-surface-container-low hover:text-on-surface"
                   }`}
@@ -168,7 +183,19 @@ export function SessionSidebar() {
                   {open ? (
                     <div className="space-y-px">
                       {ws.sessions.map((s) => (
-                        <a key={s} href="#" className={`${row} pl-8 hover:bg-surface-container-low hover:text-on-surface`}>
+                        <a
+                          key={s}
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            onOpenSession(s);
+                          }}
+                          className={`${row} pl-8 ${
+                            s === activeSessionId
+                              ? "bg-surface-container-low text-on-surface"
+                              : "hover:bg-surface-container-low hover:text-on-surface"
+                          }`}
+                        >
                           <span className={rowLabel}>{s}</span>
                         </a>
                       ))}
@@ -232,10 +259,17 @@ function Header() {
   );
 }
 
-function NavList() {
+function NavList({ onNewSession }: { onNewSession: () => void }) {
   return (
     <div className="space-y-px">
-      <a className={`${row} hover:bg-surface-container-low hover:text-on-surface`} href="#">
+      <a
+        className={`${row} hover:bg-surface-container-low hover:text-on-surface`}
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onNewSession();
+        }}
+      >
         <span className="flex items-center gap-space-sm min-w-0">
           <Icon name="edit_square" className="text-[18px] text-on-surface-variant shrink-0" />
           <span className={rowLabel}>新建任务</span>

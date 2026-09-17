@@ -7,7 +7,7 @@ import type { MarkdownFileMentions, MarkdownPathImages } from '@deepseek-ai/dsh-
 import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
 import type { AssistantBlock } from '../vendor-types.ts'
 import { markdownLabels } from '../markdown-labels.ts'
-import { ReasoningRow } from './ReasoningRow.tsx'
+import { MagicReasoningRow } from '../../../conversation/MagicReasoningRow.tsx'
 import { useSearchableHidden } from './searchable-hidden.ts'
 import css from './AssistantMarkdown.module.css'
 
@@ -82,7 +82,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
             hidden={reasoningHidden}
             reveal={revealProcess}
           >
-            <ReasoningRow text={block.text} running={streaming && i === last} t={t} />
+            <MagicReasoningRow text={block.text} running={streaming && i === last} t={t} />
           </ProcessReasoning>,
         )
         break
@@ -130,6 +130,8 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         {rendered}
         {interrupted && <span className={css.stopped}>{t('message.stopped')}</span>}
       </div>
+      {/* 完成态操作行（复制/分叉/时间）由轮尾 TurnTailNodeView 的
+          MessageIconActions 提供（DSH 原生，用户验收基准）；此处不再重复挂载。 */}
     </div>
   )
 })

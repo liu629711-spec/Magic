@@ -1,0 +1,42 @@
+/* 统计 pill（轮尾 + 输入框下方共用）：对齐 web 端 StatsPills 的胶囊形态。 */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--gl-ink-3, #8c909f);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pill:hover {
+  background: rgb(var(--gl-hover-2) / 1);
+  color: var(--gl-ink-2, #c2c6d6);
+}
+
+.pill svg {
+  flex: 0 0 auto;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sep {
+  opacity: 0.7;
+}
+
+.statsRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0 0;
+}
