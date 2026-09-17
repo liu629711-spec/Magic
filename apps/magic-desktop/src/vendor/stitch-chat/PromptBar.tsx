@@ -116,6 +116,9 @@ export default function PromptBar({
   tall = false,
   placeholder,
   onSend,
+  modelOptions,
+  modelKey,
+  onModelChange,
 }: {
   variant?: string;
   /** the self-running walkthrough; turn off when embedding in a real surface */
@@ -124,13 +127,24 @@ export default function PromptBar({
   tall?: boolean;
   placeholder?: string;
   onSend?: (text: string) => void;
+  /** 真实模型列表（2026-09-17：来自 session/modelCatalog；缺省=画廊 mock MODELS） */
+  modelOptions?: { key: string; name: string; tag?: string }[];
+  /** 当前选中模型 key（受控） */
+  modelKey?: string;
+  /** 选择模型回调（真实模式写入 session/selectModel） */
+  onModelChange?: (key: string) => void;
 }) {
   const pill = variant === "Pill";
   const [draft, setDraft] = useState("");
   const [dismissed, setDismissed] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
-  const [model, setModel] = useState(MODELS[1]);
+  const [model, setModel] = useState<(typeof MODELS)[number]>(MODELS[1]);
+  /** 真实模式渲染用：外部模型列表 + 受控选中项（缺省回退画廊 mock） */
+  const menuModels = modelOptions ?? MODELS;
+  const activeModel = modelOptions !== undefined
+    ? modelOptions.find((m) => m.key === modelKey) ?? modelOptions[0]
+    : model;
   const [attachments, setAttachments] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
   const [active, setActive] = useState(0);
@@ -188,7 +202,7 @@ export default function PromptBar({
 
   /* same gliding highlight in the model menu — floats to the hovered
    * row, falling back to the currently-selected model */
-  const modelIndex = MODELS.findIndex((m) => m.key === model.key);
+  const modelIndex = menuModels.findIndex((m) => m.key === activeModel.key);
   useLayoutEffect(() => {
     if (!modelOpen) return;
     const target = modelRowRefs.current[modelHovered ?? modelIndex];
@@ -203,7 +217,7 @@ export default function PromptBar({
     const triggerRect = modelRef.current.getBoundingClientRect();
     setModelMenuLeft(Math.max(0, Math.min(triggerRect.left - anchorRect.left, anchorRect.width - 176)));
     setModelMenuBottom(anchorRect.bottom - triggerRect.top + 8);
-  }, [modelOpen, wide, model.name]);
+  }, [modelOpen, wide, activeModel.name]);
 
   useEffect(() => {
     if (!modelOpen) setModelHovered(null);
@@ -268,10 +282,12 @@ export default function PromptBar({
     });
   };
 
-  const selectModel = (next: (typeof MODELS)[number]) => {
-    setModel(next);
+  const selectModel = (next: { key: string; name: string; tag?: string }) => {
+    if (modelOptions === undefined) setModel(next as (typeof MODELS)[number]);
     setModelOpen(false);
-    if (next.key === "magic-5") celebrate();
+    onModelChange?.(next.key);
+    // 旗舰扫光：画廊 mock 行为（真实模式不触发，2026-09-17）
+    if (modelOptions === undefined && next.key === "magic-5") celebrate();
   };
 
   /* autoplay: apply the current step, then advance after its hold */
@@ -467,7 +483,7 @@ export default function PromptBar({
                 "top 220ms cubic-bezier(0.23,1,0.32,1), height 220ms cubic-bezier(0.23,1,0.32,1), opacity 150ms ease",
             }}
           />
-          {MODELS.map((m, i) => (
+          {menuModels.map((m, i) => (
             <button
               key={m.key}
               type="button"
@@ -483,8 +499,8 @@ export default function PromptBar({
               className="relative z-10 flex h-7.5 w-full items-center gap-2 rounded-[6px] px-2 text-left"
             >
               <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">{m.name}</span>
-              <span className="shrink-0 text-[11px] text-ink-3">{m.tag}</span>
-              <span className={`shrink-0 text-ink ${m.key === model.key ? "" : "invisible"}`}>
+              {m.tag !== undefined ? <span className="shrink-0 text-[11px] text-ink-3">{m.tag}</span> : null}
+              <span className={`shrink-0 text-ink ${m.key === activeModel.key ? "" : "invisible"}`}>
                 <Icon size={13} strokeWidth={2.5}><path d="M20 6L9 17l-5-5" /></Icon>
               </span>
             </button>
@@ -622,7 +638,7 @@ export default function PromptBar({
               pill ? "rounded-full" : "rounded-[8px]"
             } ${wide ? "col-start-2 row-start-2 justify-self-start" : "col-start-3 row-start-1"}`}
           >
-            {model.name}
+            {activeModel.name}
             <span className="text-ink-3">
               <Icon size={11} strokeWidth={2.4}><path d="M6 9l6 6 6-6" /></Icon>
             </span>

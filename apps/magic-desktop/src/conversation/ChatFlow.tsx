@@ -250,7 +250,16 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
   }
 }
 
-export function ChatFlow({ store, onSend }: { store: ChatSessionStore; onSend?: (text: string) => void }) {
+export function ChatFlow({ store, onSend, modelPicker }: {
+  store: ChatSessionStore
+  onSend?: (text: string) => void
+  /** 模型选择器（真实 runtime：session/modelCatalog + selectModel；缺省=画廊 mock） */
+  modelPicker?: {
+    options: { key: string; name: string; tag?: string }[]
+    currentKey?: string
+    onChange: (key: string) => void
+  }
+}) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { snapshot } = state
 
@@ -394,6 +403,9 @@ export function ChatFlow({ store, onSend }: { store: ChatSessionStore; onSend?: 
               if (onSend !== undefined) onSend(text);
               else store.submit(text);
             }}
+            modelOptions={modelPicker?.options}
+            modelKey={modelPicker?.currentKey}
+            onModelChange={modelPicker?.onChange}
           />
           {/* 会话统计条（2026-09-17 对齐 web 端 StatsPills）：无统计数据的会话不渲染。 */}
           <ComposerStats snapshot={snapshot} />

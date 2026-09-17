@@ -22,6 +22,8 @@ export interface RemoteSessionRow {
   blank: boolean;
   cwd?: string;
   parentSessionId?: string;
+  /** 会话模型选择（projections.values.modelSelection：pending 优先，其次 lastUsed） */
+  model?: { provider: string; model: string };
 }
 
 function titleOfSummary(raw: Record<string, unknown>): string {
@@ -39,6 +41,13 @@ function titleOfSummary(raw: Record<string, unknown>): string {
 }
 
 function toRow(raw: Record<string, unknown>): RemoteSessionRow {
+  const values = (raw.projections as Record<string, unknown> | undefined)?.values as
+    | Record<string, unknown>
+    | undefined;
+  const selection = values?.modelSelection as
+    | { lastUsed?: { provider?: string; model?: string }; pending?: { provider?: string; model?: string } }
+    | undefined;
+  const chosen = selection?.pending ?? selection?.lastUsed;
   return {
     sessionId: String(raw.sessionId ?? ""),
     title: titleOfSummary(raw),
@@ -47,6 +56,10 @@ function toRow(raw: Record<string, unknown>): RemoteSessionRow {
     blank: raw.blank === true,
     cwd: typeof raw.cwd === "string" ? raw.cwd : undefined,
     parentSessionId: typeof raw.parentSessionId === "string" ? raw.parentSessionId : undefined,
+    model:
+      typeof chosen?.provider === "string" && typeof chosen?.model === "string"
+        ? { provider: chosen.provider, model: chosen.model }
+        : undefined,
   };
 }
 
@@ -63,6 +76,7 @@ export function useWebBackend(enabled: boolean): {
   prompt: (sessionId: string, text: string) => Promise<void>;
   fork: (sessionId: string) => Promise<string>;
   rename: (sessionId: string, title: string) => Promise<string>;
+  selectModel: (sessionId: string, provider: string, model: string) => Promise<void>;
 } {
   const [status, setStatus] = useState<WebBackendStatus>(enabled ? "probing" : "disabled");
   const [errorMessage, setErrorMessage] = useState("");
@@ -208,7 +222,16 @@ export function useWebBackend(enabled: boolean): {
     [refresh],
   );
 
-  return { status, errorMessage, sessions, connect, refresh, createSession, follow, prompt, fork, rename };
+  // 会话模型选择（2026-09-17）：selectModel(request: SessionSelectModelRequest)
+  const selectModel = useCallback(
+    async (sessionId: string, provider: string, model: string): Promise<void> => {
+      await dshRpc("session/selectModel", { request: { sessionId, provider, model } });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { status, errorMessage, sessions, connect, refresh, createSession, follow, prompt, fork, rename, selectModel };
 }
 
 async function listSessions(): Promise<RemoteSessionRow[]> {

@@ -6,6 +6,7 @@ import { ChatSessionStore } from "./conversation/chat-store.ts";
 import { buildSessionMarkdown } from "./conversation/session-export.ts";
 import { mockEvents } from "./conversation/mock-events.ts";
 import { useWebBackend, type RemoteSessionRow } from "./adapters/dsh-web/web-backend.ts";
+import { dshRpc } from "./adapters/dsh-web/rpc.ts";
 import { SkillsHub } from "./skills/SkillsHub.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import { readRecentLimit } from "./settings/local-prefs.ts";
@@ -60,6 +61,49 @@ export function App() {
   // 进入应用为空白态（2026-09-17 用户裁定：关闭界面/应用再进来，默认不恢复上次
   // 打开的会话界面与内容）。
   const [activeId, setActiveId] = useState<string>("");
+  // 模型目录（2026-09-17：对话区模型选择器接真实数据，不再用画廊 mock）
+  const [modelCatalog, setModelCatalog] = useState<
+    { key: string; name: string; tag?: string; provider: string }[]
+  >([]);
+  useEffect(() => {
+    if (!backendMode || web.status !== "ready") return;
+    dshRpc<{ groups?: { id: string; name: string; models?: { id: string; name: string }[] }[] }>(
+      "session/modelCatalog",
+      {},
+    )
+      .then(value => {
+        const options: { key: string; name: string; tag?: string; provider: string }[] = [];
+        for (const group of value.groups ?? []) {
+          for (const model of group.models ?? []) {
+            options.push({ key: `${group.id}:${model.id}`, name: model.name, tag: group.name, provider: group.id });
+          }
+        }
+        setModelCatalog(options);
+      })
+      .catch(() => setModelCatalog([]));
+  }, [web.status]);
+
+  const activeSessionModel = web.sessions.find(row => row.sessionId === activeId)?.model;
+  const modelPicker =
+    backendMode && modelCatalog.length > 0
+      ? {
+          options: modelCatalog.map(({ key, name, tag }) => ({ key, name, tag })),
+          currentKey:
+            activeSessionModel !== undefined
+              ? `${activeSessionModel.provider}:${activeSessionModel.model}`
+              : undefined,
+          onChange: (key: string) => {
+            const option = modelCatalog.find(m => m.key === key);
+            if (option === undefined || activeId.length === 0) return;
+            web
+              .selectModel(activeId, option.provider, key.slice(option.provider.length + 1))
+              .catch(error =>
+                window.alert(`切换模型失败：${error instanceof Error ? error.message : String(error)}`),
+              );
+          },
+        }
+      : undefined;
+
   // 视图路由（裁定 22）：chat=对话；skills=技能扩展（左栏不变）；settings=整页设置
   const [view, setView] = useState<"chat" | "skills" | "settings">("chat");
   // 会话归属（2026-09-17 用户裁定）：新建任务默认进最近任务区；工作区行 + 号建到工作区；
@@ -338,7 +382,7 @@ export function App() {
               sessionId={activeId.length > 0 ? activeId : web.sessions[0]?.sessionId ?? ""}
             />
           ) : (
-            <ChatFlow key={activeId} store={store} onSend={handleSend} />
+            <ChatFlow key={activeId} store={store} onSend={handleSend} modelPicker={modelPicker} />
           )}
         </main>
         {/* 右坞暂时隐藏（2026-09-17 用户裁定）：<InspectorPanel /> */}
