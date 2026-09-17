@@ -6,6 +6,8 @@ import { ChatSessionStore } from "./conversation/chat-store.ts";
 import { buildSessionMarkdown } from "./conversation/session-export.ts";
 import { mockEvents } from "./conversation/mock-events.ts";
 import { useWebBackend, type RemoteSessionRow } from "./adapters/dsh-web/web-backend.ts";
+import { SkillsHub } from "./skills/SkillsHub.tsx";
+import { SettingsPage } from "./settings/SettingsPage.tsx";
 import type { Workspace } from "./sidebar/mock-data";
 
 /**
@@ -57,6 +59,8 @@ export function App() {
   // 进入应用为空白态（2026-09-17 用户裁定：关闭界面/应用再进来，默认不恢复上次
   // 打开的会话界面与内容）。
   const [activeId, setActiveId] = useState<string>("");
+  // 视图路由（裁定 22）：chat=对话；skills=技能扩展（左栏不变）；settings=整页设置
+  const [view, setView] = useState<"chat" | "skills" | "settings">("chat");
 
   /** 打开即建库（web 模式：真实 sessionId；mock 模式：标题键 + mock 种子）。 */
   const ensureStore = (id: string): ChatSessionStore => {
@@ -76,6 +80,7 @@ export function App() {
   );
 
   const openSession = (id: string) => {
+    setView("chat"); // 打开会话即回到对话视图（技能/设置页点击会话行同样生效）
     if (id.length === 0) {
       setActiveId("");
       return;
@@ -233,6 +238,18 @@ export function App() {
     );
   }
 
+  // 视图路由（2026-09-17 用户裁定）：对话 / 技能扩展（左栏不变，主区替换）/
+// 设置（图二式整页，替换整个界面）。设置页从底部用户卡「设置」进入。
+  if (view === "settings") {
+    return (
+      <SettingsPage
+        onBack={() => setView("chat")}
+        onOpenSkills={() => setView("skills")}
+        backendReady={backendMode && web.status === "ready"}
+      />
+    );
+  }
+
   return (
     <div className="h-screen overflow-hidden bg-surface text-on-surface font-headline-md text-headline-md antialiased selection:bg-primary-container selection:text-on-primary-container">
       <SessionSidebar
@@ -240,6 +257,8 @@ export function App() {
         onOpenSession={openSession}
         onForkSession={forkSession}
         onExportSession={exportSession}
+        onOpenSkills={() => setView("skills")}
+        onOpenSettings={() => setView("settings")}
         labels={backendMode ? labels : undefined}
         onRenameSession={
           backendMode
@@ -272,7 +291,14 @@ export function App() {
       />
       <div className="pl-[260px] h-full flex">
         <main className="flex-1 min-w-0 bg-surface">
-          <ChatFlow key={activeId} store={store} onSend={handleSend} />
+          {view === "skills" ? (
+            <SkillsHub
+              backendReady={backendMode && web.status === "ready"}
+              sessionId={activeId.length > 0 ? activeId : web.sessions[0]?.sessionId ?? ""}
+            />
+          ) : (
+            <ChatFlow key={activeId} store={store} onSend={handleSend} />
+          )}
         </main>
         {/* 右坞暂时隐藏（2026-09-17 用户裁定）：<InspectorPanel /> */}
       </div>

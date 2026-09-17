@@ -22,10 +22,10 @@ const rowLabel = "text-[14px] font-medium truncate";
 const actionBtn =
   "w-6 h-6 rounded-md flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-low transition-[opacity,background-color,color] cursor-pointer";
 
-/** 会话列表展示上限（2026-09-17 用户裁定：超过 5 条收起，展开后滚动查找）。 */
+/** 会话列表可视行数上限（2026-09-17 用户裁定：超过即在区域内滚动查找，不做展开按钮）。 */
 const LIST_LIMIT = 5;
 
-/** 展开态滚动容器底部渐隐（提示下方还有内容；2026-09-17 用户反馈「收起按钮丑」的美化）。 */
+/** 超过可视行数时滚动容器底部渐隐（提示下方还有内容）。 */
 const FADE_MASK = {
   maskImage: "linear-gradient(to bottom, black calc(100% - 20px), transparent)",
   WebkitMaskImage: "linear-gradient(to bottom, black calc(100% - 20px), transparent)",
@@ -94,11 +94,15 @@ type DropHandlers = {
  *    打开文件夹/搜索文件与设置组 M1 无后端，置灰占位）。
  * 回退时删掉 RowActions 中 pin、拖拽 handlers、SearchPalette 引用即可。
  */
-export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true }: {
+export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenSettings }: {
   activeSessionId: string
   onOpenSession: (id: string) => void
   onForkSession: (sourceId: string, forkId: string) => void
   onExportSession: (id: string) => void
+  /** 首页导航「技能扩展」入口（裁定 22：进入技能扩展视图） */
+  onOpenSkills?: () => void
+  /** 底部用户卡「设置」入口（裁定 22：进入整页设置视图） */
+  onOpenSettings?: () => void
   /** web 后端模式：会话 id → 显示名（session/list 的 title 投影） */
   labels?: Record<string, string>
   /** web 后端模式：重命名走 session/rename；缺省=本地覆盖（mock 模式） */
@@ -166,11 +170,6 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   );
   // 任务区（裁定 19）：时间展示去掉；拖拽排序/移入需要可变列表
   const [taskList, setTaskList] = useState<string[]>(() => tasks.map((t) => t.title));
-
-  // 列表展开（2026-09-17 用户裁定）：超过 LIST_LIMIT 条收起，展开后容器滚动查找
-  const [expandedLists, setExpandedLists] = useState<Record<string, boolean>>({});
-  const toggleList = (key: string) =>
-    setExpandedLists((s) => ({ ...s, [key]: !(s[key] ?? false) }));
 
   // 拖拽（裁定 19）：HTML5 DnD；dropHint 驱动插入指示线/目标区高亮
   const dragRef = useRef<DragItem | null>(null);
@@ -470,9 +469,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   const taskKeys = (
     showMockSections ? displayedTasks : remoteTaskSessions ?? []
   ).filter((k) => !archived[k] && !pinned.some((p) => p.key === k));
-  // 任务区限 5 展开（2026-09-17 用户裁定）
-  const taskExpanded = expandedLists.task === true;
-  const shownTasks = taskExpanded ? taskKeys : taskKeys.slice(0, LIST_LIMIT);
+  // 任务区可视上限（2026-09-17 用户裁定：超过即在区域内滚动，不做展开按钮）
+  const taskScrollable = taskKeys.length > LIST_LIMIT;
 
   // 搜索任务面板数据（裁定 19/20）：mock 模式用全部本地分区；web 模式用真实会话
   const paletteSessions: PaletteSession[] = showMockSections
@@ -511,6 +509,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
               else newSession();
             }}
             onOpenSearch={() => setPaletteOpen(true)}
+            onOpenSkills={onOpenSkills}
           />
         </div>
         <div className="flex-1 overflow-y-auto px-space-sm pb-space-sm space-y-space-md">
@@ -598,10 +597,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
               // web 后端模式：真实分组默认展开（用户仍可手动折叠，折叠态保留）
               const open = remoteWorkspaces !== undefined ? (wsOpen[ws.id] ?? true) : (wsOpen[ws.id] ?? false);
               const displayed = ws.sessions.filter((s) => !archived[s]);
-              // 限 5 展开（2026-09-17 用户裁定）
-              const listKey = `ws:${ws.id}`;
-              const expanded = expandedLists[listKey] === true;
-              const shown = expanded ? displayed : displayed.slice(0, LIST_LIMIT);
+              // 可视上限（2026-09-17 用户裁定：超过即在区域内滚动，不做展开按钮）
+              const scrollable = displayed.length > LIST_LIMIT;
               const wsZone = zoneHandlers(`zone:ws:${ws.id}`, { section: "ws", wsId: ws.id });
               return (
                 <div key={ws.id}>
@@ -631,14 +628,13 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                     </button>
                   </div>
                   {open ? (
-                    <>
-                      <div
-                        className={`space-y-px ${expanded ? "max-h-64 overflow-y-auto" : ""}`}
-                        style={expanded ? FADE_MASK : undefined}
-                      >
-                      {shown.map((s, i) => {
+                    <div
+                      className={`space-y-px ${scrollable ? "max-h-40 overflow-y-auto" : ""}`}
+                      style={scrollable ? FADE_MASK : undefined}
+                    >
+                      {displayed.map((s, i) => {
                           const title = titleOf(s, s);
-                          const nextKey = shown[i + 1] ?? null;
+                          const nextKey = displayed[i + 1] ?? null;
                           return (
                             <a
                               key={s}
@@ -669,22 +665,14 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                             </a>
                           );
                       })}
-                      </div>
-                      {displayed.length > LIST_LIMIT ? (
-                        <ListMore
-                          expanded={expanded}
-                          total={displayed.length}
-                          onToggle={() => toggleList(listKey)}
-                        />
-                      ) : null}
-                    </>
+                    </div>
                   ) : null}
                 </div>
               );
             })}
           </Section>
           {/* 任务区（2026-09-17 用户裁定）：mock 模式=本地任务；web 模式=真实会话按最近
-              时间倒序（新建任务自动排第一）；超过 5 条收起，展开后滚动查找 */}
+              时间倒序（新建任务自动排第一）；超过可视行数即在区域内滚动查找 */}
           <Section
             label="任务"
             open={sectionOpen.tasks}
@@ -697,18 +685,11 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             headerDrop={taskZone}
             listDrop={showMockSections && taskKeys.length === 0 ? taskZone : undefined}
             listEmpty={showMockSections && taskKeys.length === 0}
-            scroll={taskExpanded}
-            footer={taskKeys.length > LIST_LIMIT ? (
-              <ListMore
-                expanded={taskExpanded}
-                total={taskKeys.length}
-                onToggle={() => toggleList("task")}
-              />
-            ) : null}
+            scroll={taskScrollable}
           >
-            {shownTasks.map((key, i) => {
+            {taskKeys.map((key, i) => {
               const title = titleOf(key, key);
-              const nextKey = shownTasks[i + 1] ?? null;
+              const nextKey = taskKeys[i + 1] ?? null;
               return (
                 <a
                   key={key}
@@ -743,7 +724,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             })}
           </Section>
         </div>
-        <UserCard />
+        <UserCard onOpenSettings={onOpenSettings} />
       </div>
       {dialogOpen ? (
         <CreateProjectDialog
@@ -819,7 +800,11 @@ function Header() {
   );
 }
 
-function NavList({ onNewSession, onOpenSearch }: { onNewSession: () => void; onOpenSearch: () => void }) {
+function NavList({ onNewSession, onOpenSearch, onOpenSkills }: {
+  onNewSession: () => void;
+  onOpenSearch: () => void;
+  onOpenSkills?: () => void;
+}) {
   return (
     <div className="space-y-px">
       <a
@@ -854,6 +839,11 @@ function NavList({ onNewSession, onOpenSearch }: { onNewSession: () => void; onO
           key={item.label}
           className={`${row} hover:bg-surface-container-low hover:text-on-surface`}
           href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            // 技能扩展（裁定 22）：进入技能扩展视图（左栏不变，主区替换）
+            if (item.label === "技能扩展") onOpenSkills?.();
+          }}
         >
           <span className="flex items-center gap-space-sm min-w-0">
             <Icon name={item.icon} className="text-[18px] text-on-surface-variant shrink-0" />
@@ -865,7 +855,7 @@ function NavList({ onNewSession, onOpenSearch }: { onNewSession: () => void; onO
   );
 }
 
-function UserCard() {
+function UserCard({ onOpenSettings }: { onOpenSettings?: () => void }) {
   return (
     <div className="p-space-sm shrink-0 border-t border-surface-container-highest">
       <div className="flex items-center justify-between px-space-xs py-1">
@@ -893,6 +883,7 @@ function UserCard() {
             type="button"
             className="w-7 h-7 rounded-lg hover:bg-surface-container-low flex items-center justify-center hover:text-on-surface transition-colors"
             title="设置"
+            onClick={onOpenSettings}
           >
             <Icon name="settings" className="text-[16px]" />
           </button>
@@ -977,7 +968,6 @@ function Section({
   listDrop,
   listEmpty,
   scroll,
-  footer,
 }: {
   label: string;
   open: boolean;
@@ -987,10 +977,8 @@ function Section({
   headerDrop?: DropHandlers;
   listDrop?: DropHandlers;
   listEmpty?: boolean;
-  /** 展开态：列表区限高滚动（2026-09-17 用户裁定「展开后滑动可找会话」） */
+  /** 超过可视行数：列表区限高滚动 + 底部渐隐（2026-09-17 用户裁定） */
   scroll?: boolean;
-  /** 固定在滚动区外的行尾（展开/收起按钮，不随列表滚动） */
-  footer?: ReactNode;
 }) {
   return (
     <div>
@@ -1021,51 +1009,26 @@ function Section({
         ) : null}
       </div>
       {open ? (
-        <>
-          {listEmpty && listDrop !== undefined ? (
-            <div
-              onDragOver={listDrop.onDragOver}
-              onDragLeave={listDrop.onDragLeave}
-              onDrop={listDrop.onDrop}
-              className={`mt-0.5 mx-2 rounded-lg border border-dashed border-surface-container-highest px-2 py-1.5 text-[12px] text-outline/70 ${
-                listDrop.active ? "ring-1 ring-primary border-solid" : ""
-              }`}
-            >
-              拖动会话到此处
-            </div>
-          ) : (
-            <div
-              className={`space-y-px ${scroll === true ? "max-h-64 overflow-y-auto" : ""}`}
-              style={scroll === true ? FADE_MASK : undefined}
-            >
-              {children}
-            </div>
-          )}
-          {footer}
-        </>
+        listEmpty && listDrop !== undefined ? (
+          <div
+            onDragOver={listDrop.onDragOver}
+            onDragLeave={listDrop.onDragLeave}
+            onDrop={listDrop.onDrop}
+            className={`mt-0.5 mx-2 rounded-lg border border-dashed border-surface-container-highest px-2 py-1.5 text-[12px] text-outline/70 ${
+              listDrop.active ? "ring-1 ring-primary border-solid" : ""
+            }`}
+          >
+            拖动会话到此处
+          </div>
+        ) : (
+          <div
+            className={`space-y-px ${scroll === true ? "max-h-40 overflow-y-auto" : ""}`}
+            style={scroll === true ? FADE_MASK : undefined}
+          >
+            {children}
+          </div>
+        )
       ) : null}
-    </div>
-  );
-}
-
-/** 列表「展开全部 / 收起」（2026-09-17 用户裁定：超过 5 条收起，展开后滚动查找）。
- *  2026-09-17 反馈美化：居中轻胶囊（小字号 + 细箭头 + 仅 hover 背景），
- *  并固定在滚动区外（不随列表滚动）。 */
-function ListMore({ expanded, total, onToggle }: {
-  expanded: boolean;
-  total: number;
-  onToggle: () => void;
-}) {
-  return (
-    <div className="flex justify-center py-0.5">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex h-6 items-center gap-0.5 rounded-full px-2.5 text-[11.5px] font-medium text-outline transition-colors hover:bg-surface-container-low hover:text-on-surface cursor-pointer"
-      >
-        <Icon name={expanded ? "keyboard_arrow_up" : "keyboard_arrow_down"} className="text-[13px]" />
-        <span>{expanded ? "收起" : `展开全部 ${total} 条`}</span>
-      </button>
     </div>
   );
 }
