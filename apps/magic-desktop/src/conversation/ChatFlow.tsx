@@ -1,4 +1,4 @@
-﻿// Magic 自有客户端对话区壳（M1 静态）。
+// Magic 自有客户端对话区壳（M1 静态）。
 // 替代 DSH ui-chat 的 ChatView.tsx + ChatNodeSeat.tsx + renderSlot 注册表：
 // 消息流容器 + kind→组件分发 + Turn-process 折叠逻辑（照 ChatNodeSeat.tsx:38-148
 // 的逻辑移植；per-key 可观察份额改为整窗快照直读）。渲染组件全部来自 vendor/dsh-chat。
@@ -250,7 +250,7 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
   }
 }
 
-export function ChatFlow({ store }: { store: ChatSessionStore }) {
+export function ChatFlow({ store, onSend }: { store: ChatSessionStore; onSend?: (text: string) => void }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { snapshot } = state
 
@@ -388,7 +388,13 @@ export function ChatFlow({ store }: { store: ChatSessionStore }) {
         <div className="mx-auto w-full max-w-[var(--dsh-chat-content-width)] px-4 pb-4 pt-3">
           {/* 换肤点（2026-09-17 对话区 v2）：输入条换画廊 PromptBar（demo=false 嵌入；
               听写占位=裁定 4、扫光保留=裁定 2）。回退时还原本目录 Composer.tsx。 */}
-          <PromptBar demo={false} onSend={text => store.submit(text)} />
+          <PromptBar
+            demo={false}
+            onSend={text => {
+              if (onSend !== undefined) onSend(text);
+              else store.submit(text);
+            }}
+          />
           {/* 会话统计条（2026-09-17 对齐 web 端 StatsPills）：无统计数据的会话不渲染。 */}
           <ComposerStats snapshot={snapshot} />
         </div>

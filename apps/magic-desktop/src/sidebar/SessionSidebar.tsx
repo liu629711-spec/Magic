@@ -85,18 +85,41 @@ type DropHandlers = {
  *    打开文件夹/搜索文件与设置组 M1 无后端，置灰占位）。
  * 回退时删掉 RowActions 中 pin、拖拽 handlers、SearchPalette 引用即可。
  */
-export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession }: {
+export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, showMockSections = true }: {
   activeSessionId: string
   onOpenSession: (id: string) => void
   onForkSession: (sourceId: string, forkId: string) => void
   onExportSession: (id: string) => void
+  /** web 后端模式：会话 id → 显示名（session/list 的 title 投影） */
+  labels?: Record<string, string>
+  /** web 后端模式：重命名走 session/rename；缺省=本地覆盖（mock 模式） */
+  onRenameSession?: (id: string, title: string) => void
+  /** web 后端模式：新建任务走 session/create；缺省=本地开空白会话（mock 模式） */
+  onCreateSession?: () => void
+  /** web 后端模式：项目分组由真实会话按 cwd 归组（App 下发，随 refresh 更新） */
+  remoteWorkspaces?: Workspace[]
+  /** mock 数据分区（置顶任务/任务）显隐；web 后端模式传 false 隐藏假数据（裁定 20） */
+  showMockSections?: boolean
 }) {
-  const [sectionOpen, setSectionOpen] = useState({
+  const [sectionOpen, setSectionOpen] = useState(() => ({
     pinned: false,
-    projects: false,
+    // web 后端模式：真实会话分组在「项目」下，默认展开（ready 后才挂载，prop 首渲染即可读）
+    projects: remoteWorkspaces !== undefined,
     tasks: false,
-  });
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
+  }));
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(remoteWorkspaces ?? initialWorkspaces);
+  useEffect(() => {
+    if (remoteWorkspaces === undefined) return;
+    setWorkspaces(remoteWorkspaces);
+    // 新出现的远程分组默认展开；用户手动折叠过的保持折叠
+    setWsOpen(prev => {
+      const next = { ...prev };
+      for (const ws of remoteWorkspaces) {
+        if (next[ws.id] === undefined) next[ws.id] = ws.expanded;
+      }
+      return next;
+    });
+  }, [remoteWorkspaces]);
   const [wsOpen, setWsOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(initialWorkspaces.map((ws) => [ws.id, ws.expanded])),
   );
@@ -150,8 +173,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
     return () => window.removeEventListener("keydown", onKey);
   }, [rowMenu, renameTarget]);
 
-  /** 显示名：重命名覆盖 > 基准名。store/种子键始终用基准名（base），不受重命名影响。 */
-  const titleOf = (key: string, base: string) => renamed[key] ?? base;
+  /** 显示名：web 端标题投影 > 重命名覆盖 > 基准名。store/种子键始终用基准名（base）。 */
+  const titleOf = (key: string, base: string) => labels?.[key] ?? renamed[key] ?? base;
 
   const statusOf = (task: PinTask | undefined): SessionStatus | "ack" =>
     acknowledged[task?.id ?? ""] ? "ack" : task?.status ?? "idle";
@@ -332,19 +355,22 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
     });
   };
 
-  /** 分叉会话：forkId 唯一化；落入源分区（置顶分叉仍进置顶，origin = 任务区尾）。 */
-  const forkRow = (menu: NonNullable<typeof rowMenu>) => {
+  /** 全局唯一会话名（App 会话存储按标题为键，跨分区不可重名）。 */
+  const uniqueTitle = (base: string) => {
     const taken = new Set<string>([
       ...pinned.map((p) => p.base),
       ...taskList,
       ...workspaces.flatMap((w) => w.sessions),
     ]);
-    let forkId = `${titleOf(menu.key, menu.base)}（分支）`;
+    if (!taken.has(base)) return base;
     let n = 2;
-    while (taken.has(forkId)) {
-      forkId = `${titleOf(menu.key, menu.base)}（分支 ${n}）`;
-      n += 1;
-    }
+    while (taken.has(`${base} ${n}`)) n += 1;
+    return `${base} ${n}`;
+  };
+
+  /** 分叉会话：forkId 唯一化；落入源分区（置顶分叉仍进置顶，origin = 任务区尾）。 */
+  const forkRow = (menu: NonNullable<typeof rowMenu>) => {
+    const forkId = uniqueTitle(`${titleOf(menu.key, menu.base)}（分支）`);
     onForkSession(menu.base, forkId);
     if (menu.section === "pinned") {
       setPinned((list) => [
@@ -376,7 +402,12 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   const confirmRename = () => {
     if (renameTarget === null) return;
     const next = renameTarget.title.trim();
-    if (next.length > 0) setRenamed((s) => ({ ...s, [renameTarget.key]: next }));
+    if (next.length === 0) {
+      setRenameTarget(null);
+      return;
+    }
+    if (onRenameSession !== undefined) onRenameSession(renameTarget.key, next);
+    else setRenamed((s) => ({ ...s, [renameTarget.key]: next }));
     setRenameTarget(null);
   };
 
@@ -399,25 +430,35 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
 
   const createProject = (name: string) => {
     const id = `ws-${Date.now()}`;
-    setWorkspaces((ws) => [...ws, { id, name, expanded: true, sessions: [] }]);
+    // 新工作区默认自带一个「新任务」会话（2026-09-17 用户裁定：空工作区不出现，
+    // 创建即建任务并打开）；无「拖动会话到此工作区」占位，拖拽目标仍是工作区行本体。
+    const title = uniqueTitle("新任务");
+    setWorkspaces((ws) => [...ws, { id, name, expanded: true, sessions: [title] }]);
     setWsOpen((s) => ({ ...s, [id]: true }));
     setSectionOpen((s) => ({ ...s, projects: true }));
     setDialogOpen(false);
+    onOpenSession(title);
   };
 
   const displayedPinned = pinned.filter((p) => !archived[p.key]);
   const displayedTasks = taskList.filter((k) => !archived[k]);
 
-  // 搜索任务面板数据（裁定 19）：全部会话（base 作键，显示名作标题）
-  const paletteSessions: PaletteSession[] = [
-    ...displayedPinned.map((p) => ({ key: p.base, title: titleOf(p.key, p.base), group: "置顶任务" })),
-    ...workspaces.flatMap((ws) =>
-      ws.sessions
-        .filter((s) => !archived[s])
-        .map((s) => ({ key: s, title: titleOf(s, s), group: ws.name })),
-    ),
-    ...displayedTasks.map((s) => ({ key: s, title: titleOf(s, s), group: "任务" })),
-  ];
+  // 搜索任务面板数据（裁定 19/20）：mock 模式用全部本地分区；web 模式用真实会话
+  const paletteSessions: PaletteSession[] = showMockSections
+    ? [
+        ...displayedPinned.map((p) => ({ key: p.base, title: titleOf(p.key, p.base), group: "置顶任务" })),
+        ...workspaces.flatMap((ws) =>
+          ws.sessions
+            .filter((s) => !archived[s])
+            .map((s) => ({ key: s, title: titleOf(s, s), group: ws.name })),
+        ),
+        ...displayedTasks.map((s) => ({ key: s, title: titleOf(s, s), group: "任务" })),
+      ]
+    : workspaces.flatMap((ws) =>
+        ws.sessions
+          .filter((s) => !archived[s])
+          .map((s) => ({ key: s, title: titleOf(s, s), group: ws.name })),
+      );
 
   const pinnedZone = zoneHandlers("zone:pinned", { section: "pinned" });
   const taskZone = zoneHandlers("zone:task", { section: "task" });
@@ -427,7 +468,15 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
       <div className="flex flex-col h-full overflow-hidden">
         <Header />
         <div className="flex-1 overflow-y-auto px-space-sm pb-space-sm space-y-space-md">
-          <NavList onNewSession={newSession} onOpenSearch={() => setPaletteOpen(true)} />
+          <NavList
+            onNewSession={() => {
+              if (onCreateSession !== undefined) onCreateSession();
+              else newSession();
+            }}
+            onOpenSearch={() => setPaletteOpen(true)}
+          />
+          {/* mock 数据分区（裁定 20）：web 后端模式隐藏，避免误导点击假会话 */}
+          {showMockSections ? (
           <Section
             label="置顶任务"
             open={sectionOpen.pinned}
@@ -486,6 +535,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
               );
             })}
           </Section>
+          ) : null}
           <Section
             label="项目"
             open={sectionOpen.projects}
@@ -507,7 +557,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             }
           >
             {workspaces.map((ws) => {
-              const open = wsOpen[ws.id] ?? false;
+              // web 后端模式：真实分组默认展开（用户仍可手动折叠，折叠态保留）
+              const open = remoteWorkspaces !== undefined ? (wsOpen[ws.id] ?? true) : (wsOpen[ws.id] ?? false);
               const displayed = ws.sessions.filter((s) => !archived[s]);
               const wsZone = zoneHandlers(`zone:ws:${ws.id}`, { section: "ws", wsId: ws.id });
               return (
@@ -538,20 +589,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                     </button>
                   </div>
                   {open ? (
-                    displayed.length === 0 ? (
-                      <div
-                        onDragOver={wsZone.onDragOver}
-                        onDragLeave={wsZone.onDragLeave}
-                        onDrop={wsZone.onDrop}
-                        className={`mt-0.5 mx-2 rounded-lg border border-dashed border-surface-container-highest px-2 py-1.5 text-[12px] text-outline/70 ${
-                          wsZone.active ? "ring-1 ring-primary border-solid" : ""
-                        }`}
-                      >
-                        拖动会话到此工作区
-                      </div>
-                    ) : (
-                      <div className="space-y-px">
-                        {displayed.map((s, i) => {
+                    <div className="space-y-px">
+                      {displayed.map((s, i) => {
                           const title = titleOf(s, s);
                           const nextKey = displayed[i + 1] ?? null;
                           return (
@@ -583,14 +622,14 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                               />
                             </a>
                           );
-                        })}
-                      </div>
-                    )
+                      })}
+                  </div>
                   ) : null}
                 </div>
               );
             })}
           </Section>
+          {showMockSections ? (
           <Section
             label="任务"
             open={sectionOpen.tasks}
@@ -640,6 +679,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
               );
             })}
           </Section>
+          ) : null}
         </div>
         <UserCard />
       </div>

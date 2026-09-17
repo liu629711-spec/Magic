@@ -84,6 +84,13 @@ export class ChatSessionStore {
     notifySubscribers(this.listeners, 'chat-session-store')
   }
 
+  /** 仅置等待态（web 后端模式：回声 user/message 由事件流到达，不本地追加）。 */
+  markAwaiting(): void {
+    if (this.state.awaitingReply) return
+    this.state = { ...this.state, awaitingReply: true }
+    notifySubscribers(this.listeners, 'chat-session-store')
+  }
+
   private publish(): void {
     this.state = { ...this.state, snapshot: foldChatSnapshot(this.entries) }
     notifySubscribers(this.listeners, 'chat-session-store')
