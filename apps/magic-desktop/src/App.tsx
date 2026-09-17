@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SessionSidebar } from "./sidebar/SessionSidebar";
-// 右坞暂时隐藏（2026-09-17 用户裁定）；InspectorPanel/ReviewPanel 代码保留待回归
+// 右坞（2026-09-18）：三个真实 tab（文件/文件变动/终端）接本机 dsh web 的 /sidebar 通道。
+// 原 InspectorPanel/ReviewPanel（静态 mock）保留作历史参考，不再渲染。
+import { RightDock } from "./inspector/RightDock";
 import { ChatFlow } from "./conversation/ChatFlow.tsx";
 import { ChatSessionStore } from "./conversation/chat-store.ts";
+import type { SessionHeaderData } from "./conversation/SessionHeader.tsx";
 import { buildSessionMarkdown } from "./conversation/session-export.ts";
 import { mockEvents } from "./conversation/mock-events.ts";
 import { useWebBackend, type RemoteSessionRow } from "./adapters/dsh-web/web-backend.ts";
@@ -41,6 +44,14 @@ function cwdGroupName(cwd: string | undefined): string {
   return base.length > 0 ? base : "默认工作区";
 }
 
+/** 子代理会话标题清洗（2026-09-18）：runtime 对未命名子会话的 title 投影会回落到
+ *  worker 系统提示词前缀（"You are a worker on…"），显示为「子代理 N」更可读。 */
+function subagentTitle(row: RemoteSessionRow, index: number): string {
+  const title = row.title;
+  if (title.startsWith("You are") || title.length > 64) return `子代理 ${index + 1}`;
+  return title;
+}
+
 export function App() {
   const web = useWebBackend(backendMode);
   // mock 会话种子表（分叉/重开共享；forkSession 会写入新键）
@@ -61,6 +72,11 @@ export function App() {
   // 进入应用为空白态（2026-09-17 用户裁定：关闭界面/应用再进来，默认不恢复上次
   // 打开的会话界面与内容）。
   const [activeId, setActiveId] = useState<string>("");
+  // 当前会话 store（提前定义：三件套/模型等 hook 依赖它）
+  const store = useMemo(
+    () => stores[activeId] ?? new ChatSessionStore(),
+    [stores, activeId],
+  );
   // 模型目录（2026-09-17：对话区模型选择器接真实数据，不再用画廊 mock）
   const [modelCatalog, setModelCatalog] = useState<
     { key: string; name: string; tag?: string; provider: string }[]
@@ -84,6 +100,9 @@ export function App() {
   }, [web.status]);
 
   const activeSessionModel = web.sessions.find(row => row.sessionId === activeId)?.model;
+  // 右坞作用域：只有真实 web 会话才有对应的宿主会话（mock 会话没有，右坞保持空态）。
+  const dockSessionId = backendMode && web.status === "ready" && activeId.length > 0 ? activeId : "";
+  const dockCwd = web.sessions.find(row => row.sessionId === activeId)?.cwd;
   const modelPicker =
     backendMode && modelCatalog.length > 0
       ? {
@@ -103,6 +122,123 @@ export function App() {
           },
         }
       : undefined;
+
+  // 输入条三件套（2026-09-18 照 Magic 网页版）：订阅当前会话 store 拿投影与事件
+  const chatState = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  /** 命令执行（/permission、/mode 等；args 形状做两种兜底）。 */
+  const runCommand = (line: string) => {
+    if (activeId.length === 0) return;
+    dshRpc("commands/execute", { agent: activeId, line, submittedAttachments: [] })
+      .catch(() => dshRpc("commands/execute", { sessionId: activeId, line, submittedAttachments: [] }))
+      .catch((error: unknown) =>
+        window.alert(`命令执行失败：${error instanceof Error ? error.message : String(error)}`),
+      );
+  };
+  const composerChips = (() => {
+    if (!backendMode || activeId.length === 0) return undefined;
+    const values = chatState.projections?.values ?? {};
+    // 访问模式（permission-presets 投影 values.permissions = {currentValue, options:[{value,name}]}）
+    const permissionRaw = values.permissions as
+      | { currentValue?: string; options?: { value?: string; name?: string }[] }
+      | undefined;
+    const permissionId =
+      typeof permissionRaw?.currentValue === "string" ? permissionRaw.currentValue : undefined;
+    const permissionLabel =
+      permissionId === undefined
+        ? undefined
+        : permissionRaw?.options?.find(option => option.value === permissionId)?.name ??
+          (permissionId === "read-only"
+            ? "只读"
+            : permissionId === "danger-full-access"
+              ? "完全访问"
+              : permissionId === "workspace-write"
+                ? "工作区内修改"
+                : undefined);
+    // 上下文用量（token-meter 投影 values.contextPressure = {contextWindow, pressureTokens, projectedTokens}）
+    const pressureRaw = values.contextPressure as Record<string, unknown> | undefined;
+    const contextWindow = Number(pressureRaw?.contextWindow ?? 0);
+    const usedTokens = Number(pressureRaw?.projectedTokens ?? pressureRaw?.pressureTokens ?? 0);
+    const context =
+      contextWindow > 0
+        ? {
+            percent: Math.min(100, Math.round((usedTokens / contextWindow) * 100)),
+            detail: `${usedTokens.toLocaleString()} / ${contextWindow.toLocaleString()} tokens`,
+          }
+        : undefined;
+    // 工作模式（magic-work-mode 事件流）
+    const workModeRaw = store.recentEventData("magic/work-mode") as { sessionMode?: string } | undefined;
+    const isCeo = workModeRaw?.sessionMode === "ceo";
+    return {
+      permission:
+        permissionLabel !== undefined
+          ? {
+              label: permissionLabel,
+              onClick: () =>
+                runCommand(
+                  permissionId === "read-only" ? "/permission workspace-write" : "/permission read-only",
+                ),
+            }
+          : undefined,
+      workMode: {
+        label: isCeo ? "CEO · 当前会话" : "Agent · 当前会话",
+        onClick: () => runCommand(isCeo ? "/mode agent" : "/mode ceo"),
+      },
+      context,
+    };
+  })();
+
+  // 输入条 @ 候选（真实技能）与 / 命令（commands/list）（2026-09-18）
+  const [mentionOptions, setMentionOptions] = useState<
+    { key: string; name: string; desc: string; glyph?: string; attach?: boolean }[] | undefined
+  >(undefined);
+  const [commandOptions, setCommandOptions] = useState<
+    { key: string; name: string; desc: string }[] | undefined
+  >(undefined);
+  useEffect(() => {
+    if (!backendMode || web.status !== "ready" || activeId.length === 0) return;
+    let cancelled = false;
+    dshRpc<{ skills?: { name: string; description?: string }[] }>("skills/list", {
+      request: { sessionId: activeId },
+    })
+      .then(value => {
+        if (cancelled) return;
+        const skills = (value.skills ?? []).slice(0, 40).map(skill => ({
+          key: `skill:${skill.name}`,
+          name: skill.name,
+          desc: skill.description ?? "技能",
+        }));
+        setMentionOptions([
+          { key: "attach", name: "添加照片和文件", desc: "从电脑上传", glyph: "clip", attach: true },
+          ...skills,
+        ]);
+      })
+      .catch(() => undefined);
+    dshRpc<unknown>("commands/list", { agent: activeId })
+      .catch(() => dshRpc<unknown>("commands/list", { sessionId: activeId }))
+      .then(value => {
+        if (cancelled) return;
+        const list = Array.isArray(value)
+          ? value
+          : ((value as { items?: unknown[] } | null)?.items ?? []);
+        setCommandOptions(
+          list
+            .map(item => {
+              const record = item as { name?: unknown; description?: unknown };
+              const name = typeof record.name === "string" ? record.name : "";
+              return {
+                key: name,
+                name: `/${name}`,
+                desc: typeof record.description === "string" ? record.description : "",
+              };
+            })
+            .filter(item => item.key.length > 0),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [backendMode, web.status, activeId]);
 
   // 视图路由（裁定 22）：chat=对话；skills=技能扩展（左栏不变）；settings=整页设置
   const [view, setView] = useState<"chat" | "skills" | "settings">("chat");
@@ -128,11 +264,6 @@ export function App() {
     setStores(storesRef.current);
     return fresh;
   };
-
-  const store = useMemo(
-    () => stores[activeId] ?? new ChatSessionStore(),
-    [stores, activeId],
-  );
 
   const openSession = (id: string) => {
     setView("chat"); // 打开会话即回到对话视图（技能/设置页点击会话行同样生效）
@@ -220,11 +351,34 @@ export function App() {
       .map(row => row.sessionId);
   }, [web.status, web.sessions]);
 
-  // web 模式：activeId 变化 → follow 事件流进对应 store（快照整窗替换 + 增量追加）
+  // 会话头数据（M4，2026-09-18）：从真实会话列表算父会话与子代理/子会话；
+  // mock 模式（无 web 数据）返回 undefined → 对话区不渲染会话头。
+  const sessionHeader = useMemo<SessionHeaderData | undefined>(() => {
+    if (!backendMode || web.status !== "ready" || activeId.length === 0) return undefined;
+    const current = web.sessions.find(row => row.sessionId === activeId);
+    if (current === undefined) return undefined;
+    const parentRow =
+      current.parentSessionId !== undefined
+        ? web.sessions.find(row => row.sessionId === current.parentSessionId)
+        : undefined;
+    const children = web.sessions.filter(row => row.parentSessionId === activeId);
+    return {
+      title: current.title,
+      parent:
+        parentRow !== undefined
+          ? { id: parentRow.sessionId, title: parentRow.title }
+          : undefined,
+      children: children.map((row, index) => ({ id: row.sessionId, title: subagentTitle(row, index) })),
+    };
+  }, [backendMode, web.status, web.sessions, activeId]);
+
+  // web 模式：activeId 变化 → follow 事件流进对应 store（快照整窗替换 + 增量追加）。
+  // 子代理会话必须用 subagent 地址（durable parent）——否则宿主报 session/agent-busy。
   useEffect(() => {
     if (!backendMode || web.status !== "ready" || activeId.length === 0) return;
     const target = ensureStore(activeId);
-    const dispose = web.follow(activeId, target);
+    const parentId = web.sessions.find(row => row.sessionId === activeId)?.parentSessionId;
+    const dispose = web.follow(activeId, target, parentId);
     return () => {
       dispose();
     };
@@ -382,10 +536,21 @@ export function App() {
               sessionId={activeId.length > 0 ? activeId : web.sessions[0]?.sessionId ?? ""}
             />
           ) : (
-            <ChatFlow key={activeId} store={store} onSend={handleSend} modelPicker={modelPicker} />
+            <ChatFlow
+              key={activeId}
+              store={store}
+              onSend={handleSend}
+              modelPicker={modelPicker}
+              composerChips={composerChips}
+              mentionOptions={mentionOptions}
+              commandOptions={commandOptions}
+              sessionHeader={sessionHeader}
+              onOpenSession={openSession}
+            />
           )}
         </main>
-        {/* 右坞暂时隐藏（2026-09-17 用户裁定）：<InspectorPanel /> */}
+        {/* 右坞：文件 / 文件变动 / 终端（真实 dsh web /sidebar 通道，无 mock） */}
+        <RightDock sessionId={dockSessionId} cwd={dockCwd} />
       </div>
     </div>
   );

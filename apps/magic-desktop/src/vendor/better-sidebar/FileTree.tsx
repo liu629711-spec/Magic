@@ -42,7 +42,9 @@ import { t } from './locales.ts'
 import type { BetterSidebarService } from './vendor-types.ts'
 import type { SidebarStore } from './state.ts'
 import { uploadItemsFromDrop, uploadItemsFromFiles, type UploadItem } from './upload.ts'
-import css from '../css/sidebar.module.css'
+// Magic 客户端修复：vendored 目录把 src/client/* 整体搬到 vendor/better-sidebar/，
+// 样式表落在同级 css/ 下，故原 '../css/sidebar.module.css' 改 './css/sidebar.module.css'。
+import css from './css/sidebar.module.css'
 
 interface LevelData {
   entries?: FsEntry[]

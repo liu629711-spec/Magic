@@ -158,6 +158,8 @@ export interface ChatNodeDataMap {
   'system-prompt': SystemPromptChatData
   /** 未认领 append-surface 事件的兜底呈现（conversation-nodes/fallback.ts）。 */
   unknown: UnknownSurfaceNode
+  /** Magic CEO 委派画布（本地 definition conversation/ceo-team.ts）。 */
+  'ceo-team': import('../../ceo/team.ts').CeoTeamView
 }
 
 /** message.ts 的上下文行载荷。 */

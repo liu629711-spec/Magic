@@ -3,7 +3,7 @@
 // 嵌入改造：SOURCES/COMMANDS/MODELS 本地化为 Magic 语境默认值（M1 静态，SDK 接线后
 // 由真实数据驱动）；听写按钮保留动效但不再写入假转录（裁定 4 占位）；demo 自演保留
 // 供画廊模式，嵌入一律 demo={false}；扫光照旧由旗舰模型选择触发（裁定 2）。
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createShader, playSweep, accentChain, ACCENTS } from "glimm";
 
 /* The built-in "prism" palette is only cyan→indigo→magenta, so a sweep
@@ -49,6 +49,9 @@ type Source = {
   attach?: boolean;
   connect?: boolean;
 };
+
+/** @ 候选（2026-09-18：真实技能数据经此传入）。 */
+export type PromptBarMention = Source;
 
 /* Magic 语境来源（M1 静态假数据；SDK 接线后由会话能力清单驱动） */
 const SOURCES: Source[] = [
@@ -110,6 +113,13 @@ function parseToken(draft: string): { kind: "at" | "slash"; query: string; start
   };
 }
 
+/** 输入条三件套数据（2026-09-18 照 Magic 网页版 composer）。 */
+export type PromptBarChips = {
+  permission?: { label: string; onClick?: () => void };
+  workMode?: { label: string; onClick?: () => void };
+  context?: { percent: number; detail?: string };
+};
+
 export default function PromptBar({
   variant = "Rounded",
   demo = true,
@@ -119,6 +129,9 @@ export default function PromptBar({
   modelOptions,
   modelKey,
   onModelChange,
+  composerChips,
+  mentionOptions,
+  commandOptions,
 }: {
   variant?: string;
   /** the self-running walkthrough; turn off when embedding in a real surface */
@@ -133,6 +146,13 @@ export default function PromptBar({
   modelKey?: string;
   /** 选择模型回调（真实模式写入 session/selectModel） */
   onModelChange?: (key: string) => void;
+  /** 输入条三件套（2026-09-18 照 Magic 网页版 composer）：
+   *  访问模式（工作区内修改）/ 工作模式 chip（CEO · 当前会话）/ 上下文用量 */
+  composerChips?: PromptBarChips;
+  /** 真实 @ 候选（2026-09-18：来自真实命令/文件数据；缺省=画廊 mock SOURCES） */
+  mentionOptions?: Source[];
+  /** 真实 / 命令（commands/list 数据；缺省=画廊 mock COMMANDS） */
+  commandOptions?: { key: string; name: string; desc: string }[];
 }) {
   const pill = variant === "Pill";
   const [draft, setDraft] = useState("");
@@ -142,9 +162,23 @@ export default function PromptBar({
   const [model, setModel] = useState<(typeof MODELS)[number]>(MODELS[1]);
   /** 真实模式渲染用：外部模型列表 + 受控选中项（缺省回退画廊 mock） */
   const menuModels = modelOptions ?? MODELS;
+  /** @ 候选与 / 命令数据源（2026-09-18：真实数据优先，缺省回退画廊 mock） */
+  const mentionItems = mentionOptions ?? SOURCES;
+  const commandItems = commandOptions ?? COMMANDS;
   const activeModel = modelOptions !== undefined
     ? modelOptions.find((m) => m.key === modelKey) ?? modelOptions[0]
     : model;
+  /** 模型分组（2026-09-18 照 Magic 网页版设计：按 provider 分组 + sticky 组标题） */
+  const modelGroups = useMemo(() => {
+    const groups: { tag: string; models: { key: string; name: string; tag?: string }[] }[] = [];
+    for (const m of menuModels) {
+      const tag = m.tag ?? "";
+      const last = groups[groups.length - 1];
+      if (last !== undefined && last.tag === tag) last.models.push(m);
+      else groups.push({ tag, models: [m] });
+    }
+    return groups;
+  }, [menuModels]);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
   const [active, setActive] = useState(0);
@@ -183,9 +217,9 @@ export default function PromptBar({
 
   const rows: { key: string; name: string; desc: string }[] =
     menu === "at"
-      ? SOURCES.filter((s) => s.name.toLowerCase().includes(query))
+      ? mentionItems.filter((s) => s.name.toLowerCase().includes(query))
       : menu === "slash"
-        ? COMMANDS.filter((c) => c.name.slice(1).startsWith(query))
+        ? commandItems.filter((c) => c.name.slice(1).startsWith(query))
         : [];
 
   useEffect(() => {
@@ -357,7 +391,7 @@ export default function PromptBar({
   };
 
   const pick = (row: { key: string; name: string }) => {
-    const source = SOURCES.find((s) => s.key === row.key);
+    const source = mentionItems.find((s) => s.key === row.key);
     if (source?.attach) {
       // M1 静态：附件仅收进 chips（无真实上传）；SDK 接线后换真实文件选择
       setAttachments((current) => [...current, `附件 ${current.length + 1}`]);
@@ -410,7 +444,7 @@ export default function PromptBar({
             }}
           />
           {rows.map((row, i) => {
-            const source = menu === "at" ? SOURCES.find((s) => s.key === row.key) : undefined;
+            const source = menu === "at" ? mentionItems.find((s) => s.key === row.key) : undefined;
             return (
               <button
                 key={row.key}
@@ -468,7 +502,7 @@ export default function PromptBar({
       {modelOpen && (
         <div
           onMouseLeave={() => setModelHovered(null)}
-          className="absolute z-10 w-44 rounded-[10px] bg-surface p-1 shadow-raised"
+          className="absolute z-10 w-60 max-h-[360px] overflow-y-auto rounded-[14px] bg-surface p-1 shadow-raised"
           style={{ left: modelMenuLeft, bottom: modelMenuBottom, animation: "pop-in 180ms cubic-bezier(0.23,1,0.32,1) both", transformOrigin: "bottom left" }}
         >
           {/* single gliding highlight — floats to the hovered / selected row */}
@@ -483,7 +517,16 @@ export default function PromptBar({
                 "top 220ms cubic-bezier(0.23,1,0.32,1), height 220ms cubic-bezier(0.23,1,0.32,1), opacity 150ms ease",
             }}
           />
-          {menuModels.map((m, i) => (
+          {modelGroups.map((group) => (
+            <div key={group.tag.length > 0 ? group.tag : "default"}>
+              {group.tag.length > 0 ? (
+                <div className="sticky top-0 z-10 bg-surface px-2 pt-1.5 pb-1 text-[11.5px] font-medium text-ink-3">
+                  {group.tag}
+                </div>
+              ) : null}
+              {group.models.map((m) => {
+                const i = menuModels.indexOf(m);
+                return (
             <button
               key={m.key}
               type="button"
@@ -496,14 +539,19 @@ export default function PromptBar({
                 selectModel(m);
                 inputRef.current?.focus();
               }}
-              className="relative z-10 flex h-7.5 w-full items-center gap-2 rounded-[6px] px-2 text-left"
+              className="relative z-10 flex min-h-[38px] w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left"
             >
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">{m.name}</span>
-              {m.tag !== undefined ? <span className="shrink-0 text-[11px] text-ink-3">{m.tag}</span> : null}
+              <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">{m.name}</span>
+              {m.tag !== undefined && modelOptions === undefined ? (
+                <span className="shrink-0 text-[11px] text-ink-3">{m.tag}</span>
+              ) : null}
               <span className={`shrink-0 text-ink ${m.key === activeModel.key ? "" : "invisible"}`}>
                 <Icon size={13} strokeWidth={2.5}><path d="M20 6L9 17l-5-5" /></Icon>
               </span>
             </button>
+                );
+              })}
+            </div>
           ))}
         </div>
       )}
@@ -634,12 +682,12 @@ export default function PromptBar({
               setPlusOpen(false);
               setModelOpen((current) => !current);
             }}
-            className={`flex h-7 shrink-0 items-center gap-1 px-1.5 text-[12px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink ${
-              pill ? "rounded-full" : "rounded-[8px]"
-            } ${wide ? "col-start-2 row-start-2 justify-self-start" : "col-start-3 row-start-1"}`}
+            className={`flex h-7 shrink-0 items-center gap-1 rounded-full pl-2 pr-1 text-[13px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink ${
+              wide ? "col-start-2 row-start-2 justify-self-start" : "col-start-3 row-start-1"
+            }`}
           >
             {activeModel.name}
-            <span className="text-ink-3">
+            <span className={`text-ink-3 transition-transform duration-150 ${modelOpen ? "rotate-180" : ""}`}>
               <Icon size={11} strokeWidth={2.4}><path d="M6 9l6 6 6-6" /></Icon>
             </span>
           </button>
@@ -686,6 +734,40 @@ export default function PromptBar({
             <Icon size={16} strokeWidth={2.4}><path d="M12 19V5M5 12l7-7 7 7" /></Icon>
           </button>
         </div>
+
+        {/* 输入条三件套（2026-09-18 照 Magic 网页版）：访问模式 / 工作模式（左）+ 上下文用量（右） */}
+        {composerChips !== undefined ? (
+          <div className={`flex items-center justify-between gap-2 pt-0.5 ${pill ? "px-1" : "px-0.5"}`}>
+            <div className="flex min-w-0 items-center gap-1">
+              {composerChips.permission !== undefined ? (
+                <button
+                  type="button"
+                  onClick={composerChips.permission.onClick}
+                  className="flex h-7 shrink-0 items-center rounded-full px-2 text-[12px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink"
+                >
+                  {composerChips.permission.label}
+                </button>
+              ) : null}
+              {composerChips.workMode !== undefined ? (
+                <button
+                  type="button"
+                  onClick={composerChips.workMode.onClick}
+                  className="flex h-7 shrink-0 items-center rounded-full bg-field px-2 text-[12px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink"
+                >
+                  {composerChips.workMode.label}
+                </button>
+              ) : null}
+            </div>
+            {composerChips.context !== undefined ? (
+              <span
+                title={composerChips.context.detail}
+                className="flex h-7 shrink-0 items-center rounded-full px-2 text-[12px] font-medium text-ink-3"
+              >
+                上下文已用 {composerChips.context.percent}%
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       </div>
     </div>

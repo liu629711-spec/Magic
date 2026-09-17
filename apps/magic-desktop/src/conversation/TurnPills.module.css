@@ -33,10 +33,163 @@
   opacity: 0.7;
 }
 
+/* 统计 pill 作为可点击触发（弹出会话统计详情）；只重置按钮默认外观，
+   颜色/内边距/字号仍沿用 .pill。 */
+.pillButton {
+  appearance: none;
+  margin: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pillButton:focus-visible {
+  outline: 2px solid rgb(var(--gl-accent) / 0.6);
+  outline-offset: 1px;
+}
+
 .statsRow {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 4px 0 0;
+}
+
+/* ── 会话统计详情弹层（对照 DSH web 端 stat-dialog：菜单 surface + r12 + 细边框）── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: min(70vh, 640px);
+  border: 1px solid rgb(var(--gl-line) / 1);
+  border-radius: 12px;
+  background: rgb(var(--gl-field) / 1);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
+  color: var(--gl-ink-2, #c2c6d6);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgb(var(--gl-line) / 1);
+}
+
+.dialogTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gl-ink, #e3e2e6);
+  font-weight: 500;
+}
+
+.dialogClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--gl-ink-3, #8c909f);
+  cursor: pointer;
+}
+
+.dialogClose:hover {
+  background: rgb(var(--gl-hover-2) / 1);
+  color: var(--gl-ink-2, #c2c6d6);
+}
+
+.dialogClose:focus-visible {
+  outline: 2px solid rgb(var(--gl-accent) / 0.6);
+  outline-offset: 1px;
+}
+
+.dialogBody {
+  overflow: auto;
+  padding: 12px 14px 14px;
+}
+
+.sectionTitle {
+  margin-bottom: 8px;
+  color: var(--gl-ink-3, #8c909f);
+}
+
+.sectionTitle:not(:first-child) {
+  margin-top: 16px;
+}
+
+.overview {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.overview dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  color: var(--gl-ink-3, #8c909f);
+}
+
+.overview dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--gl-ink-2, #c2c6d6);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.table {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgb(var(--gl-line) / 1);
+  color: var(--gl-ink-3, #8c909f);
+  font-weight: 500;
+  text-align: left;
+}
+
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgb(var(--gl-line) / 0.5);
+  color: var(--gl-ink-2, #c2c6d6);
+}
+
+.num {
+  text-align: right;
+}
+
+.empty {
+  padding: 32px 0;
+  color: var(--gl-ink-3, #8c909f);
+  text-align: center;
 }

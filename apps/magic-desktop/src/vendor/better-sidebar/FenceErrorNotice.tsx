@@ -13,7 +13,9 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api } from './api.ts'
 import { t } from './locales.ts'
 import { parsePrefs } from './prefs.ts'
-import css from '../css/sidebar.module.css'
+// Magic 客户端修复：vendored 目录把 src/client/* 整体搬到 vendor/better-sidebar/，
+// 样式表落在同级 css/ 下，故原 '../css/sidebar.module.css' 改 './css/sidebar.module.css'。
+import css from './css/sidebar.module.css'
 import type { SidebarStore } from './state.ts'
 
 export function FenceErrorNotice(props: { store: SidebarStore; onDisabled: () => void }) {

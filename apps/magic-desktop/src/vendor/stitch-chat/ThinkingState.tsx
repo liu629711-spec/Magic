@@ -252,7 +252,7 @@ export default function ThinkingState({
               if (variant === "Search") {
                 return (
                   <a
-                    key={row.primary}
+                    key={`${i}-${row.primary}`}
                     href={row.href}
                     target="_blank"
                     rel="noreferrer"
@@ -268,7 +268,7 @@ export default function ThinkingState({
                 const selected = selectedTool === row.primary;
                 return (
                   <button
-                    key={row.primary}
+                    key={`${i}-${row.primary}`}
                     type="button"
                     aria-pressed={selected}
                     onClick={() => setSelectedTool(selected ? null : row.primary)}
@@ -281,7 +281,7 @@ export default function ThinkingState({
               }
 
               return (
-                <div key={row.primary} className={rowClass} style={animation}>
+                <div key={`${i}-${row.primary}`} className={rowClass} style={animation}>
                   {content}
                 </div>
               );

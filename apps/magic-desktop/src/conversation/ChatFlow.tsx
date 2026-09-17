@@ -43,8 +43,13 @@ import { makeRenderToolview } from './tool-views.tsx'
 // TurnProcessSummary（codex 式「已处理 2m27s · 已探索 2 项」）。回退时还原
 // MagicTurnProcessHeader（对齐画廊 ToolChips 的计数头）或 vendored TurnProcessNodeView。
 import { MagicTurnProcessSummary, type MagicTurnProcessSummaryProps } from './MagicTurnProcessSummary.tsx'
-import PromptBar from '../vendor/stitch-chat/PromptBar.tsx'
+// CEO 委派图卡（2026-09-18）：对话流里渲染 CEO 把任务派给成员的画布（节点/连线/状态徽标）。
+import { CeoTeamGraph } from '../vendor/ceo/client/CeoTeamGraph.ts'
+import PromptBar, { type PromptBarChips, type PromptBarMention } from '../vendor/stitch-chat/PromptBar.tsx'
 import { ComposerStats, TurnTailPills } from './TurnPills.tsx'
+import { SessionHeader, type SessionHeaderData } from './SessionHeader.tsx'
+import { TrajectoryView } from './TrajectoryView.tsx'
+import { SelectionAnnotation, AnnotationChips, composeWithAnnotations } from './SelectionAnnotation.tsx'
 import { InkTowerLoader } from './InkTowerLoader.tsx'
 import { ProducedFiles } from './ProducedFiles.tsx'
 import { MagicFeedbackActions } from './MagicFeedbackActions.tsx'
@@ -62,6 +67,8 @@ const openFile = (_path: string, _options?: unknown): void => {}
 const openSkill = (_name: string): void => {}
 const inspectCall = (_callId: string): void => {}
 const forkAt = (_seq: number): void => {}
+// 成员详情/干预面板（CeoMemberInspector 等）本轮未搬：点成员/CEO 节点只切换画布高亮。
+const openCeoWorkspace = (): void => {}
 const loadImage = async (): Promise<string> => ''
 const renderMessageImages = (): null => null
 const fileMentions = (): undefined => undefined
@@ -243,6 +250,15 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
     }
     case 'unknown':
       return <UnknownNodeView {...base} node={node} />
+    case 'ceo-team':
+      // CEO 委派图卡：用自己的折叠 Definition 产节点（vendor/ceo/client/CeoTeamGraph）。
+      // props.node.data 即 projectCeoTeam 产出的 CeoTeamView；文案/成员面板降级见组件注释。
+      return (
+        <CeoTeamGraph
+          node={node as ChatNode<'ceo-team'>}
+          openWorkspace={openCeoWorkspace}
+        />
+      )
     default: {
       const unreachable: never = node
       return unreachable
@@ -250,15 +266,66 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
   }
 }
 
-export function ChatFlow({ store, onSend, modelPicker }: {
+/** 对话区顶部 tab（M5，2026-09-18）：对话=现有消息流；轨迹=事件时间线表格。 */
+type ConversationTab = 'chat' | 'trajectory'
+
+/** tab 条：文字 tab + 底边高亮（跟随 stitch，样式思路同 InspectorPanel/RightDock 的 tab）。 */
+function ConversationTabs({ active, onSelect }: {
+  active: ConversationTab
+  onSelect: (tab: ConversationTab) => void
+}) {
+  const tabs: { id: ConversationTab; label: string }[] = [
+    { id: 'chat', label: '对话' },
+    { id: 'trajectory', label: '轨迹' },
+  ]
+  return (
+    <div
+      data-conversation-tabs
+      className="h-10 shrink-0 select-none border-b border-surface-container-highest bg-surface px-4"
+    >
+      <div className="mx-auto flex h-full w-full max-w-[var(--dsh-chat-content-width)] items-center gap-1">
+        {tabs.map(item => {
+          const isActive = item.id === active
+          return (
+            <button
+              key={item.id}
+              type="button"
+              data-conversation-tab={item.id}
+              data-active={isActive || undefined}
+              onClick={() => onSelect(item.id)}
+              className={`flex h-full items-center border-b-2 px-3 text-[12.5px] transition-colors cursor-pointer ${
+                isActive
+                  ? 'border-primary font-medium text-on-surface'
+                  : 'border-transparent text-outline hover:text-on-surface'
+              }`}
+            >
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, sessionHeader, onOpenSession }: {
   store: ChatSessionStore
   onSend?: (text: string) => void
+  /** 会话头数据（M4，2026-09-18）：App 从真实会话列表算出；mock/无数据时不传 → 不渲染头。 */
+  sessionHeader?: SessionHeaderData
+  /** 会话头层级/子代理导航：切换会话（App 的 openSession）。 */
+  onOpenSession?: (id: string) => void
   /** 模型选择器（真实 runtime：session/modelCatalog + selectModel；缺省=画廊 mock） */
   modelPicker?: {
     options: { key: string; name: string; tag?: string }[]
     currentKey?: string
     onChange: (key: string) => void
   }
+  /** 输入条三件套（2026-09-18）：访问模式 / 工作模式 / 上下文用量 */
+  composerChips?: PromptBarChips
+  /** 输入条 @ 候选与 / 命令（2026-09-18：真实技能/命令数据） */
+  mentionOptions?: PromptBarMention[]
+  commandOptions?: { key: string; name: string; desc: string }[]
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { snapshot } = state
@@ -357,60 +424,92 @@ export function ChatFlow({ store, onSend, modelPicker }: {
 
   const awaitingReply = state.awaitingReply
 
+  // 对话 / 轨迹 tab（M5）：本地状态；轨迹视图读整窗持久事件（随快照变更重算）。
+  const [tab, setTab] = useState<ConversationTab>('chat')
+  const eventEntries = useMemo(() => store.eventEntries(), [store, snapshot])
+  // 划选注释（M8）：待发送的注释文本（发送后拼成引用块并清空）。
+  const [annotations, setAnnotations] = useState<string[]>([])
+
   return (
     <div className="vendor-dsh-chat flex h-full flex-col bg-surface text-on-surface">
-      <div
-        ref={flowRef}
-        data-conversation-scroll
-        className={css.flow}
-        onScroll={event => {
-          const el = event.currentTarget
-          stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
-        }}
-      >
-        <div className={css.flowInner} data-chat-flow>
-          {snapshot.order.map(key => {
-            const node = snapshot.nodes.get(key)
-            if (node === undefined || node.visibility === 'hidden') return null
-            const chatNode = node as ChatNode
-            const turn = turnOf(chatNode)
-            return (
-              <Seat
-                key={key}
-                node={chatNode}
-                presentation={projector?.get(chatNode)}
-                open={turn !== undefined && openTurns.has(turn)}
-                setOpenTurn={setOpenTurn}
-                useChat={useChat}
-                turnTail={turn === undefined ? undefined : turnTails.get(turn)}
-                producedByTurn={producedByTurn}
-                fileMentions={fileMentions}
-              />
-            )
-          })}
-          {/* 运行中状态行（2026-09-17 用户裁定）：毛笔画鼓楼动画 +「绘画中」，
-              位置同 DSH TurnStatus（流末尾左对齐）；提交后等待回包期间常驻。 */}
-          {awaitingReply && <InkTowerLoader />}
-        </div>
-      </div>
-      <div className="shrink-0" data-composer-seat>
-        <div className="mx-auto w-full max-w-[var(--dsh-chat-content-width)] px-4 pb-4 pt-3">
-          {/* 换肤点（2026-09-17 对话区 v2）：输入条换画廊 PromptBar（demo=false 嵌入；
-              听写占位=裁定 4、扫光保留=裁定 2）。回退时还原本目录 Composer.tsx。 */}
-          <PromptBar
-            demo={false}
-            onSend={text => {
-              if (onSend !== undefined) onSend(text);
-              else store.submit(text);
+      {sessionHeader !== undefined && (
+        <SessionHeader data={sessionHeader} onOpenSession={onOpenSession} />
+      )}
+      <ConversationTabs active={tab} onSelect={setTab} />
+      {tab === 'trajectory' ? (
+        <TrajectoryView entries={eventEntries} />
+      ) : (
+        <>
+          <div
+            ref={flowRef}
+            data-conversation-scroll
+            className={css.flow}
+            onScroll={event => {
+              const el = event.currentTarget
+              stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
             }}
-            modelOptions={modelPicker?.options}
-            modelKey={modelPicker?.currentKey}
-            onModelChange={modelPicker?.onChange}
+          >
+            <div className={css.flowInner} data-chat-flow>
+              {snapshot.order.map(key => {
+                const node = snapshot.nodes.get(key)
+                if (node === undefined || node.visibility === 'hidden') return null
+                const chatNode = node as ChatNode
+                const turn = turnOf(chatNode)
+                return (
+                  <Seat
+                    key={key}
+                    node={chatNode}
+                    presentation={projector?.get(chatNode)}
+                    open={turn !== undefined && openTurns.has(turn)}
+                    setOpenTurn={setOpenTurn}
+                    useChat={useChat}
+                    turnTail={turn === undefined ? undefined : turnTails.get(turn)}
+                    producedByTurn={producedByTurn}
+                    fileMentions={fileMentions}
+                  />
+                )
+              })}
+              {/* 运行中状态行（2026-09-17 用户裁定）：毛笔画鼓楼动画 +「绘画中」，
+                  位置同 DSH TurnStatus（流末尾左对齐）；提交后等待回包期间常驻。 */}
+              {awaitingReply && <InkTowerLoader />}
+            </div>
+          </div>
+          {/* 划选注释（M8）：监听消息流内划选，浮出「添加注释」按钮。 */}
+          <SelectionAnnotation
+            containerRef={flowRef}
+            onAdd={text => setAnnotations(prev => [...prev, text])}
           />
-          {/* 会话统计条（2026-09-17 对齐 web 端 StatsPills）：无统计数据的会话不渲染。 */}
-          <ComposerStats snapshot={snapshot} />
-        </div>
-      </div>
+          <div className="shrink-0" data-composer-seat>
+            <div className="mx-auto w-full max-w-[var(--dsh-chat-content-width)] px-4 pb-4 pt-3">
+              {/* 注释胶囊行（M8）：输入条上方、PromptBar 之前（无注释不渲染）。 */}
+              <AnnotationChips
+                annotations={annotations}
+                onRemove={index => setAnnotations(prev => prev.filter((_, i) => i !== index))}
+              />
+              {/* 换肤点（2026-09-17 对话区 v2）：输入条换画廊 PromptBar（demo=false 嵌入；
+                  听写占位=裁定 4、扫光保留=裁定 2）。回退时还原本目录 Composer.tsx。 */}
+              <PromptBar
+                demo={false}
+                onSend={text => {
+                  // 划选注释（M8）：注释以引用块拼在用户文本前，发送后清空。
+                  const payload = composeWithAnnotations(text, annotations)
+                  setAnnotations([])
+                  if (onSend !== undefined) onSend(payload);
+                  else store.submit(payload);
+                }}
+                modelOptions={modelPicker?.options}
+                modelKey={modelPicker?.currentKey}
+                onModelChange={modelPicker?.onChange}
+                composerChips={composerChips}
+                mentionOptions={mentionOptions}
+                commandOptions={commandOptions}
+              />
+              {/* 会话统计条（2026-09-17 对齐 web 端 StatsPills）：无统计数据的会话不渲染。 */}
+              <ComposerStats snapshot={snapshot} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

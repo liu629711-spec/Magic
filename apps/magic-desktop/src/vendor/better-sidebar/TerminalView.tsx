@@ -50,7 +50,9 @@ import {
   openTerminalUrl,
 } from './terminal-links.ts'
 import { TerminalWaitBanner } from './TerminalWaitBanner.tsx'
-import css from '../css/sidebar.module.css'
+// Magic 客户端修复：vendored 目录把 src/client/* 整体搬到 vendor/better-sidebar/，
+// 样式表落在同级 css/ 下，故原 '../css/sidebar.module.css' 改 './css/sidebar.module.css'。
+import css from './css/sidebar.module.css'
 
 /** How many consecutive unreasoned failures before showing the error banner. */
 const FAILURE_LIMIT = 3

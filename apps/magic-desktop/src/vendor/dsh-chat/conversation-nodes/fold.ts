@@ -24,6 +24,9 @@ import { turnErrorDefinition } from './turn-error.ts'
 import { turnMaxTokensDefinition } from './turn-max-tokens.ts'
 import { turnTailDefinition } from './turn-tail.ts'
 import { unknownFallbackDefinition } from './fallback.ts'
+// Magic 自研扩展（2026-09-18）：CEO 委派画布 Definition。magic-ceo 插件把 ceo/*
+// 事件写进同一事件流，源包无此 definition（会被兜底丢弃），故在本地折叠层登记。
+import { ceoTeamDefinition } from '../../../conversation/ceo-team.ts'
 
 /** Chat 业务的全部事件定义（注册顺序与源包一致）。 */
 export const chatConversationDefinitions: readonly ConversationNodeDefinition[] = [
@@ -40,6 +43,7 @@ export const chatConversationDefinitions: readonly ConversationNodeDefinition[] 
   turnErrorDefinition,
   turnMaxTokensDefinition,
   turnTailDefinition,
+  ceoTeamDefinition,
 ]
 
 /** 未认领 append-surface 事件的兜底定义。 */

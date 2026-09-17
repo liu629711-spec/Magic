@@ -1,0 +1,1389 @@
+// 搬自 plugins/magic-ceo-ui/src/client/CeoTeamGraph.ts（2026-09-18 CEO 委派图卡接入自有客户端）。
+// 改动点（仅接线，不改视觉/布局逻辑）：
+//  ① import 改指本地 vendor：../flow.ts、../team.ts、../failure-card.ts 同源；
+//     ../processView.ts 收敛为 ../tool-display.ts（只搬 toolDisplayName）；
+//     ./elapsed.ts、./selection.ts、./session-canvas.ts、./task-board-store.ts 已本地搬入。
+//  ② 词典 t 收敛为内部中文文案表（先例 conversation/MagicTurnProcessSummary.tsx）；
+//     props.t 变为可选，缺省用内部表——原插件由 locale.bind('magicCeo') 注入。
+//  ③ 依赖 @xyflow/react（apps/magic-desktop 本地安装）。
+// 遗留（本轮不做，见交付报告）：成员详情/干预面板（CeoMemberInspector、CeoProcessTimeline、
+// CeoDecisionDrawer、CeoDelegateRow、CeoWorkspace）与任务板 RPC 通道未搬；openWorkspace
+// 目前为空实现，点成员/CEO 节点只切换画布高亮，不打开右坞。
+
+import { createContext, createElement as h, Fragment, memo, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import {
+  Background,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getSmoothStepPath,
+  Handle,
+  MarkerType,
+  Position,
+  ReactFlow,
+  ReactFlowProvider,
+  useNodeId,
+  useReactFlow,
+  useStore,
+  ViewportPortal,
+  type Edge,
+  type EdgeProps,
+  type Node,
+  type NodeProps,
+} from '@xyflow/react'
+// @xyflow/react 基础样式走副作用导入（随应用样式表一起打包）；画布自定义样式
+// 由下面的 ensureCanvasCss() 运行时注入（原插件用 ?inline 字符串拼接，Vite
+// 生产构建下默认导入不可用，这里改为两条路径分开）。
+import '@xyflow/react/dist/style.css'
+import { ceoFlowMemberId, ceoTeamSinkStatus, createRosterMerger, layoutCeoTeamFlow, type CeoFlowEdgeKind, type CeoFlowLane, type CeoFlowTask } from '../flow.ts'
+import { waitingOnOf } from '../failure-card.ts'
+import { formatElapsed, useElapsedSeconds } from './elapsed.ts'
+import { parseCeoMemberReport } from '../team.ts'
+import { getEmptyTaskBoardSnapshot, getTaskBoardSnapshot, selectCeoTask, subscribeTaskBoard, type TaskBoardSnapshot } from './task-board-store.ts'
+import { toolDisplayName } from '../tool-display.ts'
+import {
+  debriefSummaryOf,
+  displayCeoSeat,
+  formatTokenCount,
+  presentCeoMember,
+  type CeoMemberViewStatus,
+  type CeoTeamMember,
+  type CeoTeamView,
+} from '../team.ts'
+import { getCeoRoster, getSelectedCeoMember, publishCeoTeam, selectCeoMember, subscribeCeoSelection } from './selection.ts'
+import { sessionCanvasHeight } from './session-canvas.ts'
+import { ink, line, surface } from './theme.ts'
+
+function clipOneLine(text: string): string {
+  const chars = Array.from(text.trim())
+  if (chars.length <= 24) return text.trim()
+  return `${chars.slice(0, 24).join('')}…`
+}
+
+export interface CeoTeamGraphTaskBoard {
+  subscribe: (listener: () => void) => () => void
+  /**
+   * 必须返回**引用稳定**的快照（状态未变时返回同一对象）。
+   * 见 task-board-store.ts 的「关键不变量」：返回不稳定的快照会让
+   * useSyncExternalStore 判定 store 一直在变 → 无限重渲染（React #185）。
+   */
+  getSnapshot: () => TaskBoardSnapshot
+  reload: () => void
+  create: (subject: string) => Promise<void>
+}
+
+type Translate = (key: string, params?: Record<string, unknown>) => string
+
+/** 图卡中文文案（收敛自 magic-ceo-ui register.ts 的 zh 词典，只用图卡相关键）。 */
+const ZH: Record<string, string> = {
+  'graph.goal': '你的任务',
+  'graph.goalHint': '对话发起',
+  'graph.ceo': 'CEO 汇总',
+  'graph.ceoPending': '待汇总',
+  'graph.ceoRunning': '正在生成汇总…',
+  'graph.ceoDone': '已汇总',
+  'graph.fold': '收起',
+  'graph.expand': '展开',
+  'graph.elapsed': '用时 {duration}',
+  'plan.title': 'CEO 分析与派发计划',
+  'plan.ready': '计划已记录，CEO 正在准备启动成员。',
+  'status.queued': '排队中',
+  'status.running': '执行中',
+  'status.delegated': '已委派',
+  'status.completed': '已完成',
+  'status.blocked': '阻塞',
+  'status.failed': '失败',
+  'status.partial': '部分完成',
+  'status.unverified': '回传待核实',
+  'status.unknown_after_restart': '重启后状态未知',
+  'status.error': '失败',
+  'badge.blocked': '阻塞',
+  'badge.decision': '待你拍板',
+  'badge.blocker': '阻塞',
+  'halted.badge': '已停止',
+  'halted.hint': '这个成员被你停止了。用 replace 或 add 继续这项工作。',
+  'tokens.badge': '{tokens} tok',
+  'tokens.tooltip': '输入 {input} · 输出 {output}',
+  'tasks.status.pending': '待处理',
+  'tasks.status.in_progress': '进行中',
+  'tasks.status.completed': '已完成',
+}
+
+function translate(key: string, params?: Record<string, unknown>): string {
+  let text = ZH[key] ?? key
+  if (params !== undefined) {
+    for (const [name, value] of Object.entries(params)) {
+      text = text.replaceAll(`{${name}}`, String(value))
+    }
+  }
+  return text
+}
+
+export interface CeoTeamGraphProps {
+  node: { data: CeoTeamView }
+  sessionId?: string
+  openWorkspace: () => void
+  /** 官方任务板（remote.agentTeams）句柄：画布任务泳道的数据源与操作面。 */
+  taskBoard?: CeoTeamGraphTaskBoard
+  /** 文案函数；缺省用内部中文表（原插件由 locale 注入）。 */
+  t?: Translate
+}
+
+// 节点 data 必须是 type 别名（而非 interface）：@xyflow/react 的 Node<T> 约束要求
+// T 满足 Record<string, unknown>，interface 没有隐式索引签名，type 别名才有。
+type GoalNodeData = {
+  preview: string
+  enterIndex: number
+  t: Translate
+}
+
+type MemberNodeData = {
+  member: CeoTeamMember
+  roster: readonly CeoTeamMember[]
+  selected: boolean
+  enterIndex: number
+  t: Translate
+}
+
+type CeoNodeData = {
+  status: CeoMemberViewStatus
+  enterIndex: number
+  t: Translate
+}
+
+interface FlowEdgeData extends Record<string, unknown> {
+  animated?: boolean
+  kind?: CeoFlowEdgeKind
+  /** AgentCore handoff fidelity: only lossy edges show a label. */
+  handoff?: 'summary' | 'truncated'
+}
+
+interface GraphHoverState {
+  hoveredNodeId: string | null
+  keepBrightIds: Set<string> | null
+}
+
+const GraphHoverContext = createContext<GraphHoverState>({
+  hoveredNodeId: null,
+  keepBrightIds: null,
+})
+
+/** AgentCore identity palette: oklch(0.58 0.13 H) — lifted chroma so hues stay
+ *  readable on the light DSH theme while still steering clear of status hues. */
+const ROLE_COLORS = [
+  'oklch(0.55 0.13 95)',
+  'oklch(0.55 0.13 145)',
+  'oklch(0.55 0.13 200)',
+  'oklch(0.55 0.13 240)',
+  'oklch(0.55 0.13 285)',
+  'oklch(0.55 0.13 320)',
+  'oklch(0.55 0.13 20)',
+  'oklch(0.55 0.13 60)',
+] as const
+
+function hashRole(role: string): number {
+  let hash = 0x811c9dc5
+  for (const char of role) {
+    hash ^= char.charCodeAt(0)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return hash >>> 0
+}
+
+function roleColor(role: string): string {
+  const key = role.trim()
+  if (key === '') return ROLE_COLORS[0]
+  return ROLE_COLORS[hashRole(key) % ROLE_COLORS.length]!
+}
+
+function roleGlyph(role: string): string {
+  const key = role.trim()
+  if (key === '') return '?'
+  return Array.from(key)[0] ?? '?'
+}
+
+function memberPreview(member: CeoTeamMember): string {
+  const output = debriefSummaryOf(member.report, member.lastMessage)
+  if (output.trim() !== '') return clipOneLine(output)
+  return clipOneLine(member.task)
+}
+
+function initiatorPreview(text: string): string {
+  const raw = text.trim()
+  const withRoles = raw.match(/^\d+\s*个\s*workers?\s*[：:]\s*(.*)$/i)
+  const base = withRoles ? (withRoles[1] ?? '').trim() : /^\d+\s*个\s*workers?$/i.test(raw) ? '' : raw
+  return clipOneLine(base)
+}
+
+type CanvasNode = Node<GoalNodeData | MemberNodeData | CeoNodeData | TaskNodeData>
+
+const STATUS_COLOR: Record<CeoMemberViewStatus, string> = {
+  queued: 'var(--dsw-alias-label-tertiary, #9a9a9a)',
+  running: 'var(--dsw-alias-state-business-primary, #3b82f6)',
+  delegated: 'var(--dsw-alias-state-success, #16a34a)',
+  completed: 'var(--dsw-alias-state-success, #16a34a)',
+  blocked: 'var(--dsw-alias-state-danger, #dc2626)',
+  failed: 'var(--dsw-alias-state-danger, #dc2626)',
+  partial: 'var(--dsw-alias-state-warning, #d97706)',
+  unverified: 'var(--dsw-alias-state-warning, #d97706)',
+  unknown_after_restart: 'var(--dsw-alias-label-tertiary, #9a9a9a)',
+  error: 'var(--dsw-alias-state-danger, #dc2626)',
+}
+
+const EDGE_COLOR = {
+  goal: 'var(--dsw-alias-border-l3, #4a4a58)',
+  depends: 'var(--dsw-alias-label-tertiary, #9a9a9a)',
+  report: 'var(--dsw-alias-border-l3, #4a4a58)',
+} as const
+
+const CANVAS_CSS = `
+.magic-ceo-canvas .react-flow__node {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+  width: 210px;
+  height: 110px;
+}
+.magic-ceo-canvas .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  background: var(--dsw-alias-border-l4, #5a5a5a);
+}
+.magic-ceo-canvas .react-flow__attribution { display: none; }
+[data-magic-ceo-status-strip] {
+  transition: background-color 0.12s ease;
+}
+[data-magic-ceo-status-strip]:hover {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3, #2c2c38) 70%, transparent);
+}
+.magic-ceo-node-face {
+  animation: magic-ceo-node-enter 0.28s ease-out both;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+/* 整卡可点：光标 + hover 光圈（点击任意节点打开成员工作区）。 */
+.magic-ceo-canvas .react-flow__node { cursor: pointer; }
+.magic-ceo-canvas .react-flow__node:hover { z-index: 1; }
+.magic-ceo-canvas .react-flow__node:hover .magic-ceo-node-face {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary, #3b82f6) 20%, transparent);
+}
+@keyframes magic-ceo-node-enter {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+/* Running presence rides the status dot only: transform/opacity keep it on the
+   compositor. An infinite card-level filter/drop-shadow repaints the whole
+   card every frame and reads as jank with several running members. */
+@keyframes magic-ceo-dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.6; }
+}
+/* AgentCore terminal flash: one-shot scale + glow on settle. */
+.magic-ceo-node-flash {
+  animation: magic-ceo-node-flash 0.6s ease-out;
+}
+@keyframes magic-ceo-node-flash {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  40% { transform: scale(1.035); box-shadow: 0 0 12px 3px var(--graph-flash-color, var(--dsw-alias-state-success, #16a34a)); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes magic-ceo-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes magic-ceo-pulse {
+  0%, 100% { opacity: .45 }
+  50% { opacity: 1 }
+}
+.magic-ceo-canvas .react-flow__node { transition: none; }
+.magic-ceo-node-dim {
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+.magic-ceo-node-bright {
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .magic-ceo-node-face,
+  .magic-ceo-node-flash {
+    animation: none;
+  }
+  [data-magic-ceo-status-strip] span {
+    animation: none !important;
+  }
+}
+`
+
+const PARTICLE_BEGINS = ['0s', '0.5s', '1s'] as const
+const PARTICLE_DUR = '1.5s'
+
+function motionEnabled(): boolean {
+  return typeof window === 'undefined'
+    || window.matchMedia('(prefers-reduced-motion: reduce)').matches === false
+}
+
+function enterDelay(index: number): string {
+  return `${String(Math.min(Math.max(0, index) * 35, 280))}ms`
+}
+
+let canvasCssInjected = false
+
+function ensureCanvasCss(): void {
+  if (canvasCssInjected || typeof document === 'undefined') return
+  canvasCssInjected = true
+  const style = document.createElement('style')
+  style.setAttribute('data-magic-ceo-canvas', 'true')
+  style.textContent = CANVAS_CSS
+  document.head.appendChild(style)
+}
+
+function cardStyle(selected: boolean, needsDecision: boolean, ring?: string, muted = false): CSSProperties {
+  return {
+    boxSizing: 'border-box',
+    width: 210,
+    height: 110,
+    padding: '10px 12px',
+    borderRadius: 12,
+    background: muted
+      ? 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 40%, var(--dsw-alias-bg-base, #ffffff))'
+      : 'var(--dsw-alias-bg-base, #ffffff)',
+    border: `1px solid ${ring ?? (selected ? ink.accent : needsDecision ? ink.warn : line.subtle)}`,
+    // AgentCore weight: colored border carries status; a whisper of lift keeps
+    // cards off the canvas without heavy halos.
+    boxShadow: '0 1px 3px rgba(15, 23, 42, 0.06)',
+    color: ink.primary,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    cursor: 'pointer',
+    textAlign: 'left',
+    overflow: 'hidden',
+  }
+}
+
+function faceStyle(enterIndex: number): CSSProperties {
+  return {
+    width: '100%',
+    height: '100%',
+    animationDelay: enterDelay(enterIndex),
+  }
+}
+
+function FlowEdge({
+  source,
+  target,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  style,
+  data,
+}: EdgeProps<Edge<FlowEdgeData>>) {
+  // AgentCore leftright layout keeps orthogonal smoothstep edges with 10px
+  // rounded corners (StepEdge.tsx:124-132, edgePathType defaults to
+  // "smoothstep") — the straight-angle look, not bezier.
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    borderRadius: 10,
+  })
+  const animated = data?.animated === true && motionEnabled()
+  const kind = data?.kind
+  const handoff = data?.handoff
+  const { hoveredNodeId, keepBrightIds } = useContext(GraphHoverContext)
+  const hoverActive = hoveredNodeId !== null
+  const hoverRelated = keepBrightIds?.has(source) === true && keepBrightIds.has(target) === true
+  let strokeOpacity: number
+  let strokeWidth: number
+  let strokeColor: string
+  if (animated) {
+    strokeOpacity = 1
+    strokeWidth = 2
+    strokeColor = ink.accent
+  } else if (!hoverActive) {
+    strokeOpacity = kind === 'depends' ? 0.35 : 0.4
+    strokeWidth = 1.5
+    strokeColor = typeof style?.stroke === 'string' ? style.stroke : EDGE_COLOR.goal
+  } else if (hoverRelated) {
+    strokeOpacity = 1
+    strokeWidth = 2
+    strokeColor = ink.accent
+  } else {
+    strokeOpacity = 0.1
+    strokeWidth = 1.5
+    strokeColor = typeof style?.stroke === 'string' ? style.stroke : EDGE_COLOR.goal
+  }
+  const dash = kind === 'depends' ? '5 4' : undefined
+  // AgentCore StepEdge information-handoff label: only lossy handoffs get a
+  // label (summary / truncated). A full handoff stays a clean line.
+  const handoffShort = handoff === 'summary' || handoff === 'truncated'
+    ? handoff === 'summary' ? '摘要' : '已截断'
+    : null
+  return h(Fragment, null,
+    h(BaseEdge, {
+      path: edgePath,
+      markerEnd,
+      style: {
+        ...style,
+        stroke: strokeColor,
+        strokeWidth,
+        opacity: strokeOpacity,
+        strokeDasharray: animated ? undefined : dash,
+      },
+    }),
+    handoffShort !== null
+      ? h(EdgeLabelRenderer, null,
+        h('div', {
+          className: 'nodrag nopan',
+          style: {
+            position: 'absolute',
+            transform: `translate(-50%, -50%) translate(${String(labelX)}px,${String(labelY)}px)`,
+            pointerEvents: 'none',
+            fontSize: 10,
+            lineHeight: '14px',
+            padding: '1px 6px',
+            borderRadius: 999,
+            border: `1px solid ${line.subtle}`,
+            background: 'var(--dsw-alias-bg-base, #ffffff)',
+            color: ink.tertiary,
+            whiteSpace: 'nowrap',
+          },
+        }, handoffShort),
+      )
+      : null,
+    animated
+      ? PARTICLE_BEGINS.map(begin => h('circle', {
+        key: begin,
+        r: 3,
+        fill: ink.accent,
+      }, h('animateMotion', {
+        dur: PARTICLE_DUR,
+        begin,
+        repeatCount: 'indefinite',
+        path: edgePath,
+      })))
+      : null,
+  )
+}
+
+// text 形参保留以对齐原实现签名（行数钳制由 CSS 完成，不消费文本内容）。
+function clampPreview(_text: string): CSSProperties {
+  return {
+    fontSize: 12,
+    lineHeight: '16px',
+    color: ink.tertiary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+  }
+}
+
+/** An upstream that declared only partial work or open risks is a lossy handoff
+ *  (summary); its full text stayed under the truncation limit. */
+function parseCeoMemberReportHasSummary(member: CeoTeamMember | undefined): boolean {
+  if (member === undefined) return false
+  const report = parseCeoMemberReport(member.lastMessage ?? '')
+  return report?.status === 'partial'
+    || (report?.risksOrBlockers ?? '').trim() !== ''
+}
+
+function useGraphNodeDimmed(): boolean {
+  const nodeId = useNodeId()
+  const { keepBrightIds } = useContext(GraphHoverContext)
+  if (keepBrightIds === null || nodeId == null) return false
+  return keepBrightIds.has(nodeId) === false
+}
+
+function graphNodeDimClass(dimmed: boolean): string {
+  return dimmed ? 'magic-ceo-node-dim' : 'magic-ceo-node-bright'
+}
+
+function isTerminalStatus(status: CeoMemberViewStatus): boolean {
+  return status === 'completed' || status === 'failed' || status === 'error'
+}
+
+function useTerminalFlash(status: CeoMemberViewStatus): boolean {
+  const [flashing, setFlashing] = useState(false)
+  const prev = useRef(status)
+  useEffect(() => {
+    const was = prev.current
+    prev.current = status
+    if (was === status) return undefined
+    if (isTerminalStatus(status) && isTerminalStatus(was) === false) {
+      setFlashing(true)
+      const timer = setTimeout(() => { setFlashing(false) }, 600)
+      return () => { clearTimeout(timer) }
+    }
+    setFlashing(false)
+    return undefined
+  }, [status])
+  return flashing
+}
+
+function endpointAvatar(kind: 'goal' | 'ceo', status: CeoMemberViewStatus): ReactNode {
+  const color = kind === 'goal' ? ink.tertiary : STATUS_COLOR[status]
+  return h('span', {
+    'aria-hidden': true,
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 28,
+      height: 28,
+      borderRadius: 99,
+      background: surface.layer3,
+      color,
+      fontSize: 13,
+      fontWeight: 600,
+      flex: '0 0 auto',
+    },
+  }, kind === 'goal' ? '你' : '汇')
+}
+
+function handles(kind: 'goal' | 'member' | 'ceo'): ReactNode[] {
+  return [
+    kind === 'goal' ? null : h(Handle, { key: 'in', type: 'target', position: Position.Left }),
+    kind === 'ceo' ? null : h(Handle, { key: 'out', type: 'source', position: Position.Right }),
+  ]
+}
+
+function GoalNode({ data }: NodeProps<Node<GoalNodeData>>) {
+  const dimmed = useGraphNodeDimmed()
+  return h('div', {
+    'data-magic-ceo-node': 'goal',
+    className: `magic-ceo-node-face ${graphNodeDimClass(dimmed)}`,
+    style: { ...cardStyle(false, false, undefined, true), ...faceStyle(data.enterIndex) },
+  },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+      endpointAvatar('goal', 'queued'),
+      h('strong', {
+        style: {
+          fontSize: 13,
+          fontWeight: 510,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        },
+      }, data.t('graph.goal')),
+    ),
+    h('div', {
+      style: { marginTop: 4, fontSize: 11, lineHeight: '16px', color: ink.tertiary },
+    }, data.t('graph.goalHint')),
+    data.preview.trim() === ''
+      ? null
+      : h('div', { style: { ...clampPreview(data.preview), marginTop: 6 } }, data.preview),
+    ...handles('goal'),
+  )
+}
+
+function MemberNode({ data }: NodeProps<Node<MemberNodeData>>) {
+  const member = data.member
+  const presentation = presentCeoMember(member)
+  const activity = member.activity
+  const title = displayCeoSeat(member, data.roster)
+  const identity = roleColor(title)
+  const running = presentation.viewStatus === 'running'
+  const completed = presentation.viewStatus === 'completed'
+  const preview = memberPreview(data.member)
+  const hoverDimmed = useGraphNodeDimmed()
+  const flashing = useTerminalFlash(presentation.viewStatus)
+  const face = running
+    ? activity?.phase === 'tool'
+      ? `正在生成 ${toolDisplayName(activity.toolName ?? '运行中')}`
+      : activity?.phase === 'thinking'
+        ? '正在分析'
+        : activity?.phase === 'winding_down'
+          ? '正在收尾'
+          : data.t('status.running')
+    : presentation.viewStatus === 'queued' && data.member.dependsOn.length > 0
+      ? '等待依赖'
+      : data.t(`status.${presentation.viewStatus}`)
+  const flashColor = presentation.viewStatus === 'failed' || presentation.viewStatus === 'error'
+    ? 'var(--dsw-alias-state-danger, #dc2626)'
+    : 'var(--dsw-alias-state-success, #16a34a)'
+  // PRD-04 §12：阻塞节点要提示「在等谁」，不能只有一个红点。
+  const blockedWait = presentation.viewStatus === 'blocked' ? waitingOnOf(member, data.roster) : []
+  const blockedBadgeText = [data.t('badge.blocked'), blockedWait.join(', ')]
+    .filter(part => part !== '')
+    .join(' · ')
+  return h('div', {
+    'data-magic-ceo-member': data.member.memberId ?? data.member.callId,
+    'data-magic-ceo-node': 'member',
+    'data-status': presentation.viewStatus,
+    'data-selected': data.selected ? 'true' : undefined,
+    className: `${graphNodeDimClass(hoverDimmed)}${running ? ' magic-ceo-node-running' : ''}`,
+  },
+    h('div', {
+      className: `magic-ceo-node-face${flashing ? ' magic-ceo-node-flash' : ''}`,
+      style: {
+        ['--graph-flash-color' as string]: flashColor,
+        ...cardStyle(
+          data.selected,
+          presentation.needsDecision,
+          completed
+            ? 'var(--dsw-alias-state-success, #16a34a)'
+            : presentation.hasBlocker || presentation.viewStatus === 'failed' || presentation.viewStatus === 'error'
+              ? 'var(--dsw-alias-state-danger, #dc2626)'
+              : presentation.viewStatus === 'partial' || presentation.viewStatus === 'unverified'
+                ? 'var(--dsw-alias-state-warning, #d97706)'
+                : undefined,
+        ),
+        ...faceStyle(data.enterIndex),
+      },
+    },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+      h('span', {
+        style: { position: 'relative', flex: '0 0 auto', width: 28, height: 28 },
+      },
+        h('span', {
+          'aria-hidden': true,
+          style: {
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 28,
+            height: 28,
+            borderRadius: 99,
+            background: `color-mix(in oklab, ${identity} 18%, transparent)`,
+            color: identity,
+            fontSize: 14,
+            fontWeight: 600,
+          },
+        }, roleGlyph(title)),
+        h('span', {
+          'aria-hidden': true,
+          style: {
+            position: 'absolute',
+            right: -2,
+            bottom: -2,
+            width: 14,
+            height: 14,
+            borderRadius: 99,
+            background: STATUS_COLOR[presentation.viewStatus],
+            border: '2px solid var(--dsw-alias-bg-base, #ffffff)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: running ? 'magic-ceo-dot-pulse 2s ease-in-out infinite' : undefined,
+          },
+        }, running
+          ? h('span', {
+            'aria-hidden': true,
+            style: {
+              width: 6,
+              height: 6,
+              border: '1.5px solid rgba(255,255,255,0.95)',
+              borderTopColor: 'transparent',
+              borderRadius: 99,
+            },
+          })
+          : presentation.viewStatus === 'completed'
+            ? h('span', { style: { fontSize: 8, lineHeight: '8px', color: '#fff', fontWeight: 700 } }, '✓')
+            : null),
+      ),
+      h('strong', {
+        style: {
+          minWidth: 0,
+          flex: 1,
+          fontSize: 14,
+          fontWeight: 500,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        },
+      }, title),
+    ),
+    // AgentCore AgentNodeMeta: badges left, status right on its own row.
+    h('div', {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 4,
+        fontSize: 12,
+        lineHeight: '16px',
+        color: ink.tertiary,
+      },
+    },
+      presentation.viewStatus === 'blocked'
+        ? h('span', {
+          'data-badge': 'blocked',
+          title: blockedBadgeText,
+          style: {
+            fontSize: 12,
+            padding: '2px 6px',
+            borderRadius: 8,
+            background: 'color-mix(in srgb, var(--dsw-alias-state-warning, #d97706) 14%, transparent)',
+            color: 'var(--dsw-alias-state-warning, #d97706)',
+          },
+        }, blockedBadgeText)
+        : presentation.needsDecision
+        ? h('span', {
+          'data-badge': 'decision',
+          style: {
+            fontSize: 12,
+            padding: '2px 6px',
+            borderRadius: 8,
+            background: 'var(--dsw-alias-bg-layer-2, #f4f4f6)',
+            color: ink.tertiary,
+          },
+        }, data.t('badge.decision'))
+        : presentation.hasBlocker
+          ? h('span', {
+            'data-badge': 'blocker',
+            style: {
+              fontSize: 12,
+              padding: '2px 6px',
+              borderRadius: 8,
+              background: 'var(--dsw-alias-bg-layer-2, #f4f4f6)',
+              color: ink.tertiary,
+            },
+          }, data.t('badge.blocker'))
+          : null,
+      member.halted === true
+        ? h('span', {
+          'data-badge': 'halted',
+          title: data.t('halted.hint'),
+          style: {
+            fontSize: 12,
+            padding: '2px 6px',
+            borderRadius: 8,
+            background: 'color-mix(in srgb, var(--dsw-alias-state-danger, #dc2626) 10%, transparent)',
+            color: 'var(--dsw-alias-state-danger, #dc2626)',
+          },
+        }, data.t('halted.badge'))
+        : null,
+      member.usage !== undefined
+        ? h('span', {
+          'data-badge': 'tokens',
+          title: data.t('tokens.tooltip', {
+            input: formatTokenCount(member.usage.inputTokens),
+            output: formatTokenCount(member.usage.outputTokens),
+          }),
+          style: {
+            fontVariantNumeric: 'tabular-nums',
+            fontSize: 11,
+            color: ink.tertiary,
+          },
+        }, data.t('tokens.badge', {
+          tokens: formatTokenCount(
+            member.usage.totalTokens
+              ?? member.usage.inputTokens + member.usage.outputTokens,
+          ),
+        }))
+        : null,
+      h('span', {
+        style: {
+          fontVariantNumeric: 'tabular-nums',
+          color: running ? ink.accent : ink.tertiary,
+        },
+      }, face),
+    ),
+    preview === ''
+      ? null
+      : h('div', { style: { ...clampPreview(preview), marginTop: 8 } }, preview),
+    ...handles('member'),
+    ),
+  )
+}
+
+function CeoNode({ data }: NodeProps<Node<CeoNodeData>>) {
+  const dimmed = useGraphNodeDimmed()
+  const flashing = useTerminalFlash(data.status)
+  const caption = data.status === 'running'
+    ? data.t('graph.ceoRunning')
+    : data.status === 'completed'
+      ? data.t('graph.ceoDone')
+      : data.t('graph.ceoPending')
+  const flashColor = data.status === 'failed' || data.status === 'error'
+    ? 'var(--dsw-alias-state-danger, #dc2626)'
+    : 'var(--dsw-alias-state-success, #16a34a)'
+  return h('div', {
+    'data-magic-ceo-node': 'ceo',
+    className: `${graphNodeDimClass(dimmed)}${data.status === 'running' ? ' magic-ceo-node-running' : ''}`,
+  },
+    h('div', {
+      className: `magic-ceo-node-face${flashing ? ' magic-ceo-node-flash' : ''}`,
+      style: {
+        ['--graph-flash-color' as string]: flashColor,
+        ...cardStyle(
+          false,
+          false,
+          data.status === 'completed'
+            ? 'var(--dsw-alias-state-success, #16a34a)'
+            : data.status === 'running'
+              ? 'var(--dsw-alias-state-business-primary, #3b82f6)'
+              : undefined,
+        ),
+        ...faceStyle(data.enterIndex),
+      },
+    },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+      endpointAvatar('ceo', data.status),
+      h('strong', { style: { fontSize: 13, fontWeight: 510 } }, data.t('graph.ceo')),
+    ),
+    h('div', {
+      style: {
+        marginTop: 4,
+        fontSize: 11,
+        lineHeight: '16px',
+        color: data.status === 'running' ? ink.accent : ink.tertiary,
+      },
+    }, caption),
+    ...handles('ceo'),
+    ),
+  )
+}
+
+type TaskNodeData = {
+  task: CeoFlowTask
+  selected: boolean
+  enterIndex: number
+  t: Translate
+}
+
+/** 任务板节点：状态点 + 主题 + 状态文字（画布底部泳道）。 */
+function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
+  const statusLabel = data.task.status === 'completed'
+    ? data.t('tasks.status.completed')
+    : data.task.status === 'in_progress'
+      ? data.t('tasks.status.in_progress')
+      : data.t('tasks.status.pending')
+  const dot = data.task.status === 'completed'
+    ? 'var(--dsw-alias-state-success, #16a34a)'
+    : data.task.status === 'in_progress'
+      ? 'var(--dsw-alias-state-business-primary, #3b82f6)'
+      : 'var(--dsw-alias-border-l3, #6b6b7a)'
+  const done = data.task.status === 'completed'
+  return h('div', {
+    'data-magic-ceo-node': 'task',
+    'data-magic-ceo-task-node': data.task.id,
+    'data-status': data.task.status,
+    'data-selected': data.selected ? 'true' : undefined,
+    className: graphNodeDimClass(false),
+  },
+    h('div', {
+      className: 'magic-ceo-node-face',
+      style: {
+        boxSizing: 'border-box',
+        width: 210,
+        height: 64,
+        padding: '8px 10px',
+        borderRadius: 10,
+        border: `0.5px solid ${data.selected ? 'var(--dsw-alias-state-business-primary, #3b82f6)' : 'var(--dsw-alias-border-l2, #3a3a48)'}`,
+        background: done ? 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 40%, transparent)' : 'var(--dsw-alias-bg-base, #ffffff)',
+      },
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 7 } },
+        h('span', { 'aria-hidden': true, style: { flex: '0 0 auto', width: 7, height: 7, borderRadius: 99, background: dot } }),
+        h('span', {
+          style: { fontSize: 12, fontWeight: done ? 400 : 510, textDecoration: done ? 'line-through' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+        }, data.task.subject),
+      ),
+      h('div', { style: { marginTop: 3, fontSize: 11, color: ink.tertiary } }, statusLabel),
+    ),
+  )
+}
+
+const nodeTypes = {
+  goal: GoalNode,
+  member: MemberNode,
+  ceo: CeoNode,
+  task: TaskNode,
+}
+
+const edgeTypes = {
+  flow: FlowEdge,
+}
+
+/** 任务板泳道底带 + 标题（视觉与 WaveLanes 同族）。 */
+function TaskLaneBand({ lane }: { lane: CeoFlowLane }): ReactNode {
+  return h(ViewportPortal, null,
+    h(Fragment, { key: lane.id },
+      h('div', {
+        'data-magic-ceo-lane': lane.id,
+        style: {
+          position: 'absolute',
+          transform: `translate(${String(lane.x)}px, ${String(lane.y)}px)`,
+          width: lane.w,
+          height: lane.h,
+          borderRadius: 12,
+          border: '1px solid color-mix(in srgb, var(--dsw-alias-border-l3, #4a4a58) 30%, transparent)',
+          background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 55%, transparent)',
+          zIndex: -1,
+          pointerEvents: 'none',
+        },
+      }),
+      h('div', {
+        style: {
+          position: 'absolute',
+          transform: `translate(${String(lane.labelX)}px, ${String(lane.labelY)}px)`,
+          fontSize: 11,
+          lineHeight: '16px',
+          fontWeight: 510,
+          color: ink.secondary,
+          pointerEvents: 'none',
+        },
+      }, lane.label),
+    ),
+  )
+}
+
+/** AgentCore WaveLanes: one soft backdrop band per wave column, rendered under
+ *  the nodes in the viewport portal so pan/zoom carries it for free. */
+function WaveLanes({ lanes }: { lanes: readonly CeoFlowLane[] }): ReactNode {
+  if (lanes.length === 0) return null
+  return h(ViewportPortal, null,
+    lanes.map(lane => h(Fragment, { key: lane.id },
+      h('div', {
+        'data-magic-ceo-lane': lane.id,
+        style: {
+          position: 'absolute',
+          transform: `translate(${String(lane.x)}px, ${String(lane.y)}px)`,
+          width: lane.w,
+          height: lane.h,
+          borderRadius: 12,
+          border: '1px solid color-mix(in srgb, var(--dsw-alias-border-l3, #4a4a58) 30%, transparent)',
+          background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 55%, transparent)',
+          zIndex: -1,
+          pointerEvents: 'none',
+        },
+      }),
+      h('div', {
+        style: {
+          position: 'absolute',
+          transform: `translate(${String(lane.labelX)}px, ${String(lane.labelY)}px)`,
+          zIndex: 1,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+          fontSize: 10,
+          lineHeight: '14px',
+          color: ink.tertiary,
+          letterSpacing: '0.04em',
+          padding: '1px 8px',
+          borderRadius: 999,
+          background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2, #ececf0) 80%, transparent)',
+        },
+      }, lane.label),
+    )),
+  )
+}
+
+/** AgentCore graphHover.hoverRelatedIds: hovered node plus its full directed
+ *  upstream + downstream path along the current edge list. */
+function hoverRelatedIds(
+  hoveredNodeId: string,
+  edges: readonly { from: string; to: string }[],
+): Set<string> {
+  const upstream = new Map<string, string[]>()
+  const downstream = new Map<string, string[]>()
+  for (const edge of edges) {
+    const ups = upstream.get(edge.to)
+    if (ups) ups.push(edge.from)
+    else upstream.set(edge.to, [edge.from])
+    const downs = downstream.get(edge.from)
+    if (downs) downs.push(edge.to)
+    else downstream.set(edge.from, [edge.to])
+  }
+  const related = new Set<string>([hoveredNodeId])
+  const walk = (adj: Map<string, string[]>) => {
+    const stack = [hoveredNodeId]
+    while (stack.length > 0) {
+      const current = stack.pop()
+      if (current === undefined) break
+      for (const next of adj.get(current) ?? []) {
+        if (related.has(next)) continue
+        related.add(next)
+        stack.push(next)
+      }
+    }
+  }
+  walk(upstream)
+  walk(downstream)
+  return related
+}
+
+/** 画布视图自适应参数（初始化 fitView 与「迟到的可见」补正共用同一份）。 */
+const CANVAS_FIT_VIEW = { padding: 0.2, minZoom: 0.35, maxZoom: 1.6 } as const
+
+/**
+ * 补正「容器在不可见状态下被量到 0 尺寸」导致的整张画布偏到容器外。
+ *
+ * 成因链：DSH 把对话里的过程行折叠为 `hidden="until-found"`（等价
+ * `content-visibility: hidden`）→ 画布卡若在这种行里挂载，ReactFlow 的
+ * ResizeObserver 读到 width/height = 0 → 初始化 fitView 把 zoom 钳到
+ * minZoom(0.35) 并以「零尺寸视口」居中，于是 translateX = (0 − 内容宽×0.35)/2，
+ * 所有节点被推出容器（容器 overflow: hidden）→ **DOM 全在、画面空白**。
+ * ReactFlow 只在初始化时 fitView，之后尺寸恢复也不会重算，所以要么补这一次，
+ * 要么用户永远看不到内容。
+ *
+ * 只在「首次量到真实尺寸」时补正一次：之后保留用户自己的平移/缩放。
+ */
+
+function RefitWhenMeasured(): null {
+  const { fitView } = useReactFlow()
+  const width = useStore(state => state.width)
+  const height = useStore(state => state.height)
+  const fitted = useRef(false)
+  useEffect(() => {
+    if (fitted.current || width <= 0 || height <= 0) return
+    fitted.current = true
+    void fitView({ ...CANVAS_FIT_VIEW })
+  }, [width, height, fitView])
+  return null
+}
+
+const Canvas = memo(function Canvas(props: {
+  members: readonly CeoTeamMember[]
+  selectedCallId: string | undefined
+  goalPreview: string
+  openWorkspace: () => void
+  tasks: ReadonlyArray<CeoFlowTask>
+  /** 当前选中的任务 id（选中态由画布任务节点高亮）。 */
+  selectedTaskId: string | undefined
+  t: Translate
+}) {
+  const layout = layoutCeoTeamFlow(props.members, props.tasks)
+  const sinkStatus = ceoTeamSinkStatus(props.members)
+  // AgentCore graphHover: hovering a node brightens its full upstream+downstream
+  // path and dims everything else — paint-level only, never RF node.className.
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const hoverState = useMemo<GraphHoverState>(() => ({
+    hoveredNodeId: hoveredId,
+    keepBrightIds: hoveredId === null ? null : hoverRelatedIds(hoveredId, layout.edges),
+  }), [hoveredId, layout.edges])
+  const flow = useMemo(() => {
+    const nodes: CanvasNode[] = layout.nodes.map((node) => {
+      if (node.kind === 'goal') {
+        return {
+          id: node.id,
+          type: 'goal',
+          position: { x: node.x, y: node.y },
+          data: { preview: props.goalPreview, enterIndex: node.enterIndex, t: props.t },
+          width: node.width,
+          height: node.height,
+          style: { width: node.width, height: node.height },
+          draggable: false,
+          selectable: false,
+        }
+      }
+      if (node.kind === 'ceo') {
+        return {
+          id: node.id,
+          type: 'ceo',
+          position: { x: node.x, y: node.y },
+          data: { status: sinkStatus, enterIndex: node.enterIndex, t: props.t },
+          width: node.width,
+          height: node.height,
+          style: { width: node.width, height: node.height },
+          draggable: false,
+          selectable: false,
+        }
+      }
+      if (node.kind === 'task') {
+        const task = node.task!
+        return {
+          id: node.id,
+          type: 'task',
+          position: { x: node.x, y: node.y },
+          data: { task, selected: task.id === props.selectedTaskId, enterIndex: node.enterIndex, t: props.t },
+          width: node.width,
+          height: node.height,
+          style: { width: node.width, height: node.height },
+          draggable: false,
+          selectable: false,
+        }
+      }
+      const member = node.member!
+      return {
+        id: ceoFlowMemberId(member.callId),
+        type: 'member',
+        position: { x: node.x, y: node.y },
+        data: {
+          member,
+          roster: props.members,
+          selected: member.callId === props.selectedCallId,
+          enterIndex: node.enterIndex,
+          t: props.t,
+        },
+        width: node.width,
+        height: node.height,
+        style: { width: node.width, height: node.height },
+        draggable: false,
+        selectable: false,
+      }
+    })
+    const runningIds = new Set(
+      props.members
+        .filter(item => presentCeoMember(item).viewStatus === 'running')
+        .map(item => ceoFlowMemberId(item.callId)),
+    )
+    if (sinkStatus === 'running') runningIds.add('ceo')
+    const edges: Edge<FlowEdgeData>[] = layout.edges.map((edge) => {
+      const live = runningIds.has(edge.to)
+      // AgentCore handoff fidelity: a dependency whose upstream text was clipped
+      // marks the edge so the user sees where information was compressed.
+      const upstreamMember = edge.kind === 'depends'
+        ? props.members.find(item => ceoFlowMemberId(item.callId) === edge.from)
+        : undefined
+      const upstreamOutput = upstreamMember?.lastMessage ?? ''
+      const handoff: FlowEdgeData['handoff'] | undefined = edge.kind === 'depends'
+        ? (upstreamOutput.length > 2000
+          ? 'truncated'
+          : parseCeoMemberReportHasSummary(upstreamMember) === true
+            ? 'summary'
+            : undefined)
+        : undefined
+      return {
+        id: edge.id,
+        source: edge.from,
+        target: edge.to,
+        type: 'flow',
+        data: { animated: live, kind: edge.kind, ...handoff === undefined ? {} : { handoff } },
+        selectable: false,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+        style: {
+          stroke: EDGE_COLOR[edge.kind],
+          strokeWidth: 1.5,
+        },
+      }
+    })
+    return { nodes, edges }
+  }, [layout, props.goalPreview, props.selectedCallId, props.t, sinkStatus, props.members, props.tasks, props.selectedTaskId])
+
+  const height = sessionCanvasHeight(layout.height)
+
+  return h('div', {
+    className: 'magic-ceo-canvas',
+    'data-magic-ceo-flow': true,
+    style: {
+      position: 'relative',
+      width: '100%',
+      height,
+      minWidth: 0,
+      overflow: 'hidden',
+      borderRadius: 12,
+      border: `1px solid ${line.subtle}`,
+      background: 'var(--dsw-alias-bg-layer-1, #f7f7f9)',
+    },
+  },
+    h(GraphHoverContext.Provider, { value: hoverState },
+      h(ReactFlow, {
+        nodes: flow.nodes,
+        edges: flow.edges,
+        nodeTypes,
+        edgeTypes,
+        fitView: true,
+        fitViewOptions: CANVAS_FIT_VIEW,
+        minZoom: CANVAS_FIT_VIEW.minZoom,
+        maxZoom: CANVAS_FIT_VIEW.maxZoom,
+        panOnDrag: true,
+        zoomOnScroll: true,
+        zoomOnPinch: true,
+        zoomOnDoubleClick: true,
+        preventScrolling: true,
+        nodesDraggable: false,
+        nodesConnectable: false,
+        nodesFocusable: false,
+        elementsSelectable: false,
+        proOptions: { hideAttribution: true },
+        onNodeMouseEnter: (_event, node) => { setHoveredId(node.id) },
+        onNodeMouseLeave: () => { setHoveredId(null) },
+        onNodeClick: (_event, node) => {
+          if (node.type === 'member') {
+            const member = (node.data as MemberNodeData).member
+            selectCeoMember(member)
+            selectCeoTask(undefined)
+            props.openWorkspace()
+            return
+          }
+          if (node.type === 'task') {
+            const task = (node.data as TaskNodeData).task
+            // 任务板只在画布呈现（PRD-04 §12 裁定）：点任务节点仅切换选中高亮，
+            // 不再打开右坞工作区（右坞是成员观察面）。
+            selectCeoTask(task.id)
+            selectCeoMember(null)
+            return
+          }
+          if (node.type === 'ceo') {
+            selectCeoMember(null)
+            selectCeoTask(undefined)
+            props.openWorkspace()
+          }
+        },
+      },
+        h(RefitWhenMeasured),
+        h(Background, { gap: 20, size: 1, color: 'color-mix(in srgb, var(--dsw-alias-border-l2, #3a3a48) 45%, transparent)' }),
+        h(WaveLanes, { lanes: layout.lanes }),
+        layout.taskLane !== undefined
+          ? h(TaskLaneBand, { lane: layout.taskLane })
+          : null,
+      ),
+    ),
+  )
+})
+
+function StatusIcon({ status }: { status: CeoMemberViewStatus }): ReactNode {
+  const running = status === 'running'
+  return h('span', {
+    'aria-hidden': true,
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 16,
+      height: 16,
+      color: STATUS_COLOR[status],
+    },
+  }, running
+    ? h('span', {
+      style: {
+        width: 12,
+        height: 12,
+        border: `2px solid ${STATUS_COLOR.running}`,
+        borderTopColor: 'transparent',
+        borderRadius: 99,
+        animation: 'magic-ceo-spin 0.8s linear infinite',
+      },
+    })
+    : status === 'completed'
+      ? '✓'
+      : status === 'blocked' || status === 'failed' || status === 'error'
+        ? '!'
+        : '○')
+}
+
+export function CeoTeamGraph(props: CeoTeamGraphProps) {
+  const t = props.t ?? translate
+  const selected = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember)
+  const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster)
+  const taskBoard = useSyncExternalStore(
+    props.taskBoard?.subscribe ?? subscribeTaskBoard,
+    props.taskBoard?.getSnapshot ?? getTaskBoardSnapshot,
+    getEmptyTaskBoardSnapshot,
+  )
+  useEffect(() => { props.taskBoard?.reload() }, [props.taskBoard])
+  const turnMembers = props.node.data.members
+  // 合并 roster 实时状态并做引用收敛：live 期间本组件每秒 tick，若无收敛，
+  // 这里每次渲染都产出新 members 数组 → Canvas memo 失效 → ReactFlow 每秒重排整图。
+  const mergeRoster = useMemo(createRosterMerger, [])
+  const members = mergeRoster(turnMembers, roster)
+  const sinkStatus = ceoTeamSinkStatus(members)
+  const live = sinkStatus === 'running' || sinkStatus === 'queued'
+  const [expanded, setExpanded] = useState(true)
+  const elapsed = useElapsedSeconds(live)
+
+  useEffect(() => { ensureCanvasCss() }, [])
+  useEffect(() => {
+    publishCeoTeam(turnMembers, props.sessionId)
+  }, [turnMembers, props.sessionId])
+
+  const progress = props.node.data.progress
+  const progressLabel = `${String(progress.completed)}/${String(progress.total)}`
+  const duration = elapsed >= 1
+    ? t('graph.elapsed', { duration: formatElapsed(elapsed) })
+    : ''
+  const goalPreview = initiatorPreview(props.node.data.plan?.summary ?? members[0]?.task ?? '')
+
+  return h('section', {
+    'data-magic-ceo-team': true,
+    style: {
+      width: '100%',
+      minWidth: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      margin: '8px 0 12px',
+      border: `1px solid ${line.subtle}`,
+      borderRadius: 12,
+      background: surface.layer2,
+    },
+  },
+    h('button', {
+      type: 'button',
+      'data-magic-ceo-status-strip': true,
+      title: expanded ? t('graph.fold') : t('graph.expand'),
+      'aria-label': expanded ? t('graph.fold') : t('graph.expand'),
+      'aria-expanded': expanded,
+      onClick: () => { setExpanded(current => !current) },
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
+        margin: 0,
+        padding: '8px 12px',
+        border: 0,
+        borderBottom: expanded ? `1px solid ${line.subtle}` : 0,
+        borderRadius: expanded ? 0 : 12,
+        background: 'transparent',
+        color: ink.secondary,
+        fontSize: 13,
+        textAlign: 'left',
+        cursor: 'pointer',
+      },
+    },
+      h(StatusIcon, { status: sinkStatus }),
+      h('span', {
+        style: { minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      }, [progressLabel, duration].filter(item => item !== '').join(' · ')),
+      h('span', {
+        'aria-hidden': true,
+        style: {
+          flex: '0 0 auto',
+          fontSize: 14,
+          lineHeight: '18px',
+          padding: '2px 6px',
+        },
+      }, expanded ? '▴' : '▾'),
+    ),
+    expanded
+      ? h('div', { style: { display: 'flex', flexDirection: 'column' } },
+        props.node.data.plan
+          ? h('div', {
+            'data-magic-ceo-plan': true,
+            style: {
+              padding: '8px 12px',
+              borderBottom: `1px solid ${line.subtle}`,
+              background: surface.layer2,
+            },
+          },
+            h('strong', { style: { display: 'block', fontSize: 12, marginBottom: 2, color: ink.secondary } }, `${t('plan.title')} · v${props.node.data.plan.version}`),
+            h('div', { style: { fontSize: 12, lineHeight: '18px', color: ink.tertiary } }, props.node.data.plan.summary),
+          )
+          : null,
+        members.length > 0
+          ? h(ReactFlowProvider, null,
+            h(Canvas, {
+              members,
+              selectedCallId: selected?.callId,
+              goalPreview,
+              openWorkspace: props.openWorkspace,
+              // 复用已订阅快照里的稳定数组（原先每次渲染都 getSnapshot().map(...)，
+              // 既重复读取又产出新引用 → 下游 memo/useMemo 全失效 → ReactFlow 每帧重排）。
+              tasks: taskBoard.tasks,
+              selectedTaskId: taskBoard.selectedTaskId,
+              t,
+            }),
+          )
+          : h('div', {
+            'data-magic-ceo-plan-status': true,
+            style: {
+              padding: '18px 12px',
+              color: ink.secondary,
+              fontSize: 12,
+            },
+            }, t('plan.ready')),
+      )
+      : null,
+  )
+}

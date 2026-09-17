@@ -27,6 +27,8 @@ const TURN_PROCESS_INDEPENDENT_KIND_LIST = [
   'turn-error',
   'turn-max-tokens',
   'turn-tail',
+  // Magic 自研扩展（2026-09-18）：CEO 委派画布不能被轮过程折叠隐藏。
+  'ceo-team',
 ] as const satisfies readonly ChatNode['kind'][]
 
 /** 与轮过程披露保持独立的 Chat Node kind。 */

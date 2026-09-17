@@ -15,16 +15,29 @@ import type {
   SessionSeq,
 } from '../vendor/dsh-chat/index.ts'
 
+/** 会话投影基线（follow 快照帧 projections，session-controller/src/types.ts:60）。
+    只保留折叠层不消费、但输入条等模块需要的原始 JSON 值。 */
+export interface SessionProjectionBaseline {
+  readonly asOfSeq: number
+  readonly values: Readonly<Record<string, unknown>>
+}
+
 export interface ChatRenderState {
   readonly snapshot: ChatSnapshot
   /** 本地已提交、等待回包（M1 无回包流；SDK 接线后由 turn/end 或首个回包事件收口）。 */
   readonly awaitingReply: boolean
+  /** 最近一次 follow 快照携带的会话投影（无快照时为 null）。 */
+  readonly projections: SessionProjectionBaseline | null
 }
 
 export class ChatSessionStore {
   private entries: SessionEventLikeEntry[] = []
   private readonly listeners = new Set<() => void>()
-  private state: ChatRenderState = { snapshot: EMPTY_CHAT_SNAPSHOT, awaitingReply: false }
+  private state: ChatRenderState = {
+    snapshot: EMPTY_CHAT_SNAPSHOT,
+    awaitingReply: false,
+    projections: null,
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
@@ -35,9 +48,10 @@ export class ChatSessionStore {
 
   getSnapshot = (): ChatRenderState => this.state
 
-  /** 载入持久事件窗口（整窗替换）。 */
-  seedWindow(events: readonly SessionEvent[]): void {
+  /** 载入持久事件窗口（整窗替换），并保存快照携带的会话投影。 */
+  seedWindow(events: readonly SessionEvent[], projections?: SessionProjectionBaseline): void {
     this.entries = events.map(event => ({ type: 'event' as const, event }))
+    this.state = { ...this.state, projections: projections ?? null }
     this.publish()
   }
 
@@ -51,6 +65,33 @@ export class ChatSessionStore {
   appendTransient(event: AssistantLiveChunkEvent): void {
     this.entries.push({ type: 'transient', event })
     this.publish()
+  }
+
+  /** 清理全部流式瞬态（turn 结束/中止时调用，避免遗留幽灵文本；
+      已落定的 assistant/message 事件仍渲染完整内容）。 */
+  clearTransients(): void {
+    const kept = this.entries.filter(entry => entry.type !== 'transient')
+    if (kept.length === this.entries.length) return
+    this.entries = kept
+    this.publish()
+  }
+
+  /** 全部持久事件（轨迹视图等读取原始事件用，2026-09-18）。 */
+  eventEntries(): readonly SessionEvent[] {
+    return this.entries
+      .filter(entry => entry.type === 'event')
+      .map(entry => (entry as { event: SessionEvent }).event)
+  }
+
+  /** 最近一次指定类型事件的 data（输入条三件套读 magic/work-mode 等真实状态）。 */
+  recentEventData(type: string): unknown {
+    for (let i = this.entries.length - 1; i >= 0; i -= 1) {
+      const entry = this.entries[i]
+      if (entry.type === 'event' && String(entry.event.type) === type) {
+        return (entry.event as { data?: unknown }).data
+      }
+    }
+    return undefined
   }
 
   /** 本地提交回声：M1 静态阶段把用户消息折叠进窗口（SDK 接线前无真实回包）。
