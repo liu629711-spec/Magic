@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Icon } from "./Icon";
 import { Folder3DIcon } from "./Folder3DIcon";
@@ -14,7 +14,7 @@ import {
 } from "./mock-data";
 
 const row =
-  "flex items-center justify-between h-8 px-2 rounded-xl text-on-surface-variant transition-[background-color,color,transform] duration-150 active:scale-[0.98] truncate cursor-pointer w-full";
+  "group flex items-center justify-between h-8 px-2 rounded-xl text-on-surface-variant transition-[background-color,color,transform] duration-150 active:scale-[0.98] truncate cursor-pointer w-full";
 
 const rowLabel = "text-[14px] font-medium truncate";
 const rowCount =
@@ -34,10 +34,17 @@ const actionBtn =
  * 5) 会话行为整行文本行（无图标、无缩进线）。
  * 2026-09-17 对话区 v2 联动：点击会话行切换对话区（onOpenSession），
  * 新建任务/添加会话开空白对话；active 会话行高亮。M1 静态：会话 id 即标题字符串。
+ * 2026-09-17 左栏会话管理（裁定 18，对齐 Magic 组合 web 端 ui-workspace 包
+ * locales.ts:38-47）：会话行 hover 出「⋯」操作菜单，三项 = 重命名（弹窗，
+ * rename.session.title）/ 分叉会话（menu.fork）/ 归档会话（menu.archiveSession）。
+ * M1 行为：重命名=侧栏显示名覆盖（store 键不变）；分叉=App 复制 mock 种子并切换；
+ * 归档=列表隐藏、当前会话则切空白。SDK 接线后换真实命令。
+ * 回退时删掉 RowActions/rowMenu/RenameDialog 相关代码即可。
  */
-export function SessionSidebar({ activeSessionId, onOpenSession }: {
+export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession }: {
   activeSessionId: string
   onOpenSession: (id: string) => void
+  onForkSession: (sourceId: string, forkId: string) => void
 }) {
   const [sectionOpen, setSectionOpen] = useState({
     pinned: false,
@@ -53,15 +60,96 @@ export function SessionSidebar({ activeSessionId, onOpenSession }: {
   const [acknowledged, setAcknowledged] = useState<Record<string, boolean>>({});
   // v2 联动：新建会话序号（仅命名展示用）
   const newSessionSeq = useRef(0);
+  // 会话管理（裁定 18）：显示名覆盖 / 归档隐藏 / 分叉追加 / 行菜单 / 重命名弹窗
+  const [renamed, setRenamed] = useState<Record<string, string>>({});
+  const [archived, setArchived] = useState<Record<string, boolean>>({});
+  const [extraPinned, setExtraPinned] = useState<string[]>([]);
+  const [extraTasks, setExtraTasks] = useState<string[]>([]);
+  const [rowMenu, setRowMenu] = useState<{
+    key: string
+    base: string
+    section: "pinned" | "ws" | "task"
+    wsId?: string
+    x: number
+    y: number
+  } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ key: string; title: string } | null>(null);
 
-  const statusOf = (task: (typeof pinnedTasks)[number]): SessionStatus | "ack" =>
-    acknowledged[task.id] ? "ack" : task.status ?? "idle";
+  // 菜单/弹窗打开时 Esc 收起
+  useEffect(() => {
+    if (rowMenu === null && renameTarget === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setRowMenu(null);
+        setRenameTarget(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rowMenu, renameTarget]);
+
+  /** 显示名：重命名覆盖 > 基准名。store/种子键始终用基准名（base），不受重命名影响。 */
+  const titleOf = (key: string, base: string) => renamed[key] ?? base;
+
+  const statusOf = (task: (typeof pinnedTasks)[number] | undefined): SessionStatus | "ack" =>
+    acknowledged[task?.id ?? ""] ? "ack" : task?.status ?? "idle";
   const acknowledge = (id: string) =>
     setAcknowledged((s) => ({ ...s, [id]: true }));
 
   const toggleSection = (key: "pinned" | "projects" | "tasks") =>
     setSectionOpen((s) => ({ ...s, [key]: !s[key] }));
   const toggleWs = (id: string) => setWsOpen((s) => ({ ...s, [id]: !s[id] }));
+
+  const openRowMenu = (
+    key: string,
+    base: string,
+    section: "pinned" | "ws" | "task",
+    wsId: string | undefined,
+    rect: DOMRect,
+  ) => {
+    setRowMenu({
+      key,
+      base,
+      section,
+      wsId,
+      x: Math.max(8, rect.right - 156),
+      y: Math.min(rect.bottom + 4, window.innerHeight - 128),
+    });
+  };
+
+  // 分叉会话：forkId 用当前显示名 + 后缀；种子键用 base（App 里与 store 键一致）。
+  const forkRow = (menu: NonNullable<typeof rowMenu>) => {
+    const forkId = `${titleOf(menu.key, menu.base)}（分支）`;
+    onForkSession(menu.base, forkId);
+    if (menu.section === "pinned") {
+      setExtraPinned((list) => (list.includes(forkId) ? list : [...list, forkId]));
+    } else if (menu.section === "task") {
+      setExtraTasks((list) => (list.includes(forkId) ? list : [...list, forkId]));
+    } else if (menu.wsId !== undefined) {
+      setWorkspaces((ws) =>
+        ws.map((w) =>
+          w.id === menu.wsId && !w.sessions.includes(forkId)
+            ? { ...w, sessions: [...w.sessions, forkId], expanded: true }
+            : w,
+        ),
+      );
+    }
+    setRowMenu(null);
+  };
+
+  // 归档会话：M1 从列表隐藏；归档当前会话则切空白对话（激活键=base 标题）。
+  const archiveRow = (menu: NonNullable<typeof rowMenu>) => {
+    setArchived((s) => ({ ...s, [menu.key]: true }));
+    setRowMenu(null);
+    if (menu.base === activeSessionId) onOpenSession("");
+  };
+
+  const confirmRename = () => {
+    if (renameTarget === null) return;
+    const next = renameTarget.title.trim();
+    if (next.length > 0) setRenamed((s) => ({ ...s, [renameTarget.key]: next }));
+    setRenameTarget(null);
+  };
 
   const addSession = (id: string) => {
     newSessionSeq.current += 1;
@@ -99,23 +187,31 @@ export function SessionSidebar({ activeSessionId, onOpenSession }: {
             open={sectionOpen.pinned}
             onToggle={() => toggleSection("pinned")}
           >
-            {pinnedTasks.map((task) => {
+            {[
+              ...pinnedTasks
+                .filter((task) => !archived[task.id])
+                .map((task) => ({ key: task.id, base: task.title, task })),
+              ...extraPinned
+                .filter((id) => !archived[id])
+                .map((id) => ({ key: id, base: id, task: undefined })),
+            ].map(({ key, base, task }) => {
               const status = statusOf(task);
+              const title = titleOf(key, base);
               return (
                 <a
-                  key={task.id}
+                  key={key}
                   href="#"
-                  aria-current={task.current ? "page" : undefined}
+                  aria-current={task?.current ? "page" : undefined}
                   onClick={(e) => {
                     e.preventDefault();
-                    if (status === "completed" || status === "interrupted") {
+                    if (task !== undefined && (status === "completed" || status === "interrupted")) {
                       acknowledge(task.id);
                     }
                     // v2 联动：置顶任务行也切换对话区（id 即标题，无 mock 时为空白会话）
-                    onOpenSession(task.title);
+                    onOpenSession(base);
                   }}
                   className={`${row} ${
-                    task.title === activeSessionId || status === "running" || task.current
+                    base === activeSessionId || status === "running" || task?.current
                       ? "bg-surface-container-low text-on-surface"
                       : "hover:bg-surface-container-low hover:text-on-surface"
                   }`}
@@ -128,10 +224,14 @@ export function SessionSidebar({ activeSessionId, onOpenSession }: {
                     ) : status === "completed" ? (
                       <CompletedCheck />
                     ) : status === "idle" ? (
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${task.dot}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${task?.dot ?? "bg-outline"}`} />
                     ) : null}
-                    <span className={rowLabel}>{task.title}</span>
+                    <span className={rowLabel}>{title}</span>
                   </span>
+                  <RowActions
+                    label={title}
+                    onOpen={(rect) => openRowMenu(key, base, "pinned", undefined, rect)}
+                  />
                 </a>
               );
             })}
@@ -182,23 +282,29 @@ export function SessionSidebar({ activeSessionId, onOpenSession }: {
                   </div>
                   {open ? (
                     <div className="space-y-px">
-                      {ws.sessions.map((s) => (
-                        <a
-                          key={s}
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            onOpenSession(s);
-                          }}
-                          className={`${row} pl-8 ${
-                            s === activeSessionId
-                              ? "bg-surface-container-low text-on-surface"
-                              : "hover:bg-surface-container-low hover:text-on-surface"
-                          }`}
-                        >
-                          <span className={rowLabel}>{s}</span>
-                        </a>
-                      ))}
+                      {ws.sessions
+                        .filter((s) => !archived[s])
+                        .map((s) => (
+                          <a
+                            key={s}
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              onOpenSession(s);
+                            }}
+                            className={`${row} pl-8 ${
+                              s === activeSessionId
+                                ? "bg-surface-container-low text-on-surface"
+                                : "hover:bg-surface-container-low hover:text-on-surface"
+                            }`}
+                          >
+                            <span className={`${rowLabel} min-w-0`}>{titleOf(s, s)}</span>
+                            <RowActions
+                              label={titleOf(s, s)}
+                              onOpen={(rect) => openRowMenu(s, s, "ws", ws.id, rect)}
+                            />
+                          </a>
+                        ))}
                     </div>
                   ) : null}
                 </div>
@@ -215,16 +321,37 @@ export function SessionSidebar({ activeSessionId, onOpenSession }: {
               </button>
             }
           >
-            {tasks.map((task) => (
+            {[
+              ...tasks
+                .filter((task) => !archived[task.title])
+                .map((task) => ({ key: task.title, base: task.title, time: task.time })),
+              ...extraTasks
+                .filter((id) => !archived[id])
+                .map((id) => ({ key: id, base: id, time: "刚刚" })),
+            ].map(({ key, base, time }) => (
               <a
-                key={task.title}
+                key={key}
                 href="#"
-                className={`${row} hover:bg-surface-container-low hover:text-on-surface`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onOpenSession(base);
+                }}
+                className={`${row} ${
+                  base === activeSessionId
+                    ? "bg-surface-container-low text-on-surface"
+                    : "hover:bg-surface-container-low hover:text-on-surface"
+                }`}
               >
                 <span className="flex items-center min-w-0">
-                  <span className={rowLabel}>{task.title}</span>
+                  <span className={rowLabel}>{titleOf(key, base)}</span>
                 </span>
-                <span className={rowCount}>{task.time}</span>
+                <span className="flex items-center gap-0.5 shrink-0">
+                  <RowActions
+                    label={titleOf(key, base)}
+                    onOpen={(rect) => openRowMenu(key, base, "task", undefined, rect)}
+                  />
+                  <span className={rowCount}>{time}</span>
+                </span>
               </a>
             ))}
           </Section>
@@ -235,6 +362,42 @@ export function SessionSidebar({ activeSessionId, onOpenSession }: {
         <CreateProjectDialog
           onCancel={() => setDialogOpen(false)}
           onCreate={createProject}
+        />
+      ) : null}
+      {/* 会话行操作菜单（裁定 18）：三项对齐 web 端 ui-workspace（重命名/分叉/归档） */}
+      {rowMenu ? (
+        <>
+          <div
+            className="fixed inset-0 z-[70]"
+            onClick={() => setRowMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setRowMenu(null);
+            }}
+          />
+          <div
+            role="menu"
+            className="fixed z-[71] min-w-[148px] rounded-lg border border-surface-container-highest bg-surface-container py-1 shadow-[0_8px_24px_-4px_rgba(0,0,0,0.6)]"
+            style={{ left: rowMenu.x, top: rowMenu.y }}
+          >
+            <MenuItem
+              icon="edit"
+              label="重命名"
+              onClick={() => {
+                setRenameTarget({ key: rowMenu.key, title: titleOf(rowMenu.key, rowMenu.base) });
+                setRowMenu(null);
+              }}
+            />
+            <MenuItem icon="call_split" label="分叉会话" onClick={() => forkRow(rowMenu)} />
+            <MenuItem icon="archive" label="归档会话" onClick={() => archiveRow(rowMenu)} />
+          </div>
+        </>
+      ) : null}
+      {renameTarget ? (
+        <RenameDialog
+          initial={renameTarget.title}
+          onCancel={() => setRenameTarget(null)}
+          onConfirm={confirmRename}
         />
       ) : null}
     </aside>
@@ -506,6 +669,105 @@ function CreateProjectDialog({
             className="h-8 px-3 rounded-lg bg-inverse-surface text-inverse-on-surface text-[13px] font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             创建项目
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 会话行 hover 操作按钮（裁定 18）：触发行操作菜单；文案对齐 web 端 aria。 */
+function RowActions({ label, onOpen }: { label: string; onOpen: (rect: DOMRect) => void }) {
+  return (
+    <button
+      type="button"
+      title={`会话「${label}」的操作`}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpen(e.currentTarget.getBoundingClientRect());
+      }}
+      className={`${actionBtn} opacity-0 group-hover:opacity-100 shrink-0`}
+    >
+      <Icon name="more_vert" className="text-[16px]" />
+    </button>
+  );
+}
+
+/** 操作菜单项（重命名/分叉会话/归档会话）。 */
+function MenuItem({ icon, label, onClick }: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-center gap-2 px-3 h-8 text-[13px] text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors text-left cursor-pointer"
+    >
+      <Icon name={icon} className="text-[16px] shrink-0" />
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+/** 重命名会话弹窗（对齐 web 端 ui-workspace rename.session.title 弹窗形态：输入框 + 取消/重命名）。 */
+function RenameDialog({ initial, onCancel, onConfirm }: {
+  initial: string;
+  onCancel: () => void;
+  onConfirm: (name: string) => void;
+}) {
+  const [name, setName] = useState(initial);
+  const canRename = name.trim().length > 0 && name.trim() !== initial;
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center"
+      onClick={onCancel}
+    >
+      <div
+        className="w-[420px] rounded-xl bg-surface-container border border-surface-container-highest shadow-[0_16px_40px_-4px_rgba(0,0,0,0.7)] p-space-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-space-lg">
+          <span className="text-[15px] font-semibold text-on-surface">重命名会话</span>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="w-7 h-7 rounded-lg hover:bg-surface-container-low flex items-center justify-center text-outline hover:text-on-surface transition-colors cursor-pointer"
+            title="关闭"
+          >
+            <Icon name="close" className="text-[18px]" />
+          </button>
+        </div>
+        <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-surface-container-highest focus-within:border-primary bg-surface-container-lowest transition-colors">
+          <Icon name="edit_square" className="text-[18px] text-outline shrink-0" />
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canRename) onConfirm(name.trim());
+            }}
+            className="flex-1 bg-transparent outline-none text-[14px] text-on-surface"
+          />
+        </div>
+        <div className="mt-space-lg flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-8 px-3 rounded-lg text-[13px] text-on-surface-variant hover:bg-surface-container-low transition-colors cursor-pointer"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={!canRename}
+            onClick={() => canRename && onConfirm(name.trim())}
+            className="h-8 px-3 rounded-lg bg-inverse-surface text-inverse-on-surface text-[13px] font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          >
+            重命名
           </button>
         </div>
       </div>
