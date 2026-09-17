@@ -54,9 +54,9 @@ export function App() {
   });
   const storesRef = useRef(stores);
   storesRef.current = stores;
-  const [activeId, setActiveId] = useState<string>(() =>
-    backendMode ? "" : Object.keys(SESSION_MOCKS)[0] ?? "",
-  );
+  // 进入应用为空白态（2026-09-17 用户裁定：关闭界面/应用再进来，默认不恢复上次
+  // 打开的会话界面与内容）。
+  const [activeId, setActiveId] = useState<string>("");
 
   /** 打开即建库（web 模式：真实 sessionId；mock 模式：标题键 + mock 种子）。 */
   const ensureStore = (id: string): ChatSessionStore => {
@@ -76,6 +76,10 @@ export function App() {
   );
 
   const openSession = (id: string) => {
+    if (id.length === 0) {
+      setActiveId("");
+      return;
+    }
     ensureStore(id);
     setActiveId(id);
   };
@@ -137,13 +141,14 @@ export function App() {
     [web.sessions],
   );
 
-  // web 模式：ready 后自动打开最近一个会话
-  useEffect(() => {
-    if (!backendMode || web.status !== "ready" || activeId !== "") return;
-    const latest = [...web.sessions].sort((a, b) => b.updatedAt - a.updatedAt)[0];
-    if (latest !== undefined) openSession(latest.sessionId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backendMode, web.status, web.sessions]);
+  // web 模式：任务区 = 全部会话按最近时间倒序（「最近」语义；新建任务即排第一）
+  const remoteTaskSessions = useMemo<string[] | undefined>(() => {
+    if (!backendMode || web.status !== "ready") return undefined;
+    return [...web.sessions]
+      .filter(row => row.parentSessionId === undefined)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(row => row.sessionId);
+  }, [web.status, web.sessions]);
 
   // web 模式：activeId 变化 → follow 事件流进对应 store（快照整窗替换 + 增量追加）
   useEffect(() => {
@@ -157,7 +162,11 @@ export function App() {
   }, [activeId, web.status, web.sessions]);
 
   const handleSend = (text: string) => {
-    if (backendMode && activeId.length > 0) {
+    if (!backendMode) {
+      store.submit(text);
+      return;
+    }
+    if (activeId.length > 0) {
       store.markAwaiting();
       web
         .prompt(activeId, text)
@@ -167,7 +176,17 @@ export function App() {
         });
       return;
     }
-    store.submit(text);
+    // 空白态直接发消息（2026-09-17）：先建会话再发；follow 的 snapshot 会补齐事件
+    web
+      .createSession()
+      .then(id => {
+        if (id.length === 0) return;
+        openSession(id);
+        return web.prompt(id, text);
+      })
+      .catch(error =>
+        window.alert(`发送失败：${error instanceof Error ? error.message : String(error)}`),
+      );
   };
 
   // web 模式连接门（认证/探测/错误态整屏呈现）
@@ -248,6 +267,7 @@ export function App() {
             : undefined
         }
         remoteWorkspaces={remoteWorkspaces}
+        remoteTaskSessions={remoteTaskSessions}
         showMockSections={!backendMode}
       />
       <div className="pl-[260px] h-full flex">
