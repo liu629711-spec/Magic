@@ -193,7 +193,7 @@ export function InkTowerLoader(): React.JSX.Element {
             <path d="M 115 138 C 96 142 62 148 42 153 C 78 155 120 157 150 157 C 180 157 222 155 258 153 C 238 148 204 142 185 138 C 160 141 140 141 115 138 Z" fill="url(#magicInkTowerWash)" />
             <path d="M 125 186 L 125 218 L 138 218 L 138 204 C 138 196 143 191 150 191 C 157 191 162 196 162 204 L 162 218 L 175 218 L 175 186 Z" fill="#b9bec9" opacity="0.35" />
           </g>
-          <g ref={groupRef} fill="none" stroke="#e3e2e6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.3">
+          <g ref={groupRef} fill="none" stroke="#e3e2e6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="5.2">
             <path d="" ref={committedRef} />
             <path d="" ref={activeRef} />
           </g>

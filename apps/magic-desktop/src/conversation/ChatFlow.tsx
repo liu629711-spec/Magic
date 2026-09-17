@@ -24,6 +24,7 @@ import {
   chatZh,
   commonZh,
   conversationZh,
+  isSettledTool,
   useSearchableHidden,
 } from '../vendor/dsh-chat/index.ts'
 import type {
@@ -44,6 +45,8 @@ import { MagicTurnProcessSummary, type MagicTurnProcessSummaryProps } from './Ma
 import PromptBar from '../vendor/stitch-chat/PromptBar.tsx'
 import { ComposerStats, TurnTailPills } from './TurnPills.tsx'
 import { InkTowerLoader } from './InkTowerLoader.tsx'
+import { ProducedFiles } from './ProducedFiles.tsx'
+import { MagicFeedbackActions } from './MagicFeedbackActions.tsx'
 import type { ChatSessionStore } from './chat-store.ts'
 import css from './ChatFlow.module.css'
 
@@ -86,10 +89,11 @@ interface SeatProps {
   setOpenTurn: (turn: number, open: boolean) => void
   useChat: UseChat
   turnTail: TurnTailChatData | undefined
+  producedByTurn: ReadonlyMap<number, readonly string[]>
 }
 
 /** 一个 Chat 节点的座位：Turn-process 折叠推导 + 分发（照 ChatNodeSeat 逻辑移植）。 */
-function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail }: SeatProps) {
+function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail, producedByTurn }: SeatProps) {
   const spec = presentation?.spec
   const processOpen = spec !== undefined && open
   const setOpenThis = useCallback((next: boolean) => {
@@ -124,7 +128,7 @@ function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail }: Seat
   }, [processMember, setOpenThis])
   const wrapperRef = useSearchableHidden(processHidden, revealProcess)
 
-  const body = renderNode(node, { turnProcess, turnTail, useChat })
+  const body = renderNode(node, { turnProcess, turnTail, useChat, producedByTurn })
   return (
     <div
       ref={wrapperRef}
@@ -145,6 +149,7 @@ interface RenderContext {
   turnProcess: TurnProcessOwnerProps | undefined
   turnTail: TurnTailChatData | undefined
   useChat: UseChat
+  producedByTurn: ReadonlyMap<number, readonly string[]>
 }
 
 /** kind→组件分发（替代 renderSlot 键控注册表；base 货币 + node + t）。 */
@@ -204,16 +209,25 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
         />
       )
     case 'turn-tail': {
-      // 轮尾 pill（2026-09-17 会话区对齐 web 端）：用量/用时挂 vendored usageAction 缝。
+      // 轮尾扩展（2026-09-17 会话区对齐 web 端）：「本次产出」行挂 renderTurnTailSlot 缝，
+      // 反馈按钮对挂 renderAssistantActions 缝，用量/用时 pill 挂 usageAction 缝。
       const tailLocation = node.location
       const tailTurn = tailLocation.kind === 'turn' ? tailLocation.turn : undefined
       const tailData = (node as ChatNode<'turn-tail'>).data
+      const tailTurnNumber = tailTurn?.turn
+      const produced = tailTurnNumber === undefined ? [] : ctx.producedByTurn.get(tailTurnNumber) ?? []
       return (
         <TurnTailNodeView
           {...base}
           node={node}
           forkAt={forkAt}
           useChat={ctx.useChat}
+          renderTurnTailSlot={produced.length === 0 ? undefined : () => (
+            <ProducedFiles matched={produced} onOpenFile={openFile} />
+          )}
+          renderAssistantActions={tailData.closing?.finalNode.messageId === undefined
+            ? undefined
+            : () => <MagicFeedbackActions />}
           usageAction={(
             <TurnTailPills
               turnTail={tailData}
@@ -253,6 +267,37 @@ export function ChatFlow({ store }: { store: ChatSessionStore }) {
         const data = (node as ChatNode<'turn-tail'>).data
         map.set(data.turn, data)
       }
+    }
+    return map
+  }, [snapshot])
+
+  // 「本次产出」按轮推导（edit/write 类工具目标路径；SDK 接线后换 deliverables 投影）。
+  const producedByTurn = useMemo(() => {
+    const map = new Map<number, string[]>()
+    for (const node of snapshot.nodes.values()) {
+      if (node.kind !== 'tool-call') continue
+      const chatNode = node as ChatNode
+      const turn = turnOf(chatNode)
+      if (turn === undefined) continue
+      const block = (chatNode as ChatNode<'tool-call'>).data.root
+      // root 是完整生命周期：落定态名字在 call 里，运行态在顶层（isSettledTool 守卫）。
+      const name = isSettledTool(block) ? block.call?.name ?? '' : block.name
+      const argsRaw = isSettledTool(block) ? block.call?.argsRaw ?? '' : block.argsRaw
+      if (!/(edit|write|patch|apply|str-replace)/.test(name.toLowerCase())) continue
+      let path: unknown = null
+      try {
+        const args: unknown = JSON.parse(argsRaw)
+        if (args !== null && typeof args === 'object') {
+          const record = args as Record<string, unknown>
+          path = record.file_path ?? record.path ?? record.file
+        }
+      } catch {
+        path = null
+      }
+      if (typeof path !== 'string' || path.length === 0) continue
+      const entry = map.get(turn)
+      if (entry === undefined) map.set(turn, [path])
+      else if (!entry.includes(path)) entry.push(path)
     }
     return map
   }, [snapshot])
@@ -307,6 +352,7 @@ export function ChatFlow({ store }: { store: ChatSessionStore }) {
                 setOpenTurn={setOpenTurn}
                 useChat={useChat}
                 turnTail={turn === undefined ? undefined : turnTails.get(turn)}
+                producedByTurn={producedByTurn}
               />
             )
           })}

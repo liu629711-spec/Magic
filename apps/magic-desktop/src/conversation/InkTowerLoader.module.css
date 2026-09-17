@@ -1,19 +1,19 @@
 /* 运行中状态行（InkTowerLoader）：位置/行高对齐 DSH ChatView 的 .turnStatus
-   （流末尾左对齐常驻行），动画画布 160px，旁注 12.5px ink-2。 */
+   （流末尾左对齐常驻行），动画画布 68px，旁注 12.5px ink-2。 */
 
 .turnStatus {
   align-self: flex-start;
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 0;
+  gap: 8px;
+  padding: 4px 0;
 }
 
 .canvasBox {
   position: relative;
-  width: 160px;
-  height: 160px;
+  width: 68px;
+  height: 68px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -21,8 +21,8 @@
 
 .haloPulse {
   position: absolute;
-  width: 118px;
-  height: 118px;
+  width: 52px;
+  height: 52px;
   border-radius: 9999px;
   border: 1px solid rgb(194 157 91 / 0.35);
   opacity: 0;

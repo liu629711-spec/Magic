@@ -1,0 +1,25 @@
+/* 消息反馈按钮对：对齐 MessageIconActions 的图标按钮 chrome（16px 图标、透明底、hover 提亮）。 */
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gl-ink-3, #8c909f);
+  cursor: pointer;
+  transition: color 100ms, background-color 100ms;
+}
+
+.action:hover {
+  color: var(--gl-ink, #e3e2e6);
+  background: rgb(var(--gl-hover) / 1);
+}
+
+.action[data-active] {
+  color: var(--gl-accent-ink, #adc6ff);
+}

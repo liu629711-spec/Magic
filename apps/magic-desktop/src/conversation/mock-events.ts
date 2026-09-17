@@ -50,6 +50,18 @@ export const mockEvents: SessionEvent[] = [
   },
   {
     type: 'user/message',
+    seq: seq(3.5),
+    time: at(1200),
+    data: {
+      id: mid('m-inject-skill'),
+      role: 'user',
+      content: [{ type: 'text', text: 'skill-catalog 注入' }],
+      source: { kind: 'plugin', plugin: 'skill-catalog' },
+    },
+    surfaceOp: 'append',
+  },
+  {
+    type: 'user/message',
     seq: seq(4),
     time: at(1500),
     data: {
