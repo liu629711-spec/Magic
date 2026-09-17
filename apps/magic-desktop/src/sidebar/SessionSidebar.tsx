@@ -25,6 +25,12 @@ const actionBtn =
 /** 会话列表展示上限（2026-09-17 用户裁定：超过 5 条收起，展开后滚动查找）。 */
 const LIST_LIMIT = 5;
 
+/** 展开态滚动容器底部渐隐（提示下方还有内容；2026-09-17 用户反馈「收起按钮丑」的美化）。 */
+const FADE_MASK = {
+  maskImage: "linear-gradient(to bottom, black calc(100% - 20px), transparent)",
+  WebkitMaskImage: "linear-gradient(to bottom, black calc(100% - 20px), transparent)",
+} as const;
+
 /** 会话位置（origin 记忆 + 拖拽来源）。index 为所在列表的基数组下标。 */
 type Loc = {
   section: "pinned" | "ws" | "task";
@@ -496,7 +502,9 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
     <aside className="fixed left-0 top-0 h-full w-[260px] bg-surface-container-lowest z-50 flex flex-col select-none">
       <div className="flex flex-col h-full overflow-hidden">
         <Header />
-        <div className="flex-1 overflow-y-auto px-space-sm pb-space-sm space-y-space-md">
+        {/* 顶部导航固定（2026-09-17 用户裁定）：新建任务/搜索任务/定时任务/技能扩展
+            不随会话列表滚动 */}
+        <div className="shrink-0 px-space-sm pb-space-md">
           <NavList
             onNewSession={() => {
               if (onCreateSession !== undefined) onCreateSession();
@@ -504,6 +512,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             }}
             onOpenSearch={() => setPaletteOpen(true)}
           />
+        </div>
+        <div className="flex-1 overflow-y-auto px-space-sm pb-space-sm space-y-space-md">
           {/* 置顶区（2026-09-17 用户裁定）：两种模式都保留（web 模式初始为空，
               pin 真实会话后进入；默认收起） */}
           <Section
@@ -621,7 +631,11 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                     </button>
                   </div>
                   {open ? (
-                    <div className={`space-y-px ${expanded ? "max-h-64 overflow-y-auto" : ""}`}>
+                    <>
+                      <div
+                        className={`space-y-px ${expanded ? "max-h-64 overflow-y-auto" : ""}`}
+                        style={expanded ? FADE_MASK : undefined}
+                      >
                       {shown.map((s, i) => {
                           const title = titleOf(s, s);
                           const nextKey = shown[i + 1] ?? null;
@@ -655,6 +669,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                             </a>
                           );
                       })}
+                      </div>
                       {displayed.length > LIST_LIMIT ? (
                         <ListMore
                           expanded={expanded}
@@ -662,7 +677,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                           onToggle={() => toggleList(listKey)}
                         />
                       ) : null}
-                  </div>
+                    </>
                   ) : null}
                 </div>
               );
@@ -683,6 +698,13 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             listDrop={showMockSections && taskKeys.length === 0 ? taskZone : undefined}
             listEmpty={showMockSections && taskKeys.length === 0}
             scroll={taskExpanded}
+            footer={taskKeys.length > LIST_LIMIT ? (
+              <ListMore
+                expanded={taskExpanded}
+                total={taskKeys.length}
+                onToggle={() => toggleList("task")}
+              />
+            ) : null}
           >
             {shownTasks.map((key, i) => {
               const title = titleOf(key, key);
@@ -719,13 +741,6 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                 </a>
               );
             })}
-            {taskKeys.length > LIST_LIMIT ? (
-              <ListMore
-                expanded={taskExpanded}
-                total={taskKeys.length}
-                onToggle={() => toggleList("task")}
-              />
-            ) : null}
           </Section>
         </div>
         <UserCard />
@@ -962,6 +977,7 @@ function Section({
   listDrop,
   listEmpty,
   scroll,
+  footer,
 }: {
   label: string;
   open: boolean;
@@ -973,6 +989,8 @@ function Section({
   listEmpty?: boolean;
   /** 展开态：列表区限高滚动（2026-09-17 用户裁定「展开后滑动可找会话」） */
   scroll?: boolean;
+  /** 固定在滚动区外的行尾（展开/收起按钮，不随列表滚动） */
+  footer?: ReactNode;
 }) {
   return (
     <div>
@@ -1003,40 +1021,52 @@ function Section({
         ) : null}
       </div>
       {open ? (
-        listEmpty && listDrop !== undefined ? (
-          <div
-            onDragOver={listDrop.onDragOver}
-            onDragLeave={listDrop.onDragLeave}
-            onDrop={listDrop.onDrop}
-            className={`mt-0.5 mx-2 rounded-lg border border-dashed border-surface-container-highest px-2 py-1.5 text-[12px] text-outline/70 ${
-              listDrop.active ? "ring-1 ring-primary border-solid" : ""
-            }`}
-          >
-            拖动会话到此处
-          </div>
-        ) : (
-          <div className={`space-y-px ${scroll === true ? "max-h-64 overflow-y-auto" : ""}`}>{children}</div>
-        )
+        <>
+          {listEmpty && listDrop !== undefined ? (
+            <div
+              onDragOver={listDrop.onDragOver}
+              onDragLeave={listDrop.onDragLeave}
+              onDrop={listDrop.onDrop}
+              className={`mt-0.5 mx-2 rounded-lg border border-dashed border-surface-container-highest px-2 py-1.5 text-[12px] text-outline/70 ${
+                listDrop.active ? "ring-1 ring-primary border-solid" : ""
+              }`}
+            >
+              拖动会话到此处
+            </div>
+          ) : (
+            <div
+              className={`space-y-px ${scroll === true ? "max-h-64 overflow-y-auto" : ""}`}
+              style={scroll === true ? FADE_MASK : undefined}
+            >
+              {children}
+            </div>
+          )}
+          {footer}
+        </>
       ) : null}
     </div>
   );
 }
 
-/** 列表「展开全部 / 收起」（2026-09-17 用户裁定：超过 5 条收起，展开后滚动查找）。 */
+/** 列表「展开全部 / 收起」（2026-09-17 用户裁定：超过 5 条收起，展开后滚动查找）。
+ *  2026-09-17 反馈美化：居中轻胶囊（小字号 + 细箭头 + 仅 hover 背景），
+ *  并固定在滚动区外（不随列表滚动）。 */
 function ListMore({ expanded, total, onToggle }: {
   expanded: boolean;
   total: number;
   onToggle: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex w-full items-center gap-1 h-7 px-2 mt-0.5 rounded-lg text-[12px] font-medium text-outline hover:text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer"
-    >
-      <Icon name={expanded ? "expand_less" : "expand_more"} className="text-[14px]" />
-      <span>{expanded ? "收起" : `展开全部 ${total} 条`}</span>
-    </button>
+    <div className="flex justify-center py-0.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex h-6 items-center gap-0.5 rounded-full px-2.5 text-[11.5px] font-medium text-outline transition-colors hover:bg-surface-container-low hover:text-on-surface cursor-pointer"
+      >
+        <Icon name={expanded ? "keyboard_arrow_up" : "keyboard_arrow_down"} className="text-[13px]" />
+        <span>{expanded ? "收起" : `展开全部 ${total} 条`}</span>
+      </button>
+    </div>
   );
 }
 
