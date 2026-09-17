@@ -3,6 +3,7 @@ import { SessionSidebar } from "./sidebar/SessionSidebar";
 import { InspectorPanel } from "./inspector/InspectorPanel";
 import { ChatFlow } from "./conversation/ChatFlow.tsx";
 import { ChatSessionStore } from "./conversation/chat-store.ts";
+import { buildSessionMarkdown } from "./conversation/session-export.ts";
 import { mockEvents } from "./conversation/mock-events.ts";
 
 /**
@@ -75,12 +76,27 @@ export function App() {
     setActiveId(forkId);
   };
 
+  // 会话导出（裁定 19）：快照序列化为 Markdown 下载。
+  const exportSession = (id: string) => {
+    const target = stores[id];
+    if (target === undefined) return;
+    const markdown = buildSessionMarkdown(id, target.getSnapshot().snapshot);
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${id}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-surface text-on-surface font-headline-md text-headline-md antialiased selection:bg-primary-container selection:text-on-primary-container">
       <SessionSidebar
         activeSessionId={activeId}
         onOpenSession={openSession}
         onForkSession={forkSession}
+        onExportSession={exportSession}
       />
       <div className="pl-[260px] h-full flex">
         <main className="flex-1 min-w-0 bg-surface">

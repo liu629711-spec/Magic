@@ -62,10 +62,11 @@ export const pinnedTasks: {
 ] as const;
 
 // 任务行不放图标（2026-09-16 用户裁定）；运行中的任务前置书写笔动画
+// 时间展示已去掉（2026-09-17 裁定 19：会话时间不需要展示）
 export const tasks = [
-  { title: "Node.js 22 LTS 升级预演", time: "2小时前" },
-  { title: "整理 API 网关路由规范文档", time: "昨天" },
-  { title: "生产环境 Redis 集群健康巡检", time: "3天前" },
+  { title: "Node.js 22 LTS 升级预演" },
+  { title: "整理 API 网关路由规范文档" },
+  { title: "生产环境 Redis 集群健康巡检" },
 ] as const;
 
 export const user = {
