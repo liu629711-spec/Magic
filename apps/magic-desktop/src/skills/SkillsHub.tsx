@@ -1,16 +1,17 @@
-// 技能扩展页（2026-09-17 用户裁定，参考 codex_04_skills_hub 设计稿 + 图三插件市场，
-// 图三优先、更密集；左栏不变，主区整体替换）。
+// 技能扩展页（2026-09-17 用户裁定：这里存放 **技能 / MCP / 智能体**，不展示 DSH 插件）。
 // 数据源（真实 runtime）：
-// - 技能：Remote `skills/list` {request:{sessionId}} → {skills:[{name,path?,description,whenToUse?}]}
+// - 技能：Remote `skills/list` {request:{sessionId}} → SkillEntry[]
 //   （session-controller/src/skill-catalog.ts:35-90，过滤 isUserInvocable）
-// - 插件：Remote `pluginInventory/list` → {entries:[{entryId,moduleName,enabled,fiberPhase}]}
-//   （host/plugin-inventory/src/types.ts:16-23；无参方法）
-// mock 模式（未连接 runtime）显示空态提示，不造假数据。
+// - 智能体：Remote `agentPresets/list` → AgentPresetRoster{presets[], authorable, modeSelectionEnabled}
+//   （preset/agent-presets/src/types.ts:11-34；内置 standard/ptc/minimal/cordis）
+// - MCP：DSH 的 mcp-client 插件无 Remote 枚举端点（已核查），暂为诚实空态
+// unconnected 模式显示空态提示，不造假数据。
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Icon } from "../sidebar/Icon";
 import { dshRpc } from "../adapters/dsh-web/rpc";
 
-export interface SkillEntry {
+interface SkillEntry {
   name: string;
   path?: string;
   description: string;
@@ -18,11 +19,32 @@ export interface SkillEntry {
   modelInvocable?: boolean;
 }
 
-export interface PluginEntry {
-  entryId: string;
-  moduleName: string;
-  enabled: boolean;
-  fiberPhase: string;
+interface AgentPresetRow {
+  id: string;
+  trust?: string;
+  isDefault?: boolean;
+  name?: string;
+  description?: string;
+  broken?: boolean;
+}
+
+interface AgentPresetRoster {
+  presets: AgentPresetRow[];
+  authorable?: boolean;
+  modeSelectionEnabled?: boolean;
+}
+
+/** 依次尝试多组 args 形状（Remote 无参方法生成不同）。 */
+async function rpcTry<T>(endpoint: string, variants: Record<string, unknown>[]): Promise<T> {
+  let lastError: unknown;
+  for (const args of variants) {
+    try {
+      return await dshRpc<T>(endpoint, args);
+    } catch (cause) {
+      lastError = cause;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 export function SkillsHub({ backendReady, sessionId }: {
@@ -31,7 +53,7 @@ export function SkillsHub({ backendReady, sessionId }: {
   sessionId: string;
 }) {
   const [skills, setSkills] = useState<SkillEntry[]>([]);
-  const [plugins, setPlugins] = useState<PluginEntry[]>([]);
+  const [agents, setAgents] = useState<AgentPresetRow[]>([]);
   const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -44,12 +66,14 @@ export function SkillsHub({ backendReady, sessionId }: {
     setState("loading");
     Promise.all([
       dshRpc<{ skills: SkillEntry[] }>("skills/list", { request: { sessionId } }),
-      // 插件清单纯附加：失败不影响技能列表
-      dshRpc<{ entries: PluginEntry[] }>("pluginInventory/list", {}).catch(() => ({ entries: [] })),
+      // 智能体 roster：无参方法，args 形状做兜底尝试；失败不影响技能列表
+      rpcTry<AgentPresetRoster>("agentPresets/list", [{}, { _request: {} }]).catch(() => ({
+        presets: [],
+      })),
     ])
-      .then(([skillResult, pluginResult]) => {
+      .then(([skillResult, roster]) => {
         setSkills(skillResult.skills ?? []);
-        setPlugins(pluginResult.entries ?? []);
+        setAgents(roster.presets ?? []);
         setState("ready");
       })
       .catch((cause: unknown) => {
@@ -72,14 +96,16 @@ export function SkillsHub({ backendReady, sessionId }: {
           ),
     [skills, q],
   );
-  const shownPlugins = useMemo(
+  const shownAgents = useMemo(
     () =>
       q.length === 0
-        ? plugins
-        : plugins.filter(
-            p => p.entryId.toLowerCase().includes(q) || p.moduleName.toLowerCase().includes(q),
+        ? agents
+        : agents.filter(
+            a =>
+              (a.name ?? a.id).toLowerCase().includes(q) ||
+              (a.description ?? "").toLowerCase().includes(q),
           ),
-    [plugins, q],
+    [agents, q],
   );
 
   return (
@@ -92,12 +118,12 @@ export function SkillsHub({ backendReady, sessionId }: {
               <h1 className="text-[20px] font-semibold tracking-tight text-on-surface">技能扩展</h1>
               {state === "ready" ? (
                 <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[11.5px] font-medium tabular-nums">
-                  {skills.length} 个技能 · {plugins.length} 个插件
+                  {skills.length} 个技能 · {agents.length} 个智能体
                 </span>
               ) : null}
             </div>
             <p className="mt-0.5 text-[12.5px] text-outline">
-              管理运行时可用的技能与插件，扩展 Magic 的能力边界。
+              管理智能体、技能与 MCP 连接，扩展 Magic 的能力边界。
             </p>
           </div>
           <button
@@ -110,13 +136,13 @@ export function SkillsHub({ backendReady, sessionId }: {
           </button>
         </div>
 
-        {/* 搜索（图三式全宽，密集） */}
+        {/* 搜索（图三式全宽） */}
         <div className="mt-4 flex items-center gap-2 h-9 px-3 rounded-lg bg-surface-container-low focus-within:bg-surface-container-high transition-colors">
           <Icon name="search" className="text-[16px] text-outline shrink-0" />
           <input
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="搜索技能与插件…"
+            placeholder="搜索智能体与技能…"
             className="flex-1 bg-transparent outline-none text-[13px] text-on-surface placeholder:text-outline"
           />
         </div>
@@ -125,98 +151,142 @@ export function SkillsHub({ backendReady, sessionId }: {
           <EmptyState
             icon="cloud_off"
             title="未连接运行时"
-            detail="技能与插件清单来自 DSH runtime。请用 /?backend=web 打开并完成授权后查看。"
+            detail="智能体与技能清单来自 DSH runtime。请用 /?backend=web 打开并完成授权后查看。"
           />
         ) : state === "loading" ? (
-          <EmptyState icon="progress_activity" title="正在加载技能与插件…" detail="" spin />
+          <EmptyState icon="progress_activity" title="正在加载…" detail="" spin />
         ) : state === "error" ? (
           <EmptyState icon="error" title="加载失败" detail={error} />
         ) : (
           <>
-            {/* 已安装横排（图三式图标行）：插件模块名首字 */}
-            {shownPlugins.length > 0 ? (
-              <section className="mt-5">
-                <div className="text-[12px] font-medium text-outline">已安装</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {shownPlugins.slice(0, 14).map(plugin => (
-                    <div
-                      key={plugin.entryId}
-                      title={plugin.moduleName}
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center text-[13px] font-semibold select-none ${
-                        plugin.enabled
-                          ? "bg-surface-container-high text-on-surface"
-                          : "bg-surface-container text-outline/50"
-                      }`}
-                    >
-                      {plugin.entryId.slice(0, 1).toUpperCase()}
-                    </div>
+            {/* 智能体（agent presets） */}
+            <Group
+              title="智能体"
+              count={shownAgents.length}
+              hint="会话创建期固定的能力组合（内置 standard / ptc / minimal / cordis）"
+            >
+              {shownAgents.length === 0 ? (
+                <GroupEmpty>没有匹配的智能体</GroupEmpty>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {shownAgents.map(agent => (
+                    <Card
+                      key={agent.id}
+                      icon="smart_toy"
+                      tone="primary"
+                      title={agent.name ?? agent.id}
+                      subtitle={agent.id}
+                      detail={agent.description ?? agent.trust ?? ""}
+                      badges={
+                        <>
+                          {agent.isDefault === true ? <Badge tone="tertiary">默认</Badge> : null}
+                          {agent.broken === true ? <Badge tone="error">异常</Badge> : null}
+                        </>
+                      }
+                    />
                   ))}
-                  {shownPlugins.length > 14 ? (
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center text-[11.5px] text-outline bg-surface-container">
-                      +{shownPlugins.length - 14}
-                    </div>
-                  ) : null}
                 </div>
-              </section>
-            ) : null}
+              )}
+            </Group>
 
-            {/* 技能列表（两列密集行） */}
-            <section className="mt-5">
-              <div className="flex items-center justify-between">
-                <div className="text-[12px] font-medium text-outline">技能 · {shownSkills.length}</div>
-              </div>
+            {/* 技能（skills） */}
+            <Group title="技能" count={shownSkills.length} hint="SKILL.md 规范定义、可被模型或用户调起的能力">
               {shownSkills.length === 0 ? (
-                <div className="mt-2 text-[12.5px] text-outline/80">没有匹配的技能</div>
+                <GroupEmpty>没有匹配的技能</GroupEmpty>
               ) : (
-                <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-0.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {shownSkills.map(skill => (
-                    <div
+                    <Card
                       key={skill.path ?? skill.name}
-                      title={skill.whenToUse ?? skill.description}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-surface-container-low transition-colors min-w-0"
-                    >
-                      <div className="w-7 h-7 rounded-md bg-surface-container-high text-tertiary flex items-center justify-center shrink-0">
-                        <Icon name="extension" className="text-[15px]" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-[13px] font-medium text-on-surface truncate">{skill.name}</div>
-                        <div className="text-[11.5px] text-outline truncate">{skill.description}</div>
-                      </div>
-                    </div>
+                      icon="extension"
+                      tone="tertiary"
+                      title={skill.name}
+                      subtitle={skill.path}
+                      detail={skill.description}
+                      badges={null}
+                    />
                   ))}
                 </div>
               )}
-            </section>
+            </Group>
 
-            {/* 插件列表（两列密集行） */}
-            <section className="mt-6 mb-2">
-              <div className="text-[12px] font-medium text-outline">插件 · {shownPlugins.length}</div>
-              {shownPlugins.length === 0 ? (
-                <div className="mt-2 text-[12.5px] text-outline/80">没有匹配的插件</div>
-              ) : (
-                <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-0.5">
-                  {shownPlugins.map(plugin => (
-                    <div
-                      key={plugin.entryId}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-surface-container-low transition-colors min-w-0"
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          plugin.enabled ? "bg-tertiary" : "bg-outline/50"
-                        }`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-medium text-on-surface truncate">{plugin.entryId}</div>
-                        <div className="text-[11.5px] text-outline truncate">{plugin.moduleName}</div>
-                      </div>
-                      <span className="text-[11px] text-outline shrink-0 tabular-nums">{plugin.fiberPhase}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+            {/* MCP（诚实空态：DSH 暂无枚举接口） */}
+            <Group title="MCP" count={0} hint="Model Context Protocol 服务器与工具">
+              <div className="rounded-xl border border-dashed border-surface-container-highest px-4 py-3 text-[12px] text-outline leading-relaxed">
+                DSH runtime 当前未暴露 MCP 服务清单接口（已核查 mcp-client 插件无远程枚举端点）——
+                接入后这里会列出已连接的 MCP 服务器与工具。
+              </div>
+            </Group>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function Group({ title, count, hint, children }: {
+  title: string;
+  count: number;
+  hint: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-6">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[12px] font-medium text-outline">
+          {title} · {count}
+        </span>
+        <span className="text-[11px] text-outline/60 truncate">{hint}</span>
+      </div>
+      <div className="mt-2">{children}</div>
+    </section>
+  );
+}
+
+function GroupEmpty({ children }: { children: ReactNode }) {
+  return <div className="text-[12.5px] text-outline/80 py-1">{children}</div>;
+}
+
+function Badge({ tone, children }: { tone: "tertiary" | "error"; children: ReactNode }) {
+  return (
+    <span
+      className={`px-1.5 py-[1px] rounded text-[10.5px] font-medium shrink-0 ${
+        tone === "tertiary"
+          ? "bg-tertiary-container/25 text-tertiary"
+          : "bg-error-container/40 text-error"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** 密集卡片（两列；图标块 + 名称 + 描述，细边框层次）。 */
+function Card({ icon, tone, title, subtitle, detail, badges }: {
+  icon: string;
+  tone: "primary" | "tertiary";
+  title: string;
+  subtitle?: string;
+  detail: string;
+  badges: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl px-3 py-2.5 bg-surface-container-lowest border border-surface-container-high/60 hover:bg-surface-container-low hover:border-surface-container-highest transition-colors min-w-0">
+      <div
+        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+          tone === "primary" ? "bg-primary-container/15 text-primary" : "bg-tertiary-container/15 text-tertiary"
+        }`}
+      >
+        <Icon name={icon} className="text-[17px]" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[13px] font-medium text-on-surface truncate">{title}</span>
+          {badges}
+        </div>
+        <div className="mt-0.5 text-[11.5px] text-outline leading-relaxed line-clamp-2 min-h-[16px]">
+          {detail.length > 0 ? detail : subtitle ?? ""}
+        </div>
       </div>
     </div>
   );

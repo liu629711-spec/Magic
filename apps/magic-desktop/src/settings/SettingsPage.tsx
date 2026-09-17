@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import { Icon } from "../sidebar/Icon";
 import { dshRpc } from "../adapters/dsh-web/rpc";
 import { getSidebarPrefs, updateSidebarPrefs, type SidebarPrefs } from "../adapters/dsh-web/sidebar-api";
+import { readRecentLimit, writeRecentLimit } from "./local-prefs";
 
 type SectionId = "general" | "appearance" | "models" | "terminal" | "browser";
 
@@ -29,6 +30,8 @@ export function SettingsPage({ onBack, onOpenSkills, backendReady }: {
   const [prefs, setPrefs] = useState<SidebarPrefs>({});
   const [revision, setRevision] = useState<number | undefined>(undefined);
   const [prefsError, setPrefsError] = useState("");
+  // 最近任务展示数量（本地偏好，2026-09-17 用户裁定）
+  const [recentLimit, setRecentLimit] = useState<number>(() => readRecentLimit());
 
   useEffect(() => {
     if (!backendReady) return;
@@ -125,6 +128,25 @@ export function SettingsPage({ onBack, onOpenSkills, backendReady }: {
               ) : null}
               {section === "general" ? (
                 <SectionBlock title="常规" desc="Magic 工作方式的基础偏好。">
+                  <SettingRow
+                    title="最近任务最多展示"
+                    desc="左栏「最近任务」区最多渲染的条数（列表仍自适应高度，超出滚动查看）。"
+                    control={
+                      <TextField
+                        value={String(recentLimit)}
+                        narrow
+                        onCommit={v => {
+                          const n = Number.parseInt(v, 10);
+                          if (Number.isFinite(n) && n > 0) {
+                            writeRecentLimit(n);
+                            setRecentLimit(n);
+                          } else {
+                            setRecentLimit(readRecentLimit());
+                          }
+                        }}
+                      />
+                    }
+                  />
                   <SettingRow
                     title="自动打开子代理"
                     desc="子代理会话启动时自动切换到其对话视图。"

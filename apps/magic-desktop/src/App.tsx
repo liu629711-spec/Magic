@@ -8,6 +8,7 @@ import { mockEvents } from "./conversation/mock-events.ts";
 import { useWebBackend, type RemoteSessionRow } from "./adapters/dsh-web/web-backend.ts";
 import { SkillsHub } from "./skills/SkillsHub.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
+import { readRecentLimit } from "./settings/local-prefs.ts";
 import type { Workspace } from "./sidebar/mock-data";
 
 /**
@@ -61,6 +62,16 @@ export function App() {
   const [activeId, setActiveId] = useState<string>("");
   // 视图路由（裁定 22）：chat=对话；skills=技能扩展（左栏不变）；settings=整页设置
   const [view, setView] = useState<"chat" | "skills" | "settings">("chat");
+  // 会话归属（2026-09-17 用户裁定）：新建任务默认进最近任务区；工作区行 + 号建到工作区；
+  // 拖拽改变归属。M1 为本地组织状态（runtime workspace attachment 后续接）。
+  const [assigned, setAssigned] = useState<Record<string, string>>({});
+  // 最近任务展示数量（设置页可调；localStorage + 事件同步）
+  const [recentLimit, setRecentLimit] = useState<number>(() => readRecentLimit());
+  useEffect(() => {
+    const onChanged = () => setRecentLimit(readRecentLimit());
+    window.addEventListener("magic:recent-limit", onChanged);
+    return () => window.removeEventListener("magic:recent-limit", onChanged);
+  }, []);
 
   /** 打开即建库（web 模式：真实 sessionId；mock 模式：标题键 + mock 种子）。 */
   const ensureStore = (id: string): ChatSessionStore => {
@@ -273,11 +284,16 @@ export function App() {
         }
         onCreateSession={
           backendMode
-            ? () => {
+            ? (workspaceId?: string) => {
                 web
                   .createSession()
                   .then(id => {
-                    if (id.length > 0) openSession(id);
+                    if (id.length === 0) return;
+                    // 工作区行 + 号：创建后归属到该工作区（2026-09-17 用户裁定）
+                    if (workspaceId !== undefined) {
+                      setAssigned(prev => ({ ...prev, [id]: workspaceId }));
+                    }
+                    openSession(id);
                   })
                   .catch(error =>
                     window.alert(`新建失败：${error instanceof Error ? error.message : String(error)}`),
@@ -288,6 +304,20 @@ export function App() {
         remoteWorkspaces={remoteWorkspaces}
         remoteTaskSessions={remoteTaskSessions}
         showMockSections={!backendMode}
+        assigned={backendMode ? assigned : undefined}
+        onAssign={
+          backendMode
+            ? (sessionId, workspaceId) => {
+                setAssigned(prev => {
+                  const next = { ...prev };
+                  if (workspaceId === null) delete next[sessionId];
+                  else next[sessionId] = workspaceId;
+                  return next;
+                });
+              }
+            : undefined
+        }
+        recentLimit={recentLimit}
       />
       <div className="pl-[260px] h-full flex">
         <main className="flex-1 min-w-0 bg-surface">

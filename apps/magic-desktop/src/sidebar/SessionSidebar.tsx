@@ -25,11 +25,24 @@ const actionBtn =
 /** 会话列表可视行数上限（2026-09-17 用户裁定：超过即在区域内滚动查找，不做展开按钮）。 */
 const LIST_LIMIT = 5;
 
-/** 超过可视行数时滚动容器底部渐隐（提示下方还有内容）。 */
-const FADE_MASK = {
-  maskImage: "linear-gradient(to bottom, black calc(100% - 20px), transparent)",
-  WebkitMaskImage: "linear-gradient(to bottom, black calc(100% - 20px), transparent)",
-} as const;
+/** 分区顺序持久化（2026-09-17 用户裁定：置顶任务/项目/最近任务 可拖拽自由组合）。 */
+const SECTION_ORDER_KEY = "magic.sectionOrder";
+type SectionId = "pinned" | "projects" | "tasks";
+function readSectionOrder(): SectionId[] {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(SECTION_ORDER_KEY) ?? "null");
+    if (
+      Array.isArray(raw) &&
+      raw.length === 3 &&
+      (["pinned", "projects", "tasks"] as SectionId[]).every((id) => raw.includes(id))
+    ) {
+      return raw as SectionId[];
+    }
+  } catch {
+    /* 数据损坏回退默认顺序 */
+  }
+  return ["pinned", "projects", "tasks"];
+}
 
 /** 会话位置（origin 记忆 + 拖拽来源）。index 为所在列表的基数组下标。 */
 type Loc = {
@@ -94,7 +107,7 @@ type DropHandlers = {
  *    打开文件夹/搜索文件与设置组 M1 无后端，置灰占位）。
  * 回退时删掉 RowActions 中 pin、拖拽 handlers、SearchPalette 引用即可。
  */
-export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenSettings }: {
+export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenSettings, assigned, onAssign, recentLimit = 20 }: {
   activeSessionId: string
   onOpenSession: (id: string) => void
   onForkSession: (sourceId: string, forkId: string) => void
@@ -103,18 +116,25 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   onOpenSkills?: () => void
   /** 底部用户卡「设置」入口（裁定 22：进入整页设置视图） */
   onOpenSettings?: () => void
+  /** web 后端模式：会话归属映射（sessionId → workspaceId；无归属=只在最近任务区） */
+  assigned?: Record<string, string>
+  /** web 后端模式：拖拽改变归属（null = 退回最近任务区） */
+  onAssign?: (sessionId: string, workspaceId: string | null) => void
   /** web 后端模式：会话 id → 显示名（session/list 的 title 投影） */
   labels?: Record<string, string>
   /** web 后端模式：重命名走 session/rename；缺省=本地覆盖（mock 模式） */
   onRenameSession?: (id: string, title: string) => void
-  /** web 后端模式：新建任务走 session/create；缺省=本地开空白会话（mock 模式） */
-  onCreateSession?: () => void
+  /** web 后端模式：新建任务走 session/create；带 workspaceId 时建到该工作区（工作区行 + 号），
+   *  缺省建到最近任务区；mock 模式缺省=本地开空白会话 */
+  onCreateSession?: (workspaceId?: string) => void
   /** web 后端模式：项目分组由真实会话按 cwd 归组（App 下发，随 refresh 更新） */
   remoteWorkspaces?: Workspace[]
   /** web 后端模式：任务区数据源 = 全部会话按最近时间倒序（App 下发；新建任务即排第一） */
   remoteTaskSessions?: string[]
   /** mock 数据分区显隐；web 后端模式传 false（置顶区转真实置顶、任务区转最近会话） */
   showMockSections?: boolean
+  /** 最近任务区最多渲染条数（设置页可调；缺省 20） */
+  recentLimit?: number
 }) {
   const [sectionOpen, setSectionOpen] = useState(() => ({
     pinned: false,
@@ -175,6 +195,51 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   const dragRef = useRef<DragItem | null>(null);
   const [dropHint, setDropHint] = useState<DropHint>(null);
 
+  // 分区拖拽重排（2026-09-17 用户裁定：三个模块可自由组合，顺序持久化）
+  const [sectionOrder, setSectionOrder] = useState<SectionId[]>(() => readSectionOrder());
+  useEffect(() => {
+    localStorage.setItem(SECTION_ORDER_KEY, JSON.stringify(sectionOrder));
+  }, [sectionOrder]);
+  const sectionDragRef = useRef<SectionId | null>(null);
+  const [sectionHint, setSectionHint] = useState<{ id: SectionId; before: boolean } | null>(null);
+  const sectionDnd = (id: SectionId) => ({
+    onDragStart: (e: ReactDragEvent) => {
+      sectionDragRef.current = id;
+      e.dataTransfer.effectAllowed = "move";
+    },
+    onDragEnd: () => {
+      sectionDragRef.current = null;
+      setSectionHint(null);
+    },
+    onDragOver: (e: ReactDragEvent) => {
+      if (sectionDragRef.current === null || sectionDragRef.current === id) return;
+      e.preventDefault();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      setSectionHint((h) => (h?.id === id && h.before === before ? h : { id, before }));
+    },
+    onDrop: (e: ReactDragEvent) => {
+      const from = sectionDragRef.current;
+      sectionDragRef.current = null;
+      const before = sectionHint?.id === id ? sectionHint.before : true;
+      setSectionHint(null);
+      if (from === null || from === id) return;
+      e.preventDefault();
+      setSectionOrder((order) => {
+        const next = order.filter((x) => x !== from);
+        const idx = next.indexOf(id);
+        next.splice(before ? idx : idx + 1, 0, from);
+        return next;
+      });
+    },
+  });
+  const sectionHeaderClass = (id: SectionId): string =>
+    sectionHint?.id === id
+      ? sectionHint.before
+        ? "shadow-[inset_0_2px_0_0_var(--color-primary)]"
+        : "shadow-[inset_0_-2px_0_0_var(--color-primary)]"
+      : "";
+
   // 搜索任务（裁定 19 图四）
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -215,6 +280,9 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
     return { section: "ws", wsId, index: sessions?.indexOf(key) ?? -1 };
   };
 
+  const isRemote = !showMockSections;
+  const remoteAll = remoteTaskSessions ?? [];
+
   /** 统一移动：从源列表移除 → 插入目标（beforeKey=null 追加）。置顶区内排序不覆盖 origin。 */
   const moveItem = (
     drag: DragItem,
@@ -224,16 +292,6 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
       drag.from.section === "pinned" && target.section === "pinned"
         ? pinned.find((p) => p.key === drag.key)?.origin ?? { section: "task", index: Number.MAX_SAFE_INTEGER }
         : drag.from;
-    if (drag.from.section === "pinned") {
-      setPinned((list) => list.filter((p) => p.key !== drag.key));
-    } else if (drag.from.section === "task") {
-      setTaskList((list) => list.filter((k) => k !== drag.key));
-    } else if (drag.from.wsId !== undefined) {
-      const fromWs = drag.from.wsId;
-      setWorkspaces((ws) =>
-        ws.map((w) => (w.id === fromWs ? { ...w, sessions: w.sessions.filter((s) => s !== drag.key) } : w)),
-      );
-    }
     const insert = <T,>(list: readonly T[], item: T, keyOf: (x: T) => string, selfKey: string): T[] => {
       const next = list.filter((x) => keyOf(x) !== selfKey);
       const beforeKey = target.beforeKey;
@@ -246,6 +304,33 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
       }
       return next;
     };
+    // web 后端模式（2026-09-17 用户裁定）：会话归属由 App 下发（assigned: sessionId→workspaceId）；
+    // 置顶仍为本地列表（渲染时过滤掉已置顶项即从原区域消失；取消置顶自动回原区域）。
+    if (isRemote) {
+      if (drag.from.section === "pinned") {
+        setPinned((list) => list.filter((p) => p.key !== drag.key));
+      }
+      if (target.section === "pinned") {
+        const item: PinnedItem = { key: drag.key, base: drag.base, task: drag.task, origin };
+        setPinned((list) => insert(list, item, (p) => p.key, drag.key));
+      } else if (target.section === "ws" && target.wsId !== undefined) {
+        onAssign?.(drag.key, target.wsId);
+        setWsOpen((s) => ({ ...s, [target.wsId as string]: true }));
+      } else if (target.section === "task") {
+        onAssign?.(drag.key, null);
+      }
+      return;
+    }
+    if (drag.from.section === "pinned") {
+      setPinned((list) => list.filter((p) => p.key !== drag.key));
+    } else if (drag.from.section === "task") {
+      setTaskList((list) => list.filter((k) => k !== drag.key));
+    } else if (drag.from.wsId !== undefined) {
+      const fromWs = drag.from.wsId;
+      setWorkspaces((ws) =>
+        ws.map((w) => (w.id === fromWs ? { ...w, sessions: w.sessions.filter((s) => s !== drag.key) } : w)),
+      );
+    }
     if (target.section === "pinned") {
       const item: PinnedItem = { key: drag.key, base: drag.base, task: drag.task, origin };
       setPinned((list) => insert(list, item, (p) => p.key, drag.key));
@@ -430,6 +515,12 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   };
 
   const addSession = (id: string) => {
+    // web 模式：工作区行 + 号 = 新建到该工作区（session/create + 本地归属）
+    if (onCreateSession !== undefined) {
+      onCreateSession(id);
+      setWsOpen((s) => ({ ...s, [id]: true }));
+      return;
+    }
     newSessionSeq.current += 1;
     const title = `新会话 ${newSessionSeq.current}`;
     setWorkspaces((ws) =>
@@ -464,13 +555,16 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
 
   const displayedPinned = pinned.filter((p) => !archived[p.key]);
   const displayedTasks = taskList.filter((k) => !archived[k]);
-  // 任务区数据源（2026-09-17 裁定）：mock 模式=本地任务列表；web 模式=全部真实会话
-  // 按最近时间倒序（新建任务即排第一）；已置顶的从任务区过滤（避免两处重复）
-  const taskKeys = (
-    showMockSections ? displayedTasks : remoteTaskSessions ?? []
-  ).filter((k) => !archived[k] && !pinned.some((p) => p.key === k));
-  // 任务区可视上限（2026-09-17 用户裁定：超过即在区域内滚动，不做展开按钮）
-  const taskScrollable = taskKeys.length > LIST_LIMIT;
+  // 最近任务区（2026-09-17 用户裁定）：改名「最近任务」；只收未归属工作区的会话
+  // （新建任务默认落这里）；渲染条数上限由设置页控制，超出部分不渲染 + 列表尾提示
+  const taskKeys = (showMockSections ? displayedTasks : remoteAll).filter(
+    (k) =>
+      !archived[k] &&
+      !pinned.some((p) => p.key === k) &&
+      (showMockSections || assigned?.[k] === undefined),
+  );
+  const shownTasks = taskKeys.slice(0, Math.max(1, recentLimit));
+  const tasksCapped = taskKeys.length > shownTasks.length;
 
   // 搜索任务面板数据（裁定 19/20）：mock 模式用全部本地分区；web 模式用真实会话
   const paletteSessions: PaletteSession[] = showMockSections
@@ -512,17 +606,20 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             onOpenSkills={onOpenSkills}
           />
         </div>
-        <div className="flex-1 overflow-y-auto px-space-sm pb-space-sm space-y-space-md">
-          {/* 置顶区（2026-09-17 用户裁定）：两种模式都保留（web 模式初始为空，
-              pin 真实会话后进入；默认收起） */}
-          <Section
-            label="置顶任务"
-            open={sectionOpen.pinned}
-            onToggle={() => toggleSection("pinned")}
-            headerDrop={pinnedZone}
-            listDrop={displayedPinned.length === 0 ? pinnedZone : undefined}
-            listEmpty={displayedPinned.length === 0}
-          >
+        <div className="flex-1 min-h-0 overflow-y-auto px-space-sm pb-space-sm flex flex-col gap-y-space-md">
+          {[
+            /* 置顶区（2026-09-17 用户裁定）：两种模式都保留；无「拖动会话到此处」占位、
+               默认收起；分区头可拖拽重排 */
+            { id: "pinned" as const, node: (
+              <Section
+                key="pinned"
+                label="置顶任务"
+                open={sectionOpen.pinned}
+                onToggle={() => toggleSection("pinned")}
+                headerDrop={pinnedZone}
+                headerProps={sectionDnd("pinned")}
+                headerClass={sectionHeaderClass("pinned")}
+              >
             {displayedPinned.map((item, i) => {
               const status = statusOf(item.task);
               const title = titleOf(item.key, item.base);
@@ -572,31 +669,42 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                 </a>
               );
             })}
-          </Section>
-          <Section
-            label="项目"
-            open={sectionOpen.projects}
-            onToggle={() => toggleSection("projects")}
-            actions={
-              <>
-                <button type="button" className={actionBtn} title="项目选项">
-                  <Icon name="more_horiz" className="text-[16px]" />
-                </button>
-                <button
-                  type="button"
-                  className={actionBtn}
-                  title="创建项目"
-                  onClick={() => setDialogOpen(true)}
-                >
-                  <Icon name="add" className="text-[16px]" />
-                </button>
-              </>
-            }
-          >
+              </Section>
+            ) },
+            { id: "projects" as const, node: (
+              <Section
+                key="projects"
+                label="项目"
+                open={sectionOpen.projects}
+                onToggle={() => toggleSection("projects")}
+                headerProps={sectionDnd("projects")}
+                headerClass={sectionHeaderClass("projects")}
+                actions={
+                  <>
+                    <button type="button" className={actionBtn} title="项目选项">
+                      <Icon name="more_horiz" className="text-[16px]" />
+                    </button>
+                    <button
+                      type="button"
+                      className={actionBtn}
+                      title="创建项目"
+                      onClick={() => setDialogOpen(true)}
+                    >
+                      <Icon name="add" className="text-[16px]" />
+                    </button>
+                  </>
+                }
+              >
             {workspaces.map((ws) => {
               // web 后端模式：真实分组默认展开（用户仍可手动折叠，折叠态保留）
               const open = remoteWorkspaces !== undefined ? (wsOpen[ws.id] ?? true) : (wsOpen[ws.id] ?? false);
-              const displayed = ws.sessions.filter((s) => !archived[s]);
+              // web 模式：工作区只显示已归属的会话（拖入 / 在工作区行 + 号新建）；
+              // mock 模式：本地数组
+              const displayed = isRemote
+                ? remoteAll.filter(
+                    (s) => assigned?.[s] === ws.id && !archived[s] && !pinned.some((p) => p.key === s),
+                  )
+                : ws.sessions.filter((s) => !archived[s]);
               // 可视上限（2026-09-17 用户裁定：超过即在区域内滚动，不做展开按钮）
               const scrollable = displayed.length > LIST_LIMIT;
               const wsZone = zoneHandlers(`zone:ws:${ws.id}`, { section: "ws", wsId: ws.id });
@@ -628,10 +736,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                     </button>
                   </div>
                   {open ? (
-                    <div
-                      className={`space-y-px ${scrollable ? "max-h-40 overflow-y-auto" : ""}`}
-                      style={scrollable ? FADE_MASK : undefined}
-                    >
+                    <ScrollArea className={scrollable ? "max-h-40" : ""}>
                       {displayed.map((s, i) => {
                           const title = titleOf(s, s);
                           const nextKey = displayed[i + 1] ?? null;
@@ -665,44 +770,48 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                             </a>
                           );
                       })}
-                    </div>
+                    </ScrollArea>
                   ) : null}
                 </div>
               );
             })}
-          </Section>
-          {/* 任务区（2026-09-17 用户裁定）：mock 模式=本地任务；web 模式=真实会话按最近
-              时间倒序（新建任务自动排第一）；超过可视行数即在区域内滚动查找 */}
-          <Section
-            label="任务"
-            open={sectionOpen.tasks}
-            onToggle={() => toggleSection("tasks")}
-            actions={
-              <button type="button" className={actionBtn} title="新建独立会话">
-                <Icon name="add" className="text-[16px]" />
-              </button>
-            }
-            headerDrop={taskZone}
-            listDrop={showMockSections && taskKeys.length === 0 ? taskZone : undefined}
-            listEmpty={showMockSections && taskKeys.length === 0}
-            scroll={taskScrollable}
-          >
-            {taskKeys.map((key, i) => {
+              </Section>
+            ) },
+            /* 最近任务区（2026-09-17 用户裁定）：mock 模式=本地任务；web 模式=未归属工作区
+               的真实会话（新建任务默认落这里）；列表自适应填充到左栏底部，超出滚动 +
+               底部悬浮滚动提示；渲染条数上限由设置页控制 */
+            { id: "tasks" as const, node: (
+              <Section
+                key="tasks"
+                label="最近任务"
+                open={sectionOpen.tasks}
+                onToggle={() => toggleSection("tasks")}
+                grow
+                headerDrop={taskZone}
+                headerProps={sectionDnd("tasks")}
+                headerClass={sectionHeaderClass("tasks")}
+                actions={
+                  <button type="button" className={actionBtn} title="新建独立会话">
+                    <Icon name="add" className="text-[16px]" />
+                  </button>
+                }
+              >
+            {shownTasks.map((key, i) => {
               const title = titleOf(key, key);
-              const nextKey = taskKeys[i + 1] ?? null;
+              const nextKey = shownTasks[i + 1] ?? null;
               return (
                 <a
                   key={key}
                   href="#"
-                  draggable={showMockSections}
+                  draggable
                   onClick={(e) => {
                     e.preventDefault();
                     onOpenSession(key);
                   }}
-                  onDragStart={showMockSections ? (e) => onRowDragStart(e, key, key, "task") : undefined}
+                  onDragStart={(e) => onRowDragStart(e, key, key, "task")}
                   onDragEnd={onDragEnd}
-                  onDragOver={showMockSections ? (e) => onRowDragOver(e, key) : undefined}
-                  onDrop={showMockSections ? (e) => onRowDrop(e, { section: "task", key, nextKey }) : undefined}
+                  onDragOver={(e) => onRowDragOver(e, key)}
+                  onDrop={(e) => onRowDrop(e, { section: "task", key, nextKey })}
                   className={`${row} ${
                     key === activeSessionId
                       ? "bg-surface-container-low text-on-surface"
@@ -722,7 +831,17 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                 </a>
               );
             })}
-          </Section>
+            {tasksCapped ? (
+              <div className="px-2 py-1.5 text-[11.5px] text-outline/70">
+                仅显示最近 {recentLimit} 条 · 可在设置中调整展示数量
+              </div>
+            ) : null}
+              </Section>
+            ) },
+          ]
+            .slice()
+            .sort((a, b) => sectionOrder.indexOf(a.id) - sectionOrder.indexOf(b.id))
+            .map((entry) => entry.node)}
         </div>
         <UserCard onOpenSettings={onOpenSettings} />
       </div>
@@ -968,6 +1087,9 @@ function Section({
   listDrop,
   listEmpty,
   scroll,
+  grow,
+  headerProps,
+  headerClass,
 }: {
   label: string;
   open: boolean;
@@ -977,19 +1099,38 @@ function Section({
   headerDrop?: DropHandlers;
   listDrop?: DropHandlers;
   listEmpty?: boolean;
-  /** 超过可视行数：列表区限高滚动 + 底部渐隐（2026-09-17 用户裁定） */
+  /** 超过可视行数：列表区限高滚动（工作区列表） */
   scroll?: boolean;
+  /** 列表自适应填充剩余空间（2026-09-17 用户裁定：最近任务「展示到最下面」） */
+  grow?: boolean;
+  /** 分区整体拖拽重排（2026-09-17 用户裁定：三个模块可自由组合） */
+  headerProps?: {
+    onDragStart?: (e: ReactDragEvent) => void;
+    onDragEnd?: () => void;
+    onDragOver?: (e: ReactDragEvent) => void;
+    onDrop?: (e: ReactDragEvent) => void;
+  };
+  headerClass?: string;
 }) {
   return (
-    <div>
+    <div className={grow === true ? "flex flex-col flex-1 min-h-0" : undefined}>
       <div
         onClick={onToggle}
-        onDragOver={headerDrop?.onDragOver}
+        draggable={headerProps !== undefined}
+        onDragStart={headerProps?.onDragStart}
+        onDragEnd={headerProps?.onDragEnd}
+        onDragOver={(e) => {
+          headerProps?.onDragOver?.(e);
+          headerDrop?.onDragOver(e);
+        }}
         onDragLeave={headerDrop?.onDragLeave}
-        onDrop={headerDrop?.onDrop}
-        className={`group flex h-8 items-center justify-between px-2 cursor-pointer select-none rounded-lg hover:text-on-surface transition-colors ${
+        onDrop={(e) => {
+          headerProps?.onDrop?.(e);
+          headerDrop?.onDrop(e);
+        }}
+        className={`group flex h-8 items-center justify-between px-2 cursor-pointer select-none rounded-lg hover:text-on-surface transition-colors shrink-0 ${
           headerDrop?.active ? "ring-1 ring-primary" : ""
-        }`}
+        } ${headerClass ?? ""}`}
       >
         {open ? (
           <span className="text-[12.5px] font-medium text-outline">{label}</span>
@@ -1021,14 +1162,78 @@ function Section({
             拖动会话到此处
           </div>
         ) : (
-          <div
-            className={`space-y-px ${scroll === true ? "max-h-40 overflow-y-auto" : ""}`}
-            style={scroll === true ? FADE_MASK : undefined}
-          >
+          <ScrollArea grow={grow} className={scroll === true ? "max-h-40" : ""}>
             {children}
-          </div>
+          </ScrollArea>
         )
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * 滚动区域 + 底部悬浮滚动提示（2026-09-17 用户裁定，参考用户提供的 ScrollProgress 设计）：
+ * 滚动时在区域底部中央浮现小胶囊（环形进度 + 提示文案），停止滚动后淡出；
+ * 替代旧「展开全部」按钮与底部渐隐 mask。
+ */
+function ScrollArea({ className, grow, children }: {
+  className?: string;
+  grow?: boolean;
+  children: ReactNode;
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [hint, setHint] = useState({ visible: false, progress: 0, atEnd: false });
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el === null) return;
+    const onScroll = () => {
+      const max = el.scrollHeight - el.clientHeight;
+      if (max <= 4) return;
+      const progress = Math.min(1, el.scrollTop / max);
+      setHint({ visible: true, progress, atEnd: progress >= 0.995 });
+      clearTimeout(hideTimer.current);
+      hideTimer.current = setTimeout(() => setHint(h => ({ ...h, visible: false })), 700);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  const R = 7;
+  const C = 2 * Math.PI * R;
+  return (
+    <div className={`relative min-h-0 flex flex-col ${grow === true ? "flex-1" : ""}`}>
+      <div ref={scrollerRef} className={`flex-1 min-h-0 overflow-y-auto space-y-px ${className ?? ""}`}>
+        {children}
+      </div>
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute bottom-1.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 h-6 pl-1.5 pr-2.5 rounded-full border border-surface-container-highest bg-surface-container-lowest/85 backdrop-blur-md shadow-lg transition-opacity duration-200 ${
+          hint.visible ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <svg viewBox="0 0 20 20" className="w-[18px] h-[18px] -rotate-90">
+          <circle cx="10" cy="10" r={R} fill="none" strokeWidth="2.5" className="stroke-outline/25" />
+          <circle
+            cx="10"
+            cy="10"
+            r={R}
+            fill="none"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            className="stroke-on-surface-variant"
+            strokeDasharray={C}
+            strokeDashoffset={C * (1 - hint.progress)}
+          />
+        </svg>
+        <span className="text-[11px] font-medium text-on-surface-variant whitespace-nowrap">
+          {hint.atEnd ? "已到底" : "下滑查看更多"}
+        </span>
+      </div>
     </div>
   );
 }
