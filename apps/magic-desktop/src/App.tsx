@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { SessionSidebar } from "./sidebar/SessionSidebar";
-import { InspectorPanel } from "./inspector/InspectorPanel";
+// 右坞暂时隐藏（2026-09-17 用户裁定）；InspectorPanel/ReviewPanel 代码保留待回归
 import { ChatFlow } from "./conversation/ChatFlow.tsx";
 import { ChatSessionStore } from "./conversation/chat-store.ts";
 import { buildSessionMarkdown } from "./conversation/session-export.ts";
@@ -102,7 +102,7 @@ export function App() {
         <main className="flex-1 min-w-0 bg-surface">
           <ChatFlow key={activeId} store={store} />
         </main>
-        <InspectorPanel />
+        {/* 右坞暂时隐藏（2026-09-17 用户裁定）：<InspectorPanel /> */}
       </div>
     </div>
   );

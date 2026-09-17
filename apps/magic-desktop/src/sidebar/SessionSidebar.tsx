@@ -193,8 +193,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
         ws.map((w) => (w.id === fromWs ? { ...w, sessions: w.sessions.filter((s) => s !== drag.key) } : w)),
       );
     }
-    const insert = <T,>(list: readonly T[], item: T, keyOf: (x: T) => string): T[] => {
-      const next = list.filter((x) => keyOf(x) !== drag.key);
+    const insert = <T,>(list: readonly T[], item: T, keyOf: (x: T) => string, selfKey: string): T[] => {
+      const next = list.filter((x) => keyOf(x) !== selfKey);
       const beforeKey = target.beforeKey;
       if (!beforeKey) {
         next.push(item);
@@ -207,13 +207,15 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
     };
     if (target.section === "pinned") {
       const item: PinnedItem = { key: drag.key, base: drag.base, task: drag.task, origin };
-      setPinned((list) => insert(list, item, (p) => p.key));
+      setPinned((list) => insert(list, item, (p) => p.key, drag.key));
     } else if (target.section === "task") {
-      setTaskList((list) => insert(list, drag.key, (k) => k));
+      // 任务/工作区条目的键=标题；mock 置顶任务 key 是侧栏 id、base 才是会话标题，
+      // 拖出时必须落 base（否则标题丢失显示成 id）。
+      setTaskList((list) => insert(list, drag.base, (k) => k, drag.base));
     } else if (target.wsId !== undefined) {
       const targetWs = target.wsId;
       setWorkspaces((ws) =>
-        ws.map((w) => (w.id === targetWs ? { ...w, sessions: insert(w.sessions, drag.key, (s) => s) } : w)),
+        ws.map((w) => (w.id === targetWs ? { ...w, sessions: insert(w.sessions, drag.base, (s) => s, drag.base) } : w)),
       );
       setWsOpen((s) => ({ ...s, [targetWs]: true }));
     }
@@ -437,7 +439,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             {displayedPinned.map((item, i) => {
               const status = statusOf(item.task);
               const title = titleOf(item.key, item.base);
-              const nextKey = displayedPinned[i + 1]?.base ?? null;
+              // beforeKey 语义按 pinned 键（key）匹配；mock 任务 key≠base，不能取 base
+              const nextKey = displayedPinned[i + 1]?.key ?? null;
               return (
                 <a
                   key={item.key}
