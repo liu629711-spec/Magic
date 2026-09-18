@@ -130,7 +130,7 @@ function WorkspaceChip({ cwd, caret, ariaExpanded, onClick }: {
   )
 }
 
-export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, headerActions }: {
+export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpandDock, onOpenDockTab, headerActions }: {
   data: SessionHeaderData
   /** 切换会话（App 的 openSession）。 */
   onOpenSession?: (id: string) => void
@@ -463,13 +463,15 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
               </div>
             )}
           </div>
+          {/* 终端（图二/图三：⊕侧边左边的按钮 = 终端，一键开右坞终端 tab） */}
           <GhostIconButton
-            icon={dockCollapsed === true ? 'right_panel_open' : 'right_panel_close'}
-            label={dockCollapsed === true ? '展开右坞' : '收起右坞'}
-            disabled={dockCollapsed === true ? onExpandDock === undefined : onCollapseDock === undefined}
+            icon="terminal"
+            label="终端"
+            disabled={onOpenDockTab === undefined}
             onClick={() => {
               setMenu(null)
-              ;(dockCollapsed === true ? onExpandDock : onCollapseDock)?.()
+              onExpandDock?.()
+              onOpenDockTab?.('terminal')
             }}
           />
           {/* ⊕侧边（图二实测语义：打开右坞侧聊 fork 面板） */}
@@ -487,6 +489,19 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
             <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden>add_circle</span>
             <span>侧边</span>
           </button>
+          {/* 右坞开关只在收起态出现在顶栏（图二最右；展开态的开关在 tab 行最右 ◨）：
+              收起后右坞整体消失（无竖条），此钮是唯一恢复入口。 */}
+          {dockCollapsed === true && (
+            <GhostIconButton
+              icon="right_panel_open"
+              label="打开右坞"
+              disabled={onExpandDock === undefined}
+              onClick={() => {
+                setMenu(null)
+                onExpandDock?.()
+              }}
+            />
+          )}
         </div>
 
       </div>

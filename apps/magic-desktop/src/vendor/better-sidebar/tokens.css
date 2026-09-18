@@ -44,6 +44,16 @@ body {
   --dsw-alias-state-warn-tertiary: rgba(229, 192, 123, 0.18); /* 近似（warn 淡底） */
   --dsw-alias-state-warn-label: #e5c07b; /* 近似（同 warn-primary） */
 
+  /* ── static 固定色（2026-09-18 补：FileTypeIcon 彩色文件图标引用；宿主定义于
+   * ui-theme design-platform.css，值主题无关。缺失时图标回退 currentColor 单色）── */
+  --dsw-static-amber-400: rgb(247, 173, 49);
+  --dsw-static-amber-500: rgb(245, 158, 11);
+  --dsw-static-deepseek-450: rgb(86, 134, 254);
+  --dsw-static-deepseek-500: rgb(65, 118, 230);
+  --dsw-static-green-500: rgb(34, 197, 94);
+  --dsw-static-neutral-bluish-300: rgb(207, 211, 214);
+  --dsw-static-red-600: rgb(236, 19, 19);
+
   /* ── 字体（--dsw-font-* 为 font 简写；Magic 用 Inter / JetBrains Mono）── */
   --dsw-font-xxxs-11: 400 11px/14px Inter, 'Segoe UI', system-ui, sans-serif; /* 近似行高 */
   --dsw-font-xxxs-strong-11: 600 11px/14px Inter, 'Segoe UI', system-ui, sans-serif; /* 近似行高 */

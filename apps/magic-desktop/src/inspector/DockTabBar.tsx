@@ -1,6 +1,6 @@
 import { Icon } from '../sidebar/Icon'
 
-export type DockTabId = 'start' | 'changes' | 'terminal' | 'files' | 'team' | 'jobs' | 'browser' | 'sidechat'
+export type DockTabId = 'start' | 'changes' | 'terminal' | 'files' | 'team' | 'jobs' | 'browser' | 'sidechat' | `editor:${string}`
 export interface DockTabDef { id: DockTabId; label: string; icon: string }
 const button = 'h-7 w-7 shrink-0 rounded flex items-center justify-center text-outline hover:bg-surface-container-high hover:text-on-surface active:bg-surface-container-highest focus-visible:outline focus-visible:outline-primary disabled:opacity-40 disabled:cursor-not-allowed'
 

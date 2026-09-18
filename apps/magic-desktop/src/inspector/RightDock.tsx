@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Icon } from "../sidebar/Icon";
 import { api, createSidebarStore, DiffFiles, FileTree, formatBytes, relativeTo, TerminalView, t } from "../vendor/better-sidebar/index.ts";
+import { downloadUrl } from "../vendor/better-sidebar/api.ts";
 import { toggleExpanded, type SidebarSnapshot, type SidebarStore } from "../vendor/better-sidebar/state.ts";
 import type { GitStatusEntry, GitStatusResult, SessionScope } from "../vendor/better-sidebar/api.ts";
 import { loadPrefs } from "../vendor/better-sidebar/prefs.ts";
@@ -44,21 +45,37 @@ export function RightDock({sessionId,cwd,onQuoteFile,teamOpenToken,sendIntervent
  const scope = useMemo<SessionScope>(()=>({sessionId,cwd:resolvedCwd}),[sessionId,resolvedCwd]);
  const [opened,setOpened] = useState<DockTabId[]>([]);
  const [active,setActive] = useState<DockTabId>('start');
- const [previewPath,setPreviewPath] = useState<string|null>(null);
  const [changesCount,setChangesCount] = useState<number|null>(null);
+ // editor tab（图五官方语义：文件在 tab 里打开，每个文件一个 tab，按路径去重聚焦）。
+ // id = `editor:<绝对路径>`；文件树点击 / 对话文件 chip / mention / 团队产出都走 openEditor。
+ const [editorTabs,setEditorTabs] = useState<{id:DockTabId;path:string}[]>([]);
  const reopenTab = useCallback((id:DockTabId)=>{if(id!=='start')setOpened(prev=>prev.includes(id)?prev:[...prev,id]);setActive(id)},[]);
- const openFileInDock = useCallback((path:string)=>{const resolved=resolveFilePath(path,resolvedCwd);if(resolved!==null){setPreviewPath(resolved);reopenTab('files')}},[resolvedCwd,reopenTab]);
+ const openEditor = useCallback((path:string)=>{
+   const resolved = resolveFilePath(path,resolvedCwd);
+   if(resolved===null) return;
+   const id: DockTabId = `editor:${resolved}`;
+   setEditorTabs(prev=>prev.some(tab=>tab.id===id)?prev:[...prev,{id,path:resolved}]);
+   setActive(id);
+ },[resolvedCwd]);
+ const openFileInDock = openEditor;
  const lastFile = useRef(0);
  useEffect(()=>{if(fileRequest && fileRequest.sessionId===sessionId && fileRequest.seq!==lastFile.current){if(!resolvedCwd && !/^(?:[a-z]:[\\/]|[/\\])/i.test(fileRequest.path))return;lastFile.current=fileRequest.seq;openFileInDock(fileRequest.path)}},[fileRequest,sessionId,openFileInDock,resolvedCwd]);
  const lastTab = useRef(0);
  useEffect(()=>{if(dockTabRequest && dockTabRequest.sessionId===sessionId && dockTabRequest.seq!==lastTab.current){lastTab.current=dockTabRequest.seq;const tab=[...DOCK_TABS,{id:'team' as const},START].find(t=>t.id===dockTabRequest.tab);if(tab)reopenTab(tab.id)}},[dockTabRequest,sessionId,reopenTab]);
  const lastTeam=useRef(teamOpenToken ?? 0);
  useEffect(()=>{if(teamOpenToken!==undefined && lastTeam.current!==teamOpenToken){lastTeam.current=teamOpenToken;reopenTab('team')}},[teamOpenToken,reopenTab]);
- const closeTab=(id:DockTabId)=>{const next=opened.filter(t=>t!==id);setOpened(next);if(active===id)setActive(next.at(-1)??'start');if(id==='files')setPreviewPath(null)};
- const definitions=[...DOCK_TABS,{id:'team' as const,label:'团队',icon:'groups'}];
- const tabs=[...(active==='start'||opened.length===0?[START]:[]),...opened.map(id=>definitions.find(t=>t.id===id)!).filter(Boolean)];
- return <aside data-right-dock className={'vendor-bs min-h-0 bg-surface-container-lowest border-l border-surface-container-highest flex flex-col overflow-hidden shrink-0 ' + (collapsed?'w-[44px]':fullscreen?'flex-1 min-w-0':'w-[min(520px,42vw)]')}>
- <div className={collapsed?'hidden':'contents'}>
+ // 会话切换：editor tab 的路径属于上一会话 cwd，全部关闭。
+ useEffect(()=>{setEditorTabs([])},[sessionId]);
+ const closeTab=(id:DockTabId)=>{
+   if(id.startsWith('editor:')){setEditorTabs(prev=>prev.filter(tab=>tab.id!==id));if(active===id)setActive('start');return}
+   const next=opened.filter(t=>t!==id);setOpened(next);if(active===id)setActive(next.at(-1)??'start');
+ };
+ const definitions=[...DOCK_TABS,{id:'team' as const,label:'团队',icon:'groups'},...editorTabs.map(tab=>({id:tab.id as DockTabId,label:tab.path.slice(Math.max(tab.path.lastIndexOf('/'),tab.path.lastIndexOf('\\'))+1),icon:'description'}))];
+ const tabs=[...(active==='start'||opened.length===0&&editorTabs.length===0?[START]:[]),...opened.map(id=>definitions.find(t=>t.id===id)!).filter(Boolean),...editorTabs.map(tab=>definitions.find(t=>t.id===tab.id)!).filter(Boolean)];
+ // 收起 = 右坞整体消失（图二：无竖条单独区域；顶栏 ◨ 是唯一恢复入口）。
+ if(collapsed===true) return null;
+ return <aside data-right-dock className={'vendor-bs min-h-0 bg-surface-container-lowest border-l border-surface-container-highest flex flex-col overflow-hidden shrink-0 ' + (fullscreen?'flex-1 min-w-0':'w-[min(520px,42vw)]')}>
+ <div className='contents'>
  <DockTabBar tabs={tabs} active={active} changesCount={changesCount} fullscreen={fullscreen===true} onToggleFullscreen={onToggleFullscreen} onSelect={setActive} onCloseTab={closeTab} onStart={()=>setActive('start')} onCollapse={onToggleCollapsed}/>
  {active==='start' && <div data-dock-guide className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2.5 overflow-y-auto py-6">
   {/* 罗盘英雄图（官方 GuideBody.tsx:70-83 CompassGlyph 56px 语义） */}
@@ -74,39 +91,37 @@ export function RightDock({sessionId,cwd,onQuoteFile,teamOpenToken,sendIntervent
   {!sessionId && <p className="pt-2 text-xs text-outline">选择会话后打开面板</p>}
  </div>}
  {opened.map(id=><div key={id} hidden={active!==id} className={active===id?'flex-1 min-h-0 flex flex-col':'hidden'}>
- {id==='files'?<FilesTab scope={scope} store={store} snapshot={snapshot} onQuoteFile={onQuoteFile} previewPath={previewPath} onOpenPreview={openFileInDock} onClosePreview={()=>setPreviewPath(null)}/>:
+ {id==='files'?<FilesTab scope={scope} store={store} snapshot={snapshot} onQuoteFile={onQuoteFile} onOpenFile={openEditor}/>:
  id==='changes'?<ChangesTab scope={scope} onCountChange={setChangesCount}/>:
  id==='terminal'?<TerminalView scope={scope} tabId={DOCK_TERMINAL_TAB} store={store}/>:
  id==='browser'?<DockBrowser store={store}/>:
  id==='jobs'?<DockJobs scope={scope} bridge={bridge}/>:
- id==='sidechat'?<DockSideChat scope={scope} bridge={bridge} onOpenFile={openFileInDock}/>:
- <CeoWorkspace sessionId={sessionId} sendIntervention={sendIntervention} onOpenFile={openFileInDock} onClose={()=>closeTab('team')} t={ceoT}/>}
+ id==='sidechat'?<DockSideChat scope={scope} bridge={bridge} onOpenFile={openEditor}/>:
+ <CeoWorkspace sessionId={sessionId} sendIntervention={sendIntervention} onOpenFile={openEditor} onClose={()=>closeTab('team')} t={ceoT}/>}
+ </div>)}
+ {editorTabs.map(tab=><div key={tab.id} hidden={active!==tab.id} className={active===tab.id?'flex-1 min-h-0 flex flex-col':'hidden'}>
+  <EditorPane scope={scope} path={tab.path} onQuote={onQuoteFile} onDeleted={()=>closeTab(tab.id)} />
  </div>)}
  </div>
- {collapsed && <button type="button" aria-label="展开右坞" className="h-10 text-outline hover:text-on-surface" onClick={onToggleCollapsed}><Icon name="right_panel_open" /></button>}
  </aside>
 }
 
 
-/** 文件 tab：真实文件树 + 真实上传（拖拽 / 右键「上传到此处」）+ 坞内文件预览 + @引用。
- *  预览状态由 RightDock 持有（团队 tab 的产出文件点击也要复用坞内预览）。 */
+/** 文件 tab：真实文件树 + 真实上传（拖拽 / 右键「上传到此处」）+ @引用。
+ *  文件打开走 openEditor（每个文件一个 editor tab，图五官方语义），本 tab 只承载树。 */
 function FilesTab({
   scope,
   store,
   snapshot,
   onQuoteFile,
-  previewPath,
-  onOpenPreview,
-  onClosePreview,
+  onOpenFile,
 }: {
   scope: SessionScope;
   store: SidebarStore;
   snapshot: SidebarSnapshot;
   onQuoteFile?: (path: string) => void;
-  /** 坞内预览的文件（绝对路径）；null = 显示文件树。 */
-  previewPath: string | null;
-  onOpenPreview: (path: string) => void;
-  onClosePreview: () => void;
+  /** 树文件行点击 → 打开 editor tab。 */
+  onOpenFile: (path: string) => void;
 }) {
   const [refreshTick, setRefreshTick] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -132,48 +147,32 @@ function FilesTab({
   };
 
   return (
-    <>
+    <div className="contents">
       {hint !== null && (
         <div className="shrink-0 px-3 py-1.5 text-[12px] text-on-surface-variant border-b border-surface-container-highest">
           {hint}
         </div>
       )}
-      {/* 预览时把树隐藏而非卸载（保留其已加载的目录缓存与滚动位置）；
-          display:contents 让 FileTree 根仍是坞 flex 列的直属项。 */}
-      <div className={previewPath !== null ? "hidden" : "contents"}>
-        <FileTree
-          sessionId={scope.sessionId}
-          cwd={scope.cwd}
-          store={store}
-          expanded={expanded}
-          revealed={NO_REVEALED}
-          onToggle={path => {
-            store.reduce(state => toggleExpanded(state, path));
-          }}
-          // 行点击 → 坞内预览（FileTree 只对文件行调 onOpenFile）。
-          onOpenFile={path => {
-            onOpenPreview(path);
-          }}
-          // 行上「@文件」→ 对话输入框草稿（跨模块桥，经 App 注入 PromptBar）。
-          onReferenceFile={path => {
-            quote(path);
-          }}
-          refreshTick={refreshTick}
-          onUploadRequest={onUploadRequest}
-          busy={busy}
-        />
-      </div>
-      {previewPath !== null && (
-        <FilePreview
-          scope={scope}
-          path={previewPath}
-          onClose={onClosePreview}
-          onQuote={() => {
-            quote(previewPath);
-          }}
-        />
-      )}
-    </>
+      <FileTree
+        sessionId={scope.sessionId}
+        cwd={scope.cwd}
+        store={store}
+        expanded={expanded}
+        revealed={NO_REVEALED}
+        onToggle={path => {
+          store.reduce(state => toggleExpanded(state, path));
+        }}
+        // 行点击 → editor tab（FileTree 只对文件行调 onOpenFile）。
+        onOpenFile={onOpenFile}
+        // 行上「@文件」→ 对话输入框草稿（跨模块桥，经 App 注入 PromptBar）。
+        onReferenceFile={path => {
+          quote(path);
+        }}
+        refreshTick={refreshTick}
+        onUploadRequest={onUploadRequest}
+        busy={busy}
+      />
+    </div>
   );
 }
 
@@ -205,35 +204,51 @@ function capPreviewText(content: string, hostTruncated: boolean): PreviewState {
 }
 
 /**
- * 坞内文件预览：真实 /sidebar/api/fs.read。头部 = 返回 + 路径 +「@ 引用」；
- * 正文等宽字体 + 行号栏（两列 pre，行号仅一个文本节点，无逐行 DOM）；
- * 二进制 / 读失败给友好提示，绝不显示假内容。
+ * editor tab 内容（图五官方语义：每个打开的文件一个 tab；对齐插件 TextEditor/EditorHost
+ * 的操作面，引擎用轻量实现——官方 CodeMirror 依赖 20+ 包不引入）：
+ * - 查看：等宽 + 行号（两列 pre）；截断提示；二进制给下载（downloadUrl）；读失败友好态。
+ * - 操作：编辑切换（textarea）+ 保存（fs.write，Ctrl/Cmd+S）+ 重命名（fs.rename）+
+ *   删除（fs.remove，确认）+ 刷新 + 复制路径 + 下载 + 「@ 引用」。
  */
-function FilePreview({
+function EditorPane({
   scope,
   path,
-  onClose,
   onQuote,
+  onDeleted,
 }: {
   scope: SessionScope;
   path: string;
-  onClose: () => void;
-  onQuote: () => void;
+  onQuote?: (path: string) => void;
+  /** 删除成功后回调（RightDock 关闭该 tab）。 */
+  onDeleted?: () => void;
 }) {
   const [state, setState] = useState<PreviewState>({ kind: "loading" });
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [draft, setDraft] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  // 删除两段确认（面板内确认条；window.confirm 在部分环境不可靠）。
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     let cancelled = false;
     setState({ kind: "loading" });
     api
       .fsRead(scope, path)
       .then(view => {
         if (cancelled) return;
-        setState(
-          view.kind === "text"
-            ? capPreviewText(view.content, view.truncated)
-            : { kind: "binary", size: view.size },
-        );
+        if (view.kind === "text") {
+          const next = capPreviewText(view.content, view.truncated);
+          setState(next);
+          setDraft(next.kind === "text" ? next.content : "");
+        } else {
+          setState({ kind: "binary", size: view.size });
+        }
+        setDirty(false);
+        setMode("view");
       })
       .catch(reason => {
         if (cancelled) return;
@@ -244,41 +259,154 @@ function FilePreview({
     };
   }, [scope, path]);
 
+  useEffect(() => load(), [load]);
+
+  const save = useCallback(() => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    void api
+      .fsWrite(scope, path, draft)
+      .then(() => setNotice("已保存"))
+      .catch(reason => setNotice(`保存失败：${errorMessage(reason)}`))
+      .finally(() => setBusy(false));
+  }, [busy, draft, path, scope]);
+
+  // Ctrl/Cmd+S 保存（编辑模式）。
+  useEffect(() => {
+    if (mode !== "edit") return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        save();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mode, save]);
+
+  const rename = useCallback(() => {
+    const next = renameValue.trim();
+    setRenaming(false);
+    if (next.length === 0 || next === path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1)) return;
+    setBusy(true);
+    setNotice(null);
+    void api
+      .fsRename(scope, path, next)
+      .then(() => setNotice(`已重命名为 ${next}`))
+      .catch(reason => setNotice(`重命名失败：${errorMessage(reason)}`))
+      .finally(() => setBusy(false));
+  }, [path, renameValue, scope]);
+
+  const remove = useCallback(() => {
+    setBusy(true);
+    setNotice(null);
+    void api
+      .fsRemove(scope, path)
+      .then(() => onDeleted?.())
+      .catch(reason => setNotice(`删除失败：${errorMessage(reason)}`))
+      .finally(() => setBusy(false));
+  }, [onDeleted, path, scope]);
+
   /** 相对 cwd 的展示路径（会话 cwd 未知时退回绝对路径）。 */
   const shownPath = scope.cwd !== undefined ? relativeTo(scope.cwd, path) : path;
+  const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
   const lineNumberText =
-    state.kind === "text"
-      ? Array.from({ length: state.lines }, (_, i) => String(i + 1)).join("\n")
-      : "";
+    mode === "edit"
+      ? ""
+      : state.kind === "text"
+        ? Array.from({ length: state.lines }, (_, i) => String(i + 1)).join("\n")
+        : "";
+
+  const iconButton = "w-6 h-6 shrink-0 rounded flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <div className="h-9 shrink-0 flex items-center gap-1.5 px-2 border-b border-surface-container-highest">
+      <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-surface-container-highest">
+        {renaming ? (
+          <input
+            autoFocus
+            value={renameValue}
+            onChange={event => setRenameValue(event.target.value)}
+            onBlur={rename}
+            onKeyDown={event => {
+              if (event.key === "Enter") rename();
+              if (event.key === "Escape") setRenaming(false);
+            }}
+            className="h-6 w-40 rounded border border-primary bg-field px-1.5 text-[12px] text-on-surface outline-none"
+          />
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-[12px] text-on-surface" title={path}>
+            {shownPath}
+          </span>
+        )}
+        {mode === "edit" ? (
+          <>
+            <span className="shrink-0 text-[11px] text-outline">{dirty ? "未保存" : "无改动"}</span>
+            <button type="button" title="保存（Ctrl+S）" disabled={!dirty || busy} onClick={save} className={iconButton}>
+              <Icon name="save" className="text-[15px]" />
+            </button>
+            <button type="button" title="退出编辑" onClick={() => { setMode("view"); setDraft(state.kind === "text" ? state.content : ""); setDirty(false); }} className={iconButton}>
+              <Icon name="close" className="text-[15px]" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" title="编辑" disabled={state.kind !== "text"} onClick={() => { setDraft(state.kind === "text" ? state.content : ""); setMode("edit"); }} className={iconButton}>
+              <Icon name="edit" className="text-[15px]" />
+            </button>
+            <button type="button" title="刷新" onClick={load} className={iconButton}>
+              <Icon name="refresh" className="text-[15px]" />
+            </button>
+          </>
+        )}
+        <button type="button" title="复制路径" onClick={() => { void navigator.clipboard.writeText(path).catch(() => undefined); }} className={iconButton}>
+          <Icon name="content_copy" className="text-[15px]" />
+        </button>
+        <a href={downloadUrl(scope, path)} title="下载" className={iconButton}>
+          <Icon name="download" className="text-[15px]" />
+        </a>
+        <button type="button" title="重命名" disabled={busy} onClick={() => { setRenameValue(name); setRenaming(true); }} className={iconButton}>
+          <Icon name="drive_file_rename_outline" className="text-[15px]" />
+        </button>
         <button
           type="button"
-          title="返回文件树"
-          aria-label="返回文件树"
-          onClick={onClose}
-          className="w-6 h-6 shrink-0 rounded flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
+          title="删除"
+          disabled={busy}
+          onClick={() => setConfirmingDelete(true)}
+          className={iconButton}
         >
-          <Icon name="arrow_back" className="text-[15px]" />
+          <Icon name="delete" className="text-[15px]" />
         </button>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-on-surface" title={path}>
-          {shownPath}
-        </span>
         <button
           type="button"
           title="引用到对话输入框"
-          onClick={onQuote}
+          onClick={() => onQuote?.(path)}
           className="shrink-0 h-6 px-2 rounded text-[12px] text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
         >
           @ 引用
         </button>
       </div>
 
-      {state.kind === "text" && state.truncated && (
+      {(state.kind === "text" && state.truncated && mode === "view") && (
         <div className="shrink-0 px-3 py-1.5 text-[12px] text-on-surface-variant border-b border-surface-container-highest">
-          文件过大，仅显示前 {state.lines} 行
+          文件过大，仅显示前 {state.lines} 行（编辑模式保存会以当前加载内容为准）
+        </div>
+      )}
+      {notice !== null && (
+        <div className="shrink-0 px-3 py-1.5 text-[12px] text-on-surface-variant border-b border-surface-container-highest" role="status">
+          {notice}
+        </div>
+      )}
+      {confirmingDelete && (
+        <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 text-[12px] border-b border-surface-container-highest bg-error-container/20" role="alertdialog" aria-label="确认删除">
+          <span className="min-w-0 flex-1 truncate text-on-surface-variant">确认删除 {name}？此操作不可撤销。</span>
+          <button type="button" disabled={busy} onClick={() => { setConfirmingDelete(false); remove(); }} className="h-6 px-2 rounded bg-error-container text-on-error-container text-[12px] hover:opacity-90 disabled:opacity-40 cursor-pointer">
+            删除
+          </button>
+          <button type="button" onClick={() => setConfirmingDelete(false)} className="h-6 px-2 rounded text-[12px] text-outline hover:text-on-surface hover:bg-surface-container cursor-pointer">
+            取消
+          </button>
         </div>
       )}
 
@@ -288,9 +416,21 @@ function FilePreview({
         ) : state.kind === "error" ? (
           <Placeholder tone="error">读取失败：{state.message}</Placeholder>
         ) : state.kind === "binary" ? (
-          <Placeholder>二进制文件（{formatBytes(state.size)}），暂不支持预览</Placeholder>
+          <div className="flex flex-col items-center justify-center gap-3 py-10">
+            <Placeholder>二进制文件（{formatBytes(state.size)}）</Placeholder>
+            <a href={downloadUrl(scope, path)} className="h-8 px-3 flex items-center rounded-lg bg-inverse-surface text-inverse-on-surface text-[13px] hover:opacity-90">
+              下载文件
+            </a>
+          </div>
         ) : state.content.length === 0 ? (
           <Placeholder>空文件</Placeholder>
+        ) : mode === "edit" ? (
+          <textarea
+            value={draft}
+            onChange={event => { setDraft(event.target.value); setDirty(event.target.value !== state.content); }}
+            spellCheck={false}
+            className="w-full h-full min-h-0 resize-none bg-transparent px-3 py-2 font-mono text-[12px] leading-[18px] text-on-surface outline-none"
+          />
         ) : (
           <div className="flex min-h-full w-max min-w-full">
             <pre
