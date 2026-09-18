@@ -6,33 +6,39 @@
  *
  * 数据全部来自本机 dsh web 实例的 /sidebar/* 真实路由（经 Vite 代理同源），无 mock：
  * - 文件     → FileTree + /sidebar/api/fs.tree（根 = 当前会话 cwd，懒加载逐层列目录）
+ *              + 行点击 → 坞内文件预览（fs.read 真实内容）；行上「@文件」→ 对话输入框草稿
  * - 文件变动 → /sidebar/api/git.status 列真实改动 + /sidebar/api/git.diff 取真实 diff，
  *              diff 体渲染复用 vendored DiffFiles
  * - 终端     → TerminalView + /sidebar/ws/terminal（真实 PTY，支持 echo hi 等输入）
  * 没有打开会话时三个 tab 都显示「选择一个会话」。
  *
  * 诚实边界（本坞目前没接通的部分，代码里都是显式空实现，不造假数据）：
- * - FileTree 的行点击（坞内文件预览面板未接）与 @引用按钮（需要写入对话区输入框草稿，
- *   跨模块桥未接），见 FilesTab 里的 onOpenFile / onReferenceFile。
  * - 设计稿原有的「审查 / 浏览器 / 侧边聊天」无可靠真实数据源，未放入 tab 栏。
  * - 历史提交（git.log）与暂存/提交操作未接：本坞只做「看」的真实闭环。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Icon } from "../sidebar/Icon";
-import { api, createSidebarStore, DiffFiles, FileTree, TerminalView, t } from "../vendor/better-sidebar/index.ts";
+import { api, createSidebarStore, DiffFiles, FileTree, formatBytes, relativeTo, TerminalView, t } from "../vendor/better-sidebar/index.ts";
 import { toggleExpanded, type SidebarSnapshot, type SidebarStore } from "../vendor/better-sidebar/state.ts";
 import type { GitStatusEntry, GitStatusResult, SessionScope } from "../vendor/better-sidebar/api.ts";
 import { loadPrefs } from "../vendor/better-sidebar/prefs.ts";
 import { summarizeResults, uploadHintText, uploadToDir, type UploadItem } from "../vendor/better-sidebar/upload.ts";
+// CEO 委派图卡右坞（2026-09-18）：图卡点成员/CEO 节点打开的「团队」tab = 成员详情 / 团队总览。
+import { CeoWorkspace } from "../vendor/ceo/client/CeoWorkspace.ts";
+import { ceoT } from "../vendor/ceo/client/dict.ts";
+import { getCeoRoster, getCeoRosterSessionId, getSelectedCeoMember, subscribeCeoSelection } from "../vendor/ceo/client/selection.ts";
+import { displayCeoSeat } from "../vendor/ceo/team.ts";
 
-/** 可用 tab：原设计稿的「审查/浏览器/侧边聊天」无真实数据源，不放入（诚实处理）。 */
-type DockTabId = "files" | "changes" | "terminal";
+/** 可用 tab：原设计稿的「审查/浏览器/侧边聊天」无真实数据源，不放入（诚实处理）。
+ *  「团队」tab 仅在 CEO 名册非空、或被图卡 openWorkspace 显式打开时出现（避免死 tab）。 */
+type DockTabId = "files" | "changes" | "terminal" | "team";
 
 const DOCK_TABS: { id: DockTabId; label: string; icon: string }[] = [
   { id: "files", label: "文件", icon: "folder" },
   { id: "changes", label: "文件变动", icon: "difference" },
   { id: "terminal", label: "终端", icon: "terminal" },
 ];
+const TEAM_TAB_ICON = "groups";
 
 /**
  * 终端 tab id：非 `agent:` 前缀即宿主眼里的「UI 终端」，宿主按 (sessionId, tab)
@@ -43,7 +49,16 @@ const DOCK_TERMINAL_TAB = "terminal:magic-rightdock";
 /** 空数组常量：FileTree 的 revealed 入参（避免每次渲染新建引用触发其内部 memo 失效）。 */
 const NO_REVEALED: string[] = [];
 
-export function RightDock({ sessionId, cwd }: { sessionId: string; cwd: string | undefined }) {
+export function RightDock({ sessionId, cwd, onQuoteFile, teamOpenToken, sendIntervention }: {
+  sessionId: string;
+  cwd: string | undefined;
+  /** @ 引用桥：把 `@<相对路径> ` 注入对话输入框草稿（App 持注入 token）。 */
+  onQuoteFile?: (path: string) => void;
+  /** 图卡点成员/CEO 节点：token 自增 → 切到「团队」tab（App 持 token）。 */
+  teamOpenToken?: number;
+  /** 成员干预（halt/redirect/resume/retry/replan）写回当前会话（App 的 promptToSession）。 */
+  sendIntervention?: (message: string) => void;
+}) {
   // 一个会话一份侧栏状态（展开集合 / 布局），store 实例随坞存活，会话切换只换内部状态。
   const storeRef = useRef<SidebarStore | undefined>(undefined);
   if (storeRef.current === undefined) storeRef.current = createSidebarStore();
@@ -89,9 +104,41 @@ export function RightDock({ sessionId, cwd }: { sessionId: string; cwd: string |
   const [active, setActive] = useState<DockTabId>("files");
   const open = sessionId.length > 0;
 
+  // 团队 tab（2026-09-18）：订阅 selection store 的名册/选中态（图卡 publishCeoTeam 写入）。
+  const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster);
+  const selectedMember = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
+  const rosterSessionId = useSyncExternalStore(subscribeCeoSelection, getCeoRosterSessionId, getCeoRosterSessionId);
+  // 被图卡显式打开过（openWorkspace token 自增）后，即使名册暂空也保留 tab（避免死 tab 消失）。
+  const [teamForced, setTeamForced] = useState(false);
+  const lastTeamToken = useRef(teamOpenToken ?? 0);
+  useEffect(() => {
+    const token = teamOpenToken ?? 0;
+    if (token === lastTeamToken.current) return;
+    lastTeamToken.current = token;
+    setTeamForced(true);
+    setActive("team");
+  }, [teamOpenToken]);
+  // 名册是模块级单例：切换会话时收起显式打开态，且只认当前会话的名册
+  // （否则非 CEO 会话会残留上一个会话的「团队」死 tab）。
+  useEffect(() => { setTeamForced(false); }, [sessionId]);
+  const rosterHere = rosterSessionId === undefined || rosterSessionId === sessionId;
+  const showTeam = open && ((roster.length > 0 && rosterHere) || teamForced);
+  const teamTitle = selectedMember === null ? "团队总览" : displayCeoSeat(selectedMember, roster);
+  const dockTabs = showTeam
+    ? [...DOCK_TABS, { id: "team" as DockTabId, label: teamTitle, icon: TEAM_TAB_ICON }]
+    : DOCK_TABS;
+
+  // 文件预览状态上提：团队 tab 的产出文件点击复用坞内预览（切回文件 tab + 打开路径）。
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  useEffect(() => { setPreviewPath(null); }, [sessionId]);
+  const openFileInDock = useCallback((path: string) => {
+    setPreviewPath(path);
+    setActive("files");
+  }, []);
+
   return (
     <aside className="vendor-bs w-[520px] shrink-0 bg-surface-container-lowest border-l border-surface-container-highest flex flex-col overflow-hidden">
-      <DockTabBar active={active} onSelect={setActive} disabled={!open} />
+      <DockTabBar tabs={dockTabs} active={active} onSelect={setActive} disabled={!open} />
       {!open ? (
         <div className="flex-1 min-h-0 flex items-center justify-center text-[13px] text-outline">
           选择一个会话
@@ -100,9 +147,25 @@ export function RightDock({ sessionId, cwd }: { sessionId: string; cwd: string |
         /* flex 列容器：vendored 组件根（.explorerBody / .terminalWrap）是 flex:1，需要确定高度的父层 */
         <div className="flex-1 min-h-0 flex flex-col">
           {active === "files" ? (
-            <FilesTab scope={scope} store={store} snapshot={snapshot} />
+            <FilesTab
+              scope={scope}
+              store={store}
+              snapshot={snapshot}
+              onQuoteFile={onQuoteFile}
+              previewPath={previewPath}
+              onOpenPreview={setPreviewPath}
+              onClosePreview={() => { setPreviewPath(null); }}
+            />
           ) : active === "changes" ? (
             <ChangesTab scope={scope} />
+          ) : active === "team" ? (
+            <CeoWorkspace
+              sessionId={sessionId}
+              sendIntervention={sendIntervention}
+              onOpenFile={openFileInDock}
+              onClose={() => { setActive("files"); }}
+              t={ceoT}
+            />
           ) : (
             <TerminalView scope={scope} tabId={DOCK_TERMINAL_TAB} store={store} />
           )}
@@ -113,17 +176,19 @@ export function RightDock({ sessionId, cwd }: { sessionId: string; cwd: string |
 }
 
 function DockTabBar({
+  tabs,
   active,
   onSelect,
   disabled,
 }: {
+  tabs: { id: DockTabId; label: string; icon: string }[];
   active: DockTabId;
   onSelect: (id: DockTabId) => void;
   disabled: boolean;
 }) {
   return (
     <div className="h-10 shrink-0 bg-surface-container-lowest border-b border-surface-container-highest flex items-center px-2 select-none gap-0.5">
-      {DOCK_TABS.map(tab => {
+      {tabs.map(tab => {
         const isActive = tab.id === active;
         const tone = isActive
           ? "border-b-2 border-primary bg-surface-container text-on-surface font-medium"
@@ -148,20 +213,35 @@ function DockTabBar({
   );
 }
 
-/** 文件 tab：真实文件树 + 真实上传（拖拽 / 右键「上传到此处」）。 */
+/** 文件 tab：真实文件树 + 真实上传（拖拽 / 右键「上传到此处」）+ 坞内文件预览 + @引用。
+ *  预览状态由 RightDock 持有（团队 tab 的产出文件点击也要复用坞内预览）。 */
 function FilesTab({
   scope,
   store,
   snapshot,
+  onQuoteFile,
+  previewPath,
+  onOpenPreview,
+  onClosePreview,
 }: {
   scope: SessionScope;
   store: SidebarStore;
   snapshot: SidebarSnapshot;
+  onQuoteFile?: (path: string) => void;
+  /** 坞内预览的文件（绝对路径）；null = 显示文件树。 */
+  previewPath: string | null;
+  onOpenPreview: (path: string) => void;
+  onClosePreview: () => void;
 }) {
   const [refreshTick, setRefreshTick] = useState(0);
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const expanded = snapshot.state?.expanded ?? [];
+
+  /** @ 引用：FileTree 给的是绝对路径，桥只传相对路径（宿主的 @ 语义）。 */
+  const quote = (path: string): void => {
+    onQuoteFile?.(relativeTo(scope.cwd ?? "", path));
+  };
 
   const onUploadRequest = (dir: string, items: UploadItem[]): void => {
     if (items.length === 0) return;
@@ -183,24 +263,174 @@ function FilesTab({
           {hint}
         </div>
       )}
-      <FileTree
-        sessionId={scope.sessionId}
-        cwd={scope.cwd}
-        store={store}
-        expanded={expanded}
-        revealed={NO_REVEALED}
-        onToggle={path => {
-          store.reduce(state => toggleExpanded(state, path));
-        }}
-        // 坞内文件预览面板未接：点击行暂为显式空实现（不是假的预览数据）。
-        onOpenFile={() => {}}
-        // @引用需要写入对话区输入框草稿，跨模块桥未接：显式空实现。
-        onReferenceFile={() => {}}
-        refreshTick={refreshTick}
-        onUploadRequest={onUploadRequest}
-        busy={busy}
-      />
+      {/* 预览时把树隐藏而非卸载（保留其已加载的目录缓存与滚动位置）；
+          display:contents 让 FileTree 根仍是坞 flex 列的直属项。 */}
+      <div className={previewPath !== null ? "hidden" : "contents"}>
+        <FileTree
+          sessionId={scope.sessionId}
+          cwd={scope.cwd}
+          store={store}
+          expanded={expanded}
+          revealed={NO_REVEALED}
+          onToggle={path => {
+            store.reduce(state => toggleExpanded(state, path));
+          }}
+          // 行点击 → 坞内预览（FileTree 只对文件行调 onOpenFile）。
+          onOpenFile={path => {
+            onOpenPreview(path);
+          }}
+          // 行上「@文件」→ 对话输入框草稿（跨模块桥，经 App 注入 PromptBar）。
+          onReferenceFile={path => {
+            quote(path);
+          }}
+          refreshTick={refreshTick}
+          onUploadRequest={onUploadRequest}
+          busy={busy}
+        />
+      </div>
+      {previewPath !== null && (
+        <FilePreview
+          scope={scope}
+          path={previewPath}
+          onClose={onClosePreview}
+          onQuote={() => {
+            quote(previewPath);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** 预览截断阈值（客户端兜底；宿主 fs.read 自身也可能截断，两者取其一即提示）。 */
+const PREVIEW_MAX_LINES = 4000;
+const PREVIEW_MAX_BYTES = 256 * 1024;
+
+/** 预览面板的数据态：加载中 / 文本（含是否截断）/ 二进制 / 读失败。 */
+type PreviewState =
+  | { kind: "loading" }
+  | { kind: "text"; content: string; truncated: boolean; lines: number }
+  | { kind: "binary"; size: number }
+  | { kind: "error"; message: string };
+
+/** 应用客户端截断：先按字节截（避免超长单行），再按行数截。 */
+function capPreviewText(content: string, hostTruncated: boolean): PreviewState {
+  let text = content;
+  let truncated = hostTruncated;
+  if (text.length > PREVIEW_MAX_BYTES) {
+    text = text.slice(0, PREVIEW_MAX_BYTES);
+    truncated = true;
+  }
+  const allLines = text.split("\n");
+  if (allLines.length > PREVIEW_MAX_LINES) {
+    text = allLines.slice(0, PREVIEW_MAX_LINES).join("\n");
+    truncated = true;
+  }
+  return { kind: "text", content: text, truncated, lines: Math.min(allLines.length, PREVIEW_MAX_LINES) };
+}
+
+/**
+ * 坞内文件预览：真实 /sidebar/api/fs.read。头部 = 返回 + 路径 +「@ 引用」；
+ * 正文等宽字体 + 行号栏（两列 pre，行号仅一个文本节点，无逐行 DOM）；
+ * 二进制 / 读失败给友好提示，绝不显示假内容。
+ */
+function FilePreview({
+  scope,
+  path,
+  onClose,
+  onQuote,
+}: {
+  scope: SessionScope;
+  path: string;
+  onClose: () => void;
+  onQuote: () => void;
+}) {
+  const [state, setState] = useState<PreviewState>({ kind: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading" });
+    api
+      .fsRead(scope, path)
+      .then(view => {
+        if (cancelled) return;
+        setState(
+          view.kind === "text"
+            ? capPreviewText(view.content, view.truncated)
+            : { kind: "binary", size: view.size },
+        );
+      })
+      .catch(reason => {
+        if (cancelled) return;
+        setState({ kind: "error", message: errorMessage(reason) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scope, path]);
+
+  /** 相对 cwd 的展示路径（会话 cwd 未知时退回绝对路径）。 */
+  const shownPath = scope.cwd !== undefined ? relativeTo(scope.cwd, path) : path;
+  const lineNumberText =
+    state.kind === "text"
+      ? Array.from({ length: state.lines }, (_, i) => String(i + 1)).join("\n")
+      : "";
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="h-9 shrink-0 flex items-center gap-1.5 px-2 border-b border-surface-container-highest">
+        <button
+          type="button"
+          title="返回文件树"
+          aria-label="返回文件树"
+          onClick={onClose}
+          className="w-6 h-6 shrink-0 rounded flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
+        >
+          <Icon name="arrow_back" className="text-[15px]" />
+        </button>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-on-surface" title={path}>
+          {shownPath}
+        </span>
+        <button
+          type="button"
+          title="引用到对话输入框"
+          onClick={onQuote}
+          className="shrink-0 h-6 px-2 rounded text-[12px] text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
+        >
+          @ 引用
+        </button>
+      </div>
+
+      {state.kind === "text" && state.truncated && (
+        <div className="shrink-0 px-3 py-1.5 text-[12px] text-on-surface-variant border-b border-surface-container-highest">
+          文件过大，仅显示前 {state.lines} 行
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 overflow-auto bg-surface-container-lowest">
+        {state.kind === "loading" ? (
+          <Placeholder>{t("loading")}</Placeholder>
+        ) : state.kind === "error" ? (
+          <Placeholder tone="error">读取失败：{state.message}</Placeholder>
+        ) : state.kind === "binary" ? (
+          <Placeholder>二进制文件（{formatBytes(state.size)}），暂不支持预览</Placeholder>
+        ) : state.content.length === 0 ? (
+          <Placeholder>空文件</Placeholder>
+        ) : (
+          <div className="flex min-h-full w-max min-w-full">
+            <pre
+              aria-hidden="true"
+              className="shrink-0 select-none border-r border-surface-container-highest px-2 py-2 text-right font-mono text-[12px] leading-[18px] text-outline"
+            >
+              {lineNumberText}
+            </pre>
+            <pre className="flex-1 px-3 py-2 font-mono text-[12px] leading-[18px] text-on-surface">
+              {state.content}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

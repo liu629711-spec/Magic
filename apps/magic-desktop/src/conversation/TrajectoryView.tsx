@@ -157,7 +157,11 @@ interface TrajectoryRow {
   summary: string
 }
 
-export function TrajectoryView({ entries }: { entries: readonly SessionEvent[] }) {
+export function TrajectoryView({ entries, onJump }: {
+  entries: readonly SessionEvent[]
+  /** 行点击跳转（M5）：把该事件的 seq 交给 ChatFlow，切回对话 tab 并定位到对应消息。 */
+  onJump?: (seq: number) => void
+}) {
   const [query, setQuery] = useState('')
 
   const rows = useMemo<TrajectoryRow[]>(
@@ -220,7 +224,16 @@ export function TrajectoryView({ entries }: { entries: readonly SessionEvent[] }
             </thead>
             <tbody>
               {filtered.map(row => (
-                <tr key={row.key} data-trajectory-row={row.type} className="border-t border-surface-container-high/60 hover:bg-surface-container-low">
+                <tr
+                  key={row.key}
+                  data-trajectory-row={row.type}
+                  data-trajectory-seq={row.seq}
+                  onClick={onJump === undefined ? undefined : () => onJump(row.seq)}
+                  title={onJump === undefined ? undefined : '点击跳到对话中的对应消息'}
+                  className={`border-t border-surface-container-high/60 hover:bg-surface-container-low${
+                    onJump === undefined ? '' : ' cursor-pointer'
+                  }`}
+                >
                   <td className="h-7 px-3 align-middle text-outline">{row.seq}</td>
                   <td className="h-7 px-2 align-middle text-ink-3">{formatTime(row.time)}</td>
                   <td className="h-7 px-2 align-middle text-ink-2">

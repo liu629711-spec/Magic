@@ -45,6 +45,16 @@ import { makeRenderToolview } from './tool-views.tsx'
 import { MagicTurnProcessSummary, type MagicTurnProcessSummaryProps } from './MagicTurnProcessSummary.tsx'
 // CEO 委派图卡（2026-09-18）：对话流里渲染 CEO 把任务派给成员的画布（节点/连线/状态徽标）。
 import { CeoTeamGraph } from '../vendor/ceo/client/CeoTeamGraph.ts'
+import type { CeoTeamGraphTaskBoard } from '../vendor/ceo/client/CeoTeamGraph.ts'
+import { CeoDecisionDock } from '../vendor/ceo/client/CeoDecisionDrawer.ts'
+import { ceoT } from '../vendor/ceo/client/dict.ts'
+import {
+  getTaskBoardSnapshot,
+  reloadTaskBoard,
+  subscribeTaskBoard,
+  type TaskBoardViewApi,
+} from '../vendor/ceo/client/task-board-store.ts'
+import { leadSessionIdOf, viewAgentTeam } from '../adapters/dsh-web/agent-teams.ts'
 import PromptBar, { type PromptBarChips, type PromptBarMention } from '../vendor/stitch-chat/PromptBar.tsx'
 import { ComposerStats, TurnTailPills } from './TurnPills.tsx'
 import { SessionHeader, type SessionHeaderData } from './SessionHeader.tsx'
@@ -67,8 +77,6 @@ const openFile = (_path: string, _options?: unknown): void => {}
 const openSkill = (_name: string): void => {}
 const inspectCall = (_callId: string): void => {}
 const forkAt = (_seq: number): void => {}
-// 成员详情/干预面板（CeoMemberInspector 等）本轮未搬：点成员/CEO 节点只切换画布高亮。
-const openCeoWorkspace = (): void => {}
 const loadImage = async (): Promise<string> => ''
 const renderMessageImages = (): null => null
 const fileMentions = (): undefined => undefined
@@ -90,6 +98,14 @@ function turnOf(node: ChatNode): number | undefined {
   return location.kind === 'turn' || location.kind === 'step' ? location.turn.turn : undefined
 }
 
+/** 在消息流容器内按键找 Seat 节点（按属性遍历，免去 CSS.escape 的转义依赖）。 */
+function findFlowElement(container: HTMLElement, key: string): HTMLElement | null {
+  for (const element of container.querySelectorAll<HTMLElement>('[data-chat-flow-key]')) {
+    if (element.dataset.chatFlowKey === key) return element
+  }
+  return null
+}
+
 interface SeatProps {
   node: ChatNode
   presentation: ChatTurnProcessPresentation | undefined
@@ -99,10 +115,12 @@ interface SeatProps {
   turnTail: TurnTailChatData | undefined
   producedByTurn: ReadonlyMap<number, readonly string[]>
   fileMentions: ChatNodeOwnerProps['fileMentions']
+  /** CEO 图卡接线（2026-09-18）：整窗透传给 renderNode。 */
+  ceo: Pick<RenderContext, 'sessionId' | 'taskBoard' | 'openWorkspace'>
 }
 
 /** 一个 Chat 节点的座位：Turn-process 折叠推导 + 分发（照 ChatNodeSeat 逻辑移植）。 */
-function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail, producedByTurn, fileMentions }: SeatProps) {
+function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail, producedByTurn, fileMentions, ceo }: SeatProps) {
   const spec = presentation?.spec
   const processOpen = spec !== undefined && open
   const setOpenThis = useCallback((next: boolean) => {
@@ -137,7 +155,7 @@ function Seat({ node, presentation, open, setOpenTurn, useChat, turnTail, produc
   }, [processMember, setOpenThis])
   const wrapperRef = useSearchableHidden(processHidden, revealProcess)
 
-  const body = renderNode(node, { turnProcess, turnTail, useChat, producedByTurn, fileMentions })
+  const body = renderNode(node, { turnProcess, turnTail, useChat, producedByTurn, fileMentions, ...ceo })
   return (
     <div
       ref={wrapperRef}
@@ -160,6 +178,10 @@ interface RenderContext {
   useChat: UseChat
   producedByTurn: ReadonlyMap<number, readonly string[]>
   fileMentions: ChatNodeOwnerProps['fileMentions']
+  /** CEO 图卡接线（2026-09-18）：当前会话 id、任务板句柄、打开右坞团队 tab 回调。 */
+  sessionId?: string
+  taskBoard: CeoTeamGraphTaskBoard
+  openWorkspace: () => void
 }
 
 /** kind→组件分发（替代 renderSlot 键控注册表；base 货币 + node + t）。 */
@@ -251,12 +273,15 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
     case 'unknown':
       return <UnknownNodeView {...base} node={node} />
     case 'ceo-team':
-      // CEO 委派图卡：用自己的折叠 Definition 产节点（vendor/ceo/client/CeoTeamGraph）。
-      // props.node.data 即 projectCeoTeam 产出的 CeoTeamView；文案/成员面板降级见组件注释。
+      // CEO 委派图卡：vendor/ceo/client/CeoTeamGraph。props.node.data 即 projectCeoTeam
+      // 产出的 CeoTeamView；接线（2026-09-18）：当前会话 id、任务板句柄（画布任务泳道
+      // 真实数据源）、打开右坞团队 tab 回调（点成员/CEO 节点）。
       return (
         <CeoTeamGraph
           node={node as ChatNode<'ceo-team'>}
-          openWorkspace={openCeoWorkspace}
+          sessionId={ctx.sessionId}
+          openWorkspace={ctx.openWorkspace}
+          taskBoard={ctx.taskBoard}
         />
       )
     default: {
@@ -308,13 +333,19 @@ function ConversationTabs({ active, onSelect }: {
   )
 }
 
-export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, sessionHeader, onOpenSession }: {
+export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession }: {
   store: ChatSessionStore
   onSend?: (text: string) => void
   /** 会话头数据（M4，2026-09-18）：App 从真实会话列表算出；mock/无数据时不传 → 不渲染头。 */
   sessionHeader?: SessionHeaderData
   /** 会话头层级/子代理导航：切换会话（App 的 openSession）。 */
   onOpenSession?: (id: string) => void
+  /** CEO 图卡接线（2026-09-18）：当前会话 id（agentTeams 路由 + 快照/名册会话守卫）。 */
+  sessionId?: string
+  /** 打开右坞「团队」tab（图卡点成员/CEO 节点）。 */
+  onOpenCeoWorkspace?: () => void
+  /** 向当前会话发一条消息（决策抽屉/成员干预）。失败时抛错，由调用方转成错误文案。 */
+  promptToSession?: (text: string) => Promise<void>
   /** 模型选择器（真实 runtime：session/modelCatalog + selectModel；缺省=画廊 mock） */
   modelPicker?: {
     options: { key: string; name: string; tag?: string }[]
@@ -326,9 +357,54 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   /** 输入条 @ 候选与 / 命令（2026-09-18：真实技能/命令数据） */
   mentionOptions?: PromptBarMention[]
   commandOptions?: { key: string; name: string; desc: string }[]
+  /** 右坞 @引用草稿注入（2026-09-18）：App 持注入 token，透传给 PromptBar 消费。 */
+  draftInjection?: { seq: number; text: string } | null
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { snapshot } = state
+
+  // CEO 图卡接线（2026-09-18）：任务板读接口 → lead 会话（成员子会话映射到父会话），
+  // 形状对齐官方 remote.agentTeams.view（agent-teams.ts 的 viewAgentTeam 走 dshRpc）。
+  const leadParentId = sessionHeader?.parent?.id
+  const taskBoardApi = useMemo<TaskBoardViewApi>(() => ({
+    view: async (sid: string) => {
+      try {
+        const value = await viewAgentTeam(leadSessionIdOf(sid, leadParentId))
+        return { ok: true as const, value: { tasks: value.tasks } }
+      } catch (cause) {
+        return { ok: false as const, error: { message: cause instanceof Error ? cause.message : String(cause) } }
+      }
+    },
+  }), [leadParentId])
+  // 句柄引用必须稳定：CeoTeamGraph 用 [props.taskBoard] 作为 reload 依赖，
+  // 每次渲染新建对象会触发 reload 循环。
+  const taskBoard = useMemo<CeoTeamGraphTaskBoard>(() => ({
+    subscribe: subscribeTaskBoard,
+    getSnapshot: getTaskBoardSnapshot,
+    reload: () => {
+      if (sessionId !== undefined && sessionId.length > 0) void reloadTaskBoard(taskBoardApi, sessionId)
+    },
+    // 只读（PRD-04 §12）：任务生命周期由智能体驱动，画布不提供建任务入口。
+    create: async () => { throw new Error('任务板只读：任务生命周期由智能体驱动') },
+  }), [sessionId, taskBoardApi])
+  // 图卡点成员/CEO 节点 → 打开右坞团队 tab（App 提供）。
+  const openCeoWorkspace = useCallback(() => { onOpenCeoWorkspace?.() }, [onOpenCeoWorkspace])
+  const ceo = useMemo(
+    () => ({ sessionId, taskBoard, openWorkspace: openCeoWorkspace }),
+    [sessionId, taskBoard, openCeoWorkspace],
+  )
+  // 决策抽屉发送：prompt 当前会话；成功/失败都回成 { ok } 信封（对齐原 register.ts 语义）。
+  const sendDecision = useMemo(() => {
+    if (promptToSession === undefined) return undefined
+    return async (text: string): Promise<{ ok: boolean; error?: string }> => {
+      try {
+        await promptToSession(text)
+        return { ok: true }
+      } catch (cause) {
+        return { ok: false, error: cause instanceof Error ? cause.message : String(cause) }
+      }
+    }
+  }, [promptToSession])
 
   // Turn-process 呈现投影（幂等；每次快照变更重算全部已加载轮）。
   const projectorRef = useRef<ChatTurnProcessProjector | null>(null)
@@ -427,6 +503,69 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   // 对话 / 轨迹 tab（M5）：本地状态；轨迹视图读整窗持久事件（随快照变更重算）。
   const [tab, setTab] = useState<ConversationTab>('chat')
   const eventEntries = useMemo(() => store.eventEntries(), [store, snapshot])
+  // 轨迹行点击跳转（M5）：待处理的目标事件 seq；切回对话 tab 后由下方 effect 完成定位。
+  const [jumpSeq, setJumpSeq] = useState<number | null>(null)
+  const jumpToEvent = useCallback((seq: number) => {
+    setJumpSeq(seq)
+    setTab('chat')
+  }, [])
+  useEffect(() => {
+    if (jumpSeq === null || tab !== 'chat') return
+    setJumpSeq(null)
+    const flowEl = flowRef.current
+    if (flowEl === null) return
+    stickRef.current = false // 跳转期间停用贴底跟随，避免新事件把视口拉回底部
+    // 「事件 seq ≤ 目标 seq 的最近可见节点」= 渲染顺序中 anchorSeq 不超过目标的最大者。
+    // 目标早于全部节点（如 permission/preset 之类无对应消息的种子事件）时落到首个节点，
+    // 这样轨迹首行也能滚到消息流最前并高亮，而不是莫名滚到底。
+    let targetKey: string | null = null
+    let targetTurn: number | null = null
+    let bestSeq = Number.NEGATIVE_INFINITY
+    let firstKey: string | null = null
+    let firstTurn: number | null = null
+    for (const key of snapshot.order) {
+      const node = snapshot.nodes.get(key)
+      if (node === undefined || node.visibility === 'hidden') continue
+      const chatNode = node as ChatNode
+      if (firstKey === null) {
+        firstKey = key
+        firstTurn = turnOf(chatNode) ?? null
+      }
+      if (node.anchorSeq <= jumpSeq && node.anchorSeq >= bestSeq) {
+        bestSeq = node.anchorSeq
+        targetKey = key
+        targetTurn = turnOf(chatNode) ?? null
+      }
+    }
+    if (targetKey === null) {
+      targetKey = firstKey
+      targetTurn = firstTurn
+    }
+    if (targetKey === null) {
+      // 没有任何可见节点：静默滚到消息流底部。
+      flowEl.scrollTop = flowEl.scrollHeight
+      return
+    }
+    const key = targetKey
+    const revealAndScroll = () => {
+      const element = findFlowElement(flowEl, key)
+      if (element === null) {
+        flowEl.scrollTop = flowEl.scrollHeight
+        return
+      }
+      element.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      element.classList.add(css.jumpHighlight)
+      window.setTimeout(() => element.classList.remove(css.jumpHighlight), 1200)
+    }
+    const element = findFlowElement(flowEl, key)
+    // 命中节点若被折叠的轮过程隐藏（hidden="until-found"）先展开所属轮，再等一帧滚动。
+    if (element !== null && element.hasAttribute('hidden') && targetTurn !== null) {
+      setOpenTurn(targetTurn, true)
+      window.requestAnimationFrame(() => window.requestAnimationFrame(revealAndScroll))
+      return
+    }
+    revealAndScroll()
+  }, [jumpSeq, tab, snapshot, setOpenTurn])
   // 划选注释（M8）：待发送的注释文本（发送后拼成引用块并清空）。
   const [annotations, setAnnotations] = useState<string[]>([])
 
@@ -437,7 +576,7 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
       )}
       <ConversationTabs active={tab} onSelect={setTab} />
       {tab === 'trajectory' ? (
-        <TrajectoryView entries={eventEntries} />
+        <TrajectoryView entries={eventEntries} onJump={jumpToEvent} />
       ) : (
         <>
           <div
@@ -466,6 +605,7 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
                     turnTail={turn === undefined ? undefined : turnTails.get(turn)}
                     producedByTurn={producedByTurn}
                     fileMentions={fileMentions}
+                    ceo={ceo}
                   />
                 )
               })}
@@ -486,6 +626,9 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
                 annotations={annotations}
                 onRemove={index => setAnnotations(prev => prev.filter((_, i) => i !== index))}
               />
+              {/* 决策抽屉（2026-09-18 CEO 图卡接入）：有「待你拍板」成员时，在输入条上方
+                  浮出抽屉（数据来自 selection store 的 attention 项）；发送 → prompt 当前会话。 */}
+              <CeoDecisionDock sessionId={sessionId} sendDecision={sendDecision} t={ceoT} />
               {/* 换肤点（2026-09-17 对话区 v2）：输入条换画廊 PromptBar（demo=false 嵌入；
                   听写占位=裁定 4、扫光保留=裁定 2）。回退时还原本目录 Composer.tsx。 */}
               <PromptBar
@@ -503,6 +646,7 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
                 composerChips={composerChips}
                 mentionOptions={mentionOptions}
                 commandOptions={commandOptions}
+                draftInjection={draftInjection}
               />
               {/* 会话统计条（2026-09-17 对齐 web 端 StatsPills）：无统计数据的会话不渲染。 */}
               <ComposerStats snapshot={snapshot} />

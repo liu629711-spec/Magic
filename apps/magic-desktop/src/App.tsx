@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SessionSidebar } from "./sidebar/SessionSidebar";
 // 右坞（2026-09-18）：三个真实 tab（文件/文件变动/终端）接本机 dsh web 的 /sidebar 通道。
 // 原 InspectorPanel/ReviewPanel（静态 mock）保留作历史参考，不再渲染。
@@ -125,14 +125,15 @@ export function App() {
 
   // 输入条三件套（2026-09-18 照 Magic 网页版）：订阅当前会话 store 拿投影与事件
   const chatState = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  /** 命令执行（/permission、/mode 等；args 形状做两种兜底）。 */
+  // 命令执行（/permission、/mode 等）。wire 参数取自生成的 Remote 契约
+  // `commands/lib/typert.remote-client.d.ts:11-16`：execute(agentId, line, submittedAttachments, signal?)，
+  // 其中 agentId 是 Agent lookup 的 wire 字段（core/agent/src/index.ts:258-264 注册 wire:'agentId'）。
   const runCommand = (line: string) => {
     if (activeId.length === 0) return;
-    dshRpc("commands/execute", { agent: activeId, line, submittedAttachments: [] })
-      .catch(() => dshRpc("commands/execute", { sessionId: activeId, line, submittedAttachments: [] }))
-      .catch((error: unknown) =>
+    dshRpc("commands/execute", { agentId: activeId, line, submittedAttachments: [] }).catch(
+      (error: unknown) =>
         window.alert(`命令执行失败：${error instanceof Error ? error.message : String(error)}`),
-      );
+    );
   };
   const composerChips = (() => {
     if (!backendMode || activeId.length === 0) return undefined;
@@ -194,6 +195,16 @@ export function App() {
   const [commandOptions, setCommandOptions] = useState<
     { key: string; name: string; desc: string }[] | undefined
   >(undefined);
+  // @ 引用桥（2026-09-18）：右坞「@文件」→ 对话输入框草稿 `@<相对路径> `。
+  // 受控注入 token：seq 变化 = 一次注入（PromptBar 按 seq 消费）。
+  const [draftInjection, setDraftInjection] = useState<{ seq: number; text: string } | null>(null);
+  const quoteFile = (path: string) => setDraftInjection({ seq: Date.now(), text: `@${path} ` });
+  // 只消费一次：子组件（PromptBar）的 effect 先于父组件 effect 执行，故这里在它追加草稿后
+  // 立刻清空注入——之后切会话/切视图都不会重复追加。不在对话视图（无输入框）时注入被丢弃。
+  useEffect(() => {
+    if (draftInjection === null) return;
+    setDraftInjection(null);
+  }, [draftInjection]);
   useEffect(() => {
     if (!backendMode || web.status !== "ready" || activeId.length === 0) return;
     let cancelled = false;
@@ -213,8 +224,10 @@ export function App() {
         ]);
       })
       .catch(() => undefined);
-    dshRpc<unknown>("commands/list", { agent: activeId })
-      .catch(() => dshRpc<unknown>("commands/list", { sessionId: activeId }))
+    // list 的 wire 参数同上：list(agentId)（typert.remote-client.d.ts:12）。
+    // 传 agentId 才会按该 Agent 的 scoped 层展开——插件命令 /mode（magic-work-mode）、
+    // /permission（permission-presets）注册在 agent 上下文子层，缺 agentId 只回全局核心命令。
+    dshRpc<unknown>("commands/list", { agentId: activeId })
       .then(value => {
         if (cancelled) return;
         const list = Array.isArray(value)
@@ -363,6 +376,7 @@ export function App() {
         : undefined;
     const children = web.sessions.filter(row => row.parentSessionId === activeId);
     return {
+      id: current.sessionId,
       title: current.title,
       parent:
         parentRow !== undefined
@@ -412,6 +426,21 @@ export function App() {
         window.alert(`发送失败：${error instanceof Error ? error.message : String(error)}`),
       );
   };
+
+  // CEO 委派图卡接线（2026-09-18）：向当前会话发一条消息（决策抽屉/成员干预都用它）。
+  // 与 handleSend 同 RPC（session/prompt），但不改本地 store 等待态——那由 follow 事件流驱动。
+  const promptToSession = useCallback(async (text: string): Promise<void> => {
+    if (!backendMode || activeId.length === 0) throw new Error("当前会话不可用");
+    await web.prompt(activeId, text);
+  }, [web.prompt, activeId]);
+  const sendIntervention = useCallback((message: string) => {
+    void promptToSession(message).catch((error: unknown) =>
+      window.alert(`干预发送失败：${error instanceof Error ? error.message : String(error)}`),
+    );
+  }, [promptToSession]);
+  // 打开右坞「团队」tab（图卡点成员/CEO 节点）：token 自增，RightDock 监听后切 tab。
+  const [teamOpenToken, setTeamOpenToken] = useState(0);
+  const openTeamTab = useCallback(() => { setTeamOpenToken(value => value + 1); }, []);
 
   // web 模式连接门（认证/探测/错误态整屏呈现）
   if (backendMode && web.status !== "ready") {
@@ -544,13 +573,25 @@ export function App() {
               composerChips={composerChips}
               mentionOptions={mentionOptions}
               commandOptions={commandOptions}
+              draftInjection={draftInjection}
               sessionHeader={sessionHeader}
               onOpenSession={openSession}
+              sessionId={backendMode ? activeId : undefined}
+              onOpenCeoWorkspace={openTeamTab}
+              promptToSession={promptToSession}
             />
           )}
         </main>
-        {/* 右坞：文件 / 文件变动 / 终端（真实 dsh web /sidebar 通道，无 mock） */}
-        <RightDock sessionId={dockSessionId} cwd={dockCwd} />
+        {/* 右坞：文件 / 文件变动 / 终端 / 团队（真实 dsh web /sidebar 通道，无 mock）；
+            onQuoteFile：文件 @引用注入对话输入框草稿（跨模块桥）；
+            teamOpenToken：图卡点成员/CEO 节点时切到「团队」tab；sendIntervention：成员干预写回会话 */}
+        <RightDock
+          sessionId={dockSessionId}
+          cwd={dockCwd}
+          onQuoteFile={quoteFile}
+          teamOpenToken={teamOpenToken}
+          sendIntervention={sendIntervention}
+        />
       </div>
     </div>
   );

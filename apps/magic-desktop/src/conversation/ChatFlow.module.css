@@ -18,3 +18,17 @@
 .flowItem {
   padding-block: 2px;
 }
+
+/* 轨迹行跳转命中高亮（M5，2026-09-18）：由 ChatFlow 在滚动定位后临时挂载 1.2s，
+ * 通过 classList 动态增删（不进入 React 渲染属性，避免并行编辑冲突）。 */
+.jumpHighlight {
+  border-radius: 8px;
+  outline: 2px solid var(--color-primary, #8ab4ff);
+  outline-offset: 2px;
+  animation: jumpHighlightFade 1200ms ease-out;
+}
+
+@keyframes jumpHighlightFade {
+  from { outline-color: var(--color-primary, #8ab4ff); }
+  to { outline-color: transparent; }
+}

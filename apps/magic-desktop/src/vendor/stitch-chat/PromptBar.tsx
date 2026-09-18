@@ -132,6 +132,7 @@ export default function PromptBar({
   composerChips,
   mentionOptions,
   commandOptions,
+  draftInjection,
 }: {
   variant?: string;
   /** the self-running walkthrough; turn off when embedding in a real surface */
@@ -153,6 +154,9 @@ export default function PromptBar({
   mentionOptions?: Source[];
   /** 真实 / 命令（commands/list 数据；缺省=画廊 mock COMMANDS） */
   commandOptions?: { key: string; name: string; desc: string }[];
+  /** 受控「草稿注入」桥（2026-09-18）：右坞 @引用把 `@<路径> ` 追加到草稿；
+   *  seq 变化即注入一次（多次点击 seq 不同，故每次都追加，语义与 DSH 一致）。 */
+  draftInjection?: { seq: number; text: string } | null;
 }) {
   const pill = variant === "Pill";
   const [draft, setDraft] = useState("");
@@ -347,6 +351,19 @@ export default function PromptBar({
     const t = setTimeout(() => setListening(false), 2200);
     return () => clearTimeout(t);
   }, [listening]);
+
+  /* @引用桥（2026-09-18）：右坞 FileTree 的「@文件」按钮经 App → ChatFlow 注入
+   * `@<相对路径> `。追加语义（不清空已有草稿）；seq 变化即一次新注入。ref 去重
+   * 是为了 StrictMode 开发态 effect 双跑 / 重挂载时不重复追加。 */
+  const injectedSeqRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (draftInjection === null || draftInjection === undefined) return;
+    if (injectedSeqRef.current === draftInjection.seq) return;
+    injectedSeqRef.current = draftInjection.seq;
+    setDraft((prev) => prev + draftInjection.text);
+    inputRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftInjection?.seq]);
 
   /* Move wrapped text above the controls, then grow to a compact maximum. */
   useLayoutEffect(() => {

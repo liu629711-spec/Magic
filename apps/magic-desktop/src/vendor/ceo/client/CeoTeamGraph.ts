@@ -6,9 +6,10 @@
 //  ② 词典 t 收敛为内部中文文案表（先例 conversation/MagicTurnProcessSummary.tsx）；
 //     props.t 变为可选，缺省用内部表——原插件由 locale.bind('magicCeo') 注入。
 //  ③ 依赖 @xyflow/react（apps/magic-desktop 本地安装）。
-// 遗留（本轮不做，见交付报告）：成员详情/干预面板（CeoMemberInspector、CeoProcessTimeline、
-// CeoDecisionDrawer、CeoDelegateRow、CeoWorkspace）与任务板 RPC 通道未搬；openWorkspace
-// 目前为空实现，点成员/CEO 节点只切换画布高亮，不打开右坞。
+// 后续轮次（2026-09-18 第二轮）：成员详情/干预面板（CeoMemberInspector、CeoProcessTimeline、
+// CeoDecisionDrawer、CeoWorkspace、MemberAvatar、FailureCard）已搬入本目录，任务板 RPC
+// （task-board-store 的 reloadTaskBoard）已接通；点成员/CEO 节点经 openWorkspace 打开右坞
+// 「团队」tab。CeoDelegateRow / MemberTabTitle / TurnProcessSummary 仍无挂载点，未搬。
 
 import { createContext, createElement as h, Fragment, memo, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import {
