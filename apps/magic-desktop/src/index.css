@@ -24,6 +24,31 @@
   }
 }
 
+/* inline-style 动画的 keyframes 兜底（2026-09-18）：tailwind-extend.json 的 keyframes
+ * 只有用 animate-* 工具类才会被 Tailwind 产出，而 ThinkingState/MagicReasoningRow 等
+ * 组件以 inline style 引用动画名——不补全局定义则动效静默失效（实测构建 CSS 缺失）。 */
+@keyframes shimmer-text {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes fade-up {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+/* pop-in 同因补定义（2026-09-18）：PromptBar 各浮层/ContextMeter 弹窗以 inline style
+ * 引用 pop-in，缺全局 keyframes 时动画静默失效（见上方注释说明）。 */
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(0.96) translateY(2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
 .material-symbols-outlined {
   font-family: "Material Symbols Outlined";
   font-weight: normal;

@@ -39,3 +39,12 @@
   from { outline-color: var(--color-primary, #8ab4ff); }
   to { outline-color: transparent; }
 }
+
+/* 轮过程折叠收起态收口（2026-09-18 回归修复）：vendor 把收起的过程行标为
+ * hidden="until-found"（上游语义=content-visibility:hidden，内容不绘制、盒保留、
+ * Ctrl+F 可见时展开）。本环境该 UA 语义失效（实测收起行内容溢出可见、命中测试
+ * 被后续兄弟盖住——思考胶囊因此「看得见点不到」）。壳层按同语义强制收口：
+ * 不用 display:none，保留 until-found 的 beforematch 展开能力。 */
+.flow [data-chat-flow] > [hidden='until-found'] {
+  content-visibility: hidden;
+}

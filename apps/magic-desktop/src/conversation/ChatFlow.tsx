@@ -333,7 +333,7 @@ function ConversationTabs({ active, onSelect }: {
   )
 }
 
-export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession }: {
+export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, headerActions }: {
   store: ChatSessionStore
   onSend?: (text: string) => void
   /** 会话头数据（M4，2026-09-18）：App 从真实会话列表算出；mock/无数据时不传 → 不渲染头。 */
@@ -359,6 +359,21 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   commandOptions?: { key: string; name: string; desc: string }[]
   /** 右坞 @引用草稿注入（2026-09-18）：App 持注入 token，透传给 PromptBar 消费。 */
   draftInjection?: { seq: number; text: string } | null
+  /** 会话工作目录（图四顶行 workspace chip，2026-09-18）：透传给 SessionHeader。 */
+  cwd?: string
+  /** 右坞收起态（顶行 right_panel_open/close 图标切换）：透传给 SessionHeader。 */
+  dockCollapsed?: boolean
+  /** 右坞展开/收起（顶行 corner 语义）：透传给 SessionHeader。 */
+  onExpandDock?: () => void
+  onCollapseDock?: () => void
+  /** 打开右坞指定 tab（顶行 terminal 等图标）：透传给 SessionHeader。 */
+  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team') => void
+  /** 会话操作（顶行 ⋯ 菜单：重命名/导出 Markdown/复制会话 ID）：透传给 SessionHeader。 */
+  headerActions?: {
+    rename?: (title: string) => void
+    exportMarkdown?: () => void
+    copyId?: () => void
+  }
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { snapshot } = state
@@ -572,7 +587,16 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   return (
     <div className="vendor-dsh-chat flex h-full flex-col bg-surface text-on-surface">
       {sessionHeader !== undefined && (
-        <SessionHeader data={sessionHeader} onOpenSession={onOpenSession} />
+        <SessionHeader
+          data={sessionHeader}
+          onOpenSession={onOpenSession}
+          cwd={cwd}
+          dockCollapsed={dockCollapsed}
+          onExpandDock={onExpandDock}
+          onCollapseDock={onCollapseDock}
+          onOpenDockTab={onOpenDockTab}
+          headerActions={headerActions}
+        />
       )}
       <ConversationTabs active={tab} onSelect={setTab} />
       {tab === 'trajectory' ? (

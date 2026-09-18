@@ -5,6 +5,12 @@ import { SessionSidebar } from "./sidebar/SessionSidebar";
 import { RightDock } from "./inspector/RightDock";
 import { ChatFlow } from "./conversation/ChatFlow.tsx";
 import { ChatSessionStore } from "./conversation/chat-store.ts";
+// 上下文圆环（2026-09-18 官方化）：formatTokens 官方紧凑格式 + 明细行类型 + 实测三段色
+import {
+  CONTEXT_METER_TONES,
+  formatTokens,
+  type ContextMeterBreakdownItem,
+} from "./conversation/ContextMeter.tsx";
 import type { SessionHeaderData } from "./conversation/SessionHeader.tsx";
 import { buildSessionMarkdown } from "./conversation/session-export.ts";
 import { mockEvents } from "./conversation/mock-events.ts";
@@ -155,7 +161,10 @@ export function App() {
               : permissionId === "workspace-write"
                 ? "工作区内修改"
                 : undefined);
-    // 上下文用量（token-meter 投影 values.contextPressure = {contextWindow, pressureTokens, projectedTokens}）
+    // 上下文用量（token-meter 投影 values.contextPressure = {contextWindow, pressureTokens, projectedTokens}）。
+    // 2026-09-18 官方化：detail 换官方「~36.1K / 262K」紧凑格式（used 优先 projectedTokens，
+    // 同官方 context-occupancy.ts:18）；明细从 values.contextBreakdown 读（官方
+    // ContextBreakdownProjection = {systemTokens, toolsTokens, messageTokens}）。
     const pressureRaw = values.contextPressure as Record<string, unknown> | undefined;
     const contextWindow = Number(pressureRaw?.contextWindow ?? 0);
     const usedTokens = Number(pressureRaw?.projectedTokens ?? pressureRaw?.pressureTokens ?? 0);
@@ -163,9 +172,37 @@ export function App() {
       contextWindow > 0
         ? {
             percent: Math.min(100, Math.round((usedTokens / contextWindow) * 100)),
-            detail: `${usedTokens.toLocaleString()} / ${contextWindow.toLocaleString()} tokens`,
+            detail: `~${formatTokens(usedTokens)} / ${formatTokens(contextWindow)}`,
           }
         : undefined;
+    // 上下文明细三段（系统提示词/工具定义/对话消息）。投影缺失或形状不符 → breakdown
+    // undefined，ContextMeter 弹窗只显示头部两段（条与图例不渲染）。
+    const breakdownRaw = values.contextBreakdown as
+      | { systemTokens?: unknown; toolsTokens?: unknown; messageTokens?: unknown }
+      | undefined;
+    const breakdown: ContextMeterBreakdownItem[] | undefined =
+      breakdownRaw === undefined || context === undefined
+        ? undefined
+        : [
+            {
+              label: "系统提示词",
+              value: `~${formatTokens(Number(breakdownRaw.systemTokens ?? 0))}`,
+              tokens: Number(breakdownRaw.systemTokens ?? 0),
+              tone: CONTEXT_METER_TONES.system,
+            },
+            {
+              label: "工具定义",
+              value: `~${formatTokens(Number(breakdownRaw.toolsTokens ?? 0))}`,
+              tokens: Number(breakdownRaw.toolsTokens ?? 0),
+              tone: CONTEXT_METER_TONES.tools,
+            },
+            {
+              label: "对话消息",
+              value: `~${formatTokens(Number(breakdownRaw.messageTokens ?? 0))}`,
+              tokens: Number(breakdownRaw.messageTokens ?? 0),
+              tone: CONTEXT_METER_TONES.messages,
+            },
+          ];
     // 工作模式（magic-work-mode 事件流）
     const workModeRaw = store.recentEventData("magic/work-mode") as { sessionMode?: string } | undefined;
     const isCeo = workModeRaw?.sessionMode === "ceo";
@@ -184,7 +221,7 @@ export function App() {
         label: isCeo ? "CEO · 当前会话" : "Agent · 当前会话",
         onClick: () => runCommand(isCeo ? "/mode agent" : "/mode ceo"),
       },
-      context,
+      context: context === undefined ? undefined : { ...context, breakdown },
     };
   })();
 
@@ -378,6 +415,8 @@ export function App() {
     return {
       id: current.sessionId,
       title: current.title,
+      // 工作目录（图四顶行 workspace chip 展示/复制，2026-09-18）。
+      cwd: current.cwd,
       parent:
         parentRow !== undefined
           ? { id: parentRow.sessionId, title: parentRow.title }
@@ -441,6 +480,21 @@ export function App() {
   // 打开右坞「团队」tab（图卡点成员/CEO 节点）：token 自增，RightDock 监听后切 tab。
   const [teamOpenToken, setTeamOpenToken] = useState(0);
   const openTeamTab = useCallback(() => { setTeamOpenToken(value => value + 1); }, []);
+  // 右坞 chrome 状态（2026-09-18 图四顶行接线）：收起态 + 全屏态 + 切 tab 请求。
+  const [dockCollapsed, setDockCollapsed] = useState(false);
+  const [dockFullscreen, setDockFullscreen] = useState(false);
+  // 切 tab 请求（{tab, seq}，seq 区分同 tab 的重复点击）：RightDock 监听 seq 变化切 tab。
+  const [dockTabRequest, setDockTabRequest] = useState<{ tab: string; seq: number } | null>(null);
+  // L agent 契约（并行开发）：RightDock 按同名 props 消费——
+  // collapsed/onToggleCollapsed/fullscreen/onToggleFullscreen/dockTabRequest。
+  // 契约由另一 agent 在 RightDock.tsx 落地；此处先以 any 展开避免契约未合入时 tsc 失败。
+  const dockChrome: any = {
+    collapsed: dockCollapsed,
+    onToggleCollapsed: () => setDockCollapsed(v => !v),
+    fullscreen: dockFullscreen,
+    onToggleFullscreen: () => setDockFullscreen(v => !v),
+    dockTabRequest,
+  };
 
   // web 模式连接门（认证/探测/错误态整屏呈现）
   if (backendMode && web.status !== "ready") {
@@ -576,6 +630,33 @@ export function App() {
               draftInjection={draftInjection}
               sessionHeader={sessionHeader}
               onOpenSession={openSession}
+              cwd={dockCwd}
+              dockCollapsed={dockCollapsed}
+              onExpandDock={() => setDockCollapsed(false)}
+              onCollapseDock={() => setDockCollapsed(true)}
+              onOpenDockTab={tab => {
+                setDockCollapsed(false);
+                setDockTabRequest({ tab, seq: Date.now() });
+              }}
+              headerActions={
+                backendMode && activeId.length > 0
+                  ? {
+                      rename: title => {
+                        web
+                          .rename(activeId, title)
+                          .catch(error =>
+                            window.alert(
+                              `重命名失败：${error instanceof Error ? error.message : String(error)}`,
+                            ),
+                          );
+                      },
+                      exportMarkdown: () => exportSession(activeId),
+                      copyId: () => {
+                        void navigator.clipboard.writeText(activeId);
+                      },
+                    }
+                  : undefined
+              }
               sessionId={backendMode ? activeId : undefined}
               onOpenCeoWorkspace={openTeamTab}
               promptToSession={promptToSession}
@@ -591,6 +672,7 @@ export function App() {
           onQuoteFile={quoteFile}
           teamOpenToken={teamOpenToken}
           sendIntervention={sendIntervention}
+          {...dockChrome}
         />
       </div>
     </div>

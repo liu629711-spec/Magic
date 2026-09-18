@@ -2,24 +2,17 @@
 // 非弹窗）。数据源（真实 runtime，无则空态）：
 // - 常规/终端/浏览器：better-sidebar 插件偏好（/sidebar/api/settings.get|update，
 //   字段见 plugins/dsh-better-sidebar/src/client/prefs.ts:40-123）
-// - 模型：Remote `session/modelCatalog`（session-controller/src/types.ts:144-150）
+// - 模型：官方 DSH 形态重做（2026-09-18），provider 卡列表 + 内嵌编辑卡，见 ./models-section.tsx
 // - 外观：DSH ui-theme 走 host user-settings 通道，暂未标定 → 置灰占位（诚实标注）
 // - 技能与插件：跳转技能扩展页（用户裁定「插件功能做进技能扩展」）
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Icon } from "../sidebar/Icon";
-import { dshRpc } from "../adapters/dsh-web/rpc";
 import { getSidebarPrefs, updateSidebarPrefs, type SidebarPrefs } from "../adapters/dsh-web/sidebar-api";
 import { readRecentLimit, writeRecentLimit } from "./local-prefs";
+import { ModelsSection } from "./models-section";
 
 type SectionId = "general" | "appearance" | "models" | "terminal" | "browser";
-
-interface ModelCatalogModel { id: string; name: string; description?: string }
-interface ModelProviderGroup { id: string; name: string; models: ModelCatalogModel[] }
-interface ModelCatalog {
-  default: { provider: string; model: string };
-  groups: ModelProviderGroup[];
-}
 
 export function SettingsPage({ onBack, onOpenSkills, backendReady }: {
   onBack: () => void;
@@ -252,53 +245,6 @@ export function SettingsPage({ onBack, onOpenSkills, backendReady }: {
         </div>
       </main>
     </div>
-  );
-}
-
-/** 模型目录（session/modelCatalog：默认模型 + provider 分组，M1 只读展示）。 */
-function ModelsSection() {
-  const [catalog, setCatalog] = useState<ModelCatalog | undefined>(undefined);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    dshRpc<ModelCatalog>("session/modelCatalog", {})
-      .then(setCatalog)
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
-  }, []);
-
-  return (
-    <SectionBlock title="模型" desc="运行时可用模型（当前会话模型切换在输入栏选择）。">
-      {error.length > 0 ? (
-        <div className="text-[12.5px] text-error">模型目录加载失败：{error}</div>
-      ) : catalog === undefined ? (
-        <div className="text-[12.5px] text-outline">正在加载模型目录…</div>
-      ) : (
-        <>
-          <SettingRow
-            title="默认模型"
-            desc="新会话使用的默认 provider / 模型。"
-            control={
-              <span className="text-[12.5px] text-on-surface-variant tabular-nums">
-                {catalog.default.provider} · {catalog.default.model}
-              </span>
-            }
-          />
-          {catalog.groups.map(group => (
-            <div key={group.id} className="px-4 py-3 border-t border-surface-container-high/60">
-              <div className="text-[12px] font-medium text-outline mb-2">{group.name}</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1">
-                {group.models.map(model => (
-                  <div key={model.id} className="flex items-baseline gap-2 min-w-0">
-                    <span className="text-[12.5px] text-on-surface truncate">{model.name}</span>
-                    <span className="text-[11px] text-outline truncate">{model.id}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </>
-      )}
-    </SectionBlock>
   );
 }
 
