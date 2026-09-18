@@ -1,22 +1,21 @@
 /**
- * 官方 Sidebar 的 mount 组合层（对应 vendor client/index.tsx 的 apply 序列，
- * 跳过 slots / native 右栏面 / link-intercept / turn-tail——magic-desktop 没有
- * DSH native Sidebar 与 DSH 对话列）：
- *   createSidebarStore → createBetterSidebarService → registerBuiltins（照
- *   index.tsx:187-190 的 builtin tabs/viewers 注册；fileIcon 走内置 glyph 链，
- *   无外部 registerFileIcon）→ attachLocale / chunk module system / prefs 引导
- *   → <Sidebar ctx store>。
+ * dockkit 右栏的 mount 组合层。两层职责：
  *
- * DOM 锚点降级：官方 use-center-column 在 DSH 里锚定对话列
- * （`#root [data-slot="main.conversation"]`，center-column.ts:12），无锚点的
- * 失败路径是面板永远 visibility:hidden（Sidebar.tsx:743 centerMeasured 门）。
- * magic-desktop 没有该锚点，这里在容器内铺一个同 key 的透明假锚点：
- * resolveCenterColumn 命中它、columnOfSlotHost 停在本容器（第一个真实盒子
- * 祖先），centerRect = 右坞容器矩形——底部工作台水平贴合右坞、贴视口底
- * （layout.css 的 margin-bottom push 作用在 absolute 锚点上，无布局效果）。
+ * 1. better-sidebar 插件面（官方 plugins/dsh-better-sidebar client apply 的
+ *    本环境等价）：createSidebarStore → createBetterSidebarService →
+ *    registerBuiltins（builtinTabs 产物 = editor/files/terminal/browser/
+ *    subagent/sidechat/diff 描述符）→ chunk module system / locale / prefs →
+ *    createNativeTabRecords + createNativeSurface（service 的 native 写面）→
+ *    registerNativeSurface（native/index.ts：每个描述符注册成 dockkit tab
+ *    type + `sidebar.right.pane.tab`/`…title` 的 body/chip slot——对应官方
+ *    index.tsx:148-154/187-190 序列）；
+ * 2. dockkit 右栏面：DockkitSidebarRight（ui-sidebar-right 平移包的 host，
+ *    官方 apply 序列）渲染 <SidebarRight> 竖向面板 + 顶部 tab 行。
+ *
+ * 旧 bottom workbench（vendor Sidebar.tsx）不再渲染；文件保留作追溯。
+ * RenderBoundary 维持壳级错误边界：某面板内部错误不拖垮整体。
  */
 import { useEffect, useRef, useState } from 'react'
-import { Sidebar } from '../vendor/dsh-better-sidebar/src/client/Sidebar.tsx'
 import { RenderBoundary } from '../vendor/dsh-better-sidebar/src/client/RenderBoundary.tsx'
 import { createSidebarStore } from '../vendor/dsh-better-sidebar/src/client/state.ts'
 import { createBetterSidebarService } from '../vendor/dsh-better-sidebar/src/client/service.ts'
@@ -26,12 +25,15 @@ import { attachLocale, t } from '../vendor/dsh-better-sidebar/src/client/locales
 import { loadBootDecision } from '../vendor/dsh-better-sidebar/src/client/prefs.ts'
 import { api } from '../vendor/dsh-better-sidebar/src/client/api.ts'
 import css from '../vendor/dsh-better-sidebar/src/client/sidebar.module.css'
-// 官方样式链：token 桥（--dsw-alias-* → stitch token）+ 布局（panel host / bottom push）
-// + 组件 module css（Sidebar 自 import）。css/* 的子样式由各组件自己 import。
+// 官方样式链：token 桥（--dsw-alias-* → stitch token）——dockkit/ui-sidebar-right
+// 的 module css 消费同一 token 链。
 import '../vendor/dsh-better-sidebar/src/client/tokens.css'
-import '../vendor/dsh-better-sidebar/src/client/layout.css'
+import { createNativeTabRecords } from '../vendor/dsh-better-sidebar/src/client/native/tab-adapter.tsx'
+import { registerNativeSurface } from '../vendor/dsh-better-sidebar/src/client/native/index.ts'
+import { createNativeSurface } from '../vendor/dsh-better-sidebar/src/client/native/surface.ts'
 import { createDockContext } from './dock-context'
 import { resolveFilePath } from './file-path'
+import { DockkitSidebarRight } from './DockkitSidebarRight'
 import type { DockSessionBridge } from './DockPanels'
 
 /** 自写壳 dockTabRequest.tab → 官方 tab descriptor id（builtins/tabs.tsx）。 */
@@ -51,10 +53,10 @@ export interface DockShellProps {
   bridge: DockSessionBridge
   /** conversation.input 桥：树 @ 引用 / 划选「添加到对话」经 ctx.conversation 到这里。 */
   onDraftText?: (text: string) => void
-  /** ctx.get('sidebarRight').isExpanded 的取值（右坞可见性）。 */
-  expanded?: boolean
-  /** sidebarRight.toggleExpanded（官方窄屏停靠把右栏放回去的动作）。 */
-  onToggleCollapsed?: () => void
+  /** dockkit 全屏模式（⛶）报告；RightDock 切 aside 宽度。 */
+  onFullscreenChange?: (fullscreen: boolean) => void
+  /** dockkit 收起按钮（◨）报告；RightDock → App onToggleCollapsed。 */
+  onCollapse?: () => void
   dockTabRequest?: { tab: string; seq: number; sessionId: string } | null
   fileRequest?: { path: string; seq: number; sessionId: string } | null
 }
@@ -64,15 +66,15 @@ export function DockShell({
   cwd,
   bridge,
   onDraftText,
-  expanded = true,
-  onToggleCollapsed,
+  onFullscreenChange,
+  onCollapse,
   dockTabRequest,
   fileRequest,
 }: DockShellProps) {
   // latest-ref：bundle/options 在 mount 时闭包一次，读值全部经 latest 解引用，
-  // props 更新无需重建 ctx（Sidebar 的 uSES 订阅随之保持稳定）。
-  const latest = useRef({ sessionId, cwd, bridge, onDraftText, expanded, onToggleCollapsed })
-  latest.current = { sessionId, cwd, bridge, onDraftText, expanded, onToggleCollapsed }
+  // props 更新无需重建 ctx（订阅随之保持稳定）。
+  const latest = useRef({ sessionId, cwd, bridge, onDraftText, onFullscreenChange, onCollapse })
+  latest.current = { sessionId, cwd, bridge, onDraftText, onFullscreenChange, onCollapse }
 
   // 官方规则（vendor index.tsx:134-142）：每激活实例一套 store/service，无模块级单例。
   const [store] = useState(createSidebarStore)
@@ -90,16 +92,34 @@ export function DockShell({
     },
     getRows: () => latest.current.bridge.sessions,
     onDraftText: (text) => { latest.current.onDraftText?.(text) },
-    isExpanded: () => latest.current.expanded,
-    toggleExpanded: () => { latest.current.onToggleCollapsed?.() },
+    // dockkit 右栏自持 expanded（store.layout.expanded）；该 face 仅供
+    // better-sidebar 的窄屏停靠读面（use-host-feeds），恒展开。
+    isExpanded: () => true,
+    toggleExpanded: () => { latest.current.onCollapse?.() },
   }))
   const ctx = bundle.ctx
 
-  // 注册序列（照 vendor index.tsx apply，跳过 slots/native/link-intercept/ime）。
+  // native surface（官方 index.tsx:148-154）：records + service 写面，一次创建。
+  // setSurface 在注册 effect 里做（StrictMode 的 cleanup 会清掉，remount 需重装）。
+  const [native] = useState(() => {
+    const records = createNativeTabRecords()
+    const surface = createNativeSurface(ctx, records)
+    return { records, surface }
+  })
+
+  // 注册序列（官方 index.tsx：dictionaries/builtins/native registrations）。
   useEffect(() => {
     setChunkModuleSystem(ctx.modules)
     attachLocale(ctx.locale)
+    service.setSurface(native.surface)
     const disposeBuiltins = registerBuiltins(ctx, service)
+    const disposeSurface = () => {
+      native.surface.dispose()
+      service.setSurface(undefined)
+    }
+    // dockkit host（子组件）的 provide effect 先于本 effect 执行——
+    // ctx.inject(['sidebarRightTabs']) 在此立即可用（native/index.ts:137）。
+    const disposeNative = registerNativeSurface({ ctx, store, service, records: native.records })
     let disposed = false
     // Side card 偏好引导（官方 loadBootDecision 自带失败兜底 → schema 默认值）。
     void loadBootDecision(api)
@@ -107,21 +127,21 @@ export function DockShell({
       .catch(() => { /* 保持默认 prefs */ })
     return () => {
       disposed = true
+      disposeNative()
       disposeBuiltins()
+      disposeSurface()
     }
-  }, [ctx, service, store])
+  }, [ctx, store, service, native])
 
-  // 默认展开工作台：官方 per-session state bottomOpen 默认 false（DSH 里由
-  // session header 的 BottomDockToggle 控制）；magic 右坞没有该 header 按钮，
-  // mount 时展开一次（此后官方 localStorage 持久化接管，用户收起的选择被记住）。
-  useEffect(() => {
-    store.reduce(state => state.bottomOpen ? state : { ...state, bottomOpen: true })
-  }, [store, sessionId])
-
-  // props 驱动的 sessions 快照变化 → 通知官方 uSES 订阅者。
+  // props 驱动的 sessions 快照变化 → 通知官方 uSES 订阅者（native surface 的
+  // flushPending 也挂在这个订阅流上）。
   useEffect(() => { bundle.refreshSessions() }, [bundle, sessionId, cwd, bridge.sessions])
 
-  // 旧 fileRequest 通道 → 官方 openFile（editor tab per-path 去重聚焦）。
+  // better-sidebar store 的 active session（官方 Sidebar.tsx:207 的同款 effect）：
+  // service.openTab 的 native 分支用它解析无 scope open 的目标会话。
+  useEffect(() => { store.setSession(sessionId || undefined) }, [store, sessionId])
+
+  // fileRequest 通道 → 官方 openFile（native openResource，editor tab per-path 去重）。
   const lastFileSeq = useRef(0)
   useEffect(() => {
     if (fileRequest === null || fileRequest === undefined) return
@@ -134,7 +154,7 @@ export function DockShell({
     service.openFile({ sessionId, cwd }, resolved)
   }, [fileRequest, sessionId, cwd, service])
 
-  // 旧 dockTabRequest 通道 → 官方 openTab（无 surface → 落底部工作台并展开）。
+  // dockTabRequest 通道 → 官方 openTab（native surface → dockkit openTab）。
   const lastTabSeq = useRef(0)
   useEffect(() => {
     if (dockTabRequest === null || dockTabRequest === undefined) return
@@ -151,13 +171,15 @@ export function DockShell({
   }, [dockTabRequest, sessionId, service])
 
   return (
-    <div className="vendor-bs relative flex-1 min-h-0 min-w-0">
-      {/* use-center-column 的降级锚点：铺满本容器，centerRect = 右坞容器矩形。 */}
-      <div data-slot="main.conversation" aria-hidden="true" className="pointer-events-none absolute inset-0" />
-      {/* 根错误边界（官方 RenderBoundary）：壳级渲染失败显示错误条，不拖垮右坞。 */}
-      <RenderBoundary className={css.boundaryError}>
-        <Sidebar ctx={ctx} store={store} />
-      </RenderBoundary>
-    </div>
+    // 根错误边界（官方 RenderBoundary）：壳级渲染失败显示错误条，不拖垮右坞。
+    <RenderBoundary className={css.boundaryError}>
+      <DockkitSidebarRight
+        ctx={ctx}
+        slotCore={bundle.slotCore}
+        sessionId={sessionId}
+        onFullscreenChange={onFullscreenChange}
+        onCollapse={onCollapse}
+      />
+    </RenderBoundary>
   )
 }

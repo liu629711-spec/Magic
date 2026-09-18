@@ -16,9 +16,23 @@
  * - ctx.modules：index.tsx:218 → chunk-loader（chunk 404 由调用方 catch 容错）
  * - ctx.connection：SideChatView.tsx:404-405/747 全部 `?.` 消费 → undefined 即隐藏断线横幅
  * - ctx.on（session feed / assistant-stream）：client 运行时零调用点 → noop
- * host-half 服务面（webServer/settings/tools/jobs/agents/invariants/slots/webRuntime/
+ * host-half 服务面（webServer/settings/tools/jobs/agents/invariants/webRuntime/
  * subagents/agentPresets/sessionTitle/sessionPersistence）运行时无人读：置 undefined。
+ *
+ * dockkit 右栏扩展（ui-sidebar-right 平移包 + 插件 native/index.ts 的消费面）：
+ * - ctx.slots：官方 SlotCore（vendor/dsh-client-ui-slots 平移）+ mini renderer 的
+ *   inject 语义（dockkit-slot-renderer.tsx），声明链 host 侧自建；
+ * - ctx.locale 增 bind/register：bind 供 ui-sidebar-right 的 t 席（dockLabels/
+ *   guide 标题），register 兼容两种官方形态——better-sidebar (ns, lang, dict)
+ *   与 ui-sidebar-right (ns, { zh, en })；
+ * - ctx.inject(deps, cb)：插件 native/index.ts:137 等待 'sidebarRightTabs'
+ *   服务的挂载序列。本环境服务由 host 在同一 mount 序列同步 provide，缺失
+ *   依赖时显式 warn（官方 fiber 等待语义在受控时序下不需要）；
+ * - ctx.sidebarRight / ctx.sidebarRightTabs：由 DockkitSidebarRight host 经
+ *   provide 注入（controller 与 tab-type registry）。
  */
+import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
+import { slotsInject } from './dockkit-slot-renderer'
 import type {
   Context,
   SidebarConversation,
@@ -45,6 +59,8 @@ export interface DockContextOptions {
 
 export interface DockContextBundle {
   ctx: Context
+  /** dockkit 右栏的 slot 注册表（ui-sidebar-right/插件 tab body 都注册进这里）。 */
+  slotCore: SlotCore
   /** props 驱动的 sessions 快照变化后调用（DockShell 的 effect 负责）。 */
   refreshSessions(): void
 }
@@ -133,17 +149,42 @@ export function createDockContext(options: DockContextOptions): DockContextBundl
     // 在本环境无实现（undefined = 面板内对应动作降级），不在此桩。
   }
 
-  // ── locale：固定 zh 的 mini store ────────────────────────────────────────
+  // ── locale：固定 zh 的 mini store + dockkit 词典面 ───────────────────────
   // t() 直读 zh 源字典（locales.ts:999 zh 是 source of truth），register 面
-  // 留空（无外部 lookup 消费者）；subscribe 恒不触发（locale 固定）。
+  // 兼容两种官方形态；bind(ns) 是 ui-sidebar-right 的 t 席（dockLabels、
+  // guide 标题、PanelChrome 文案都从这走，locales.ts 词典在 host 注册）。
   const localeListeners = new Set<() => void>()
+  const localeDicts = new Map<string, Record<string, Record<string, string>>>()
   const locale = {
     getSnapshot: () => ({ active: 'zh' }),
     subscribe(fn: () => void): () => void {
       localeListeners.add(fn)
       return () => { localeListeners.delete(fn) }
     },
-    register(): () => void { return () => {} },
+    register(ns: string, lang: string | Record<string, Record<string, string>>, dict?: Record<string, string>): () => void {
+      const before = localeDicts.get(ns)
+      // better-sidebar 形态 (ns, lang, dict) 与 ui-sidebar-right 形态 (ns, {zh, en})。
+      const next = typeof lang === 'string'
+        ? { ...before, [lang]: dict ?? {} }
+        : { ...before, ...lang }
+      localeDicts.set(ns, next)
+      return () => {
+        if (before === undefined) localeDicts.delete(ns)
+        else localeDicts.set(ns, before)
+      }
+    },
+    bind(ns: string): (key: string, params?: Record<string, unknown>) => string {
+      return (key, params) => {
+        const table = localeDicts.get(ns)
+        let text = table?.zh?.[key] ?? table?.en?.[key] ?? key
+        if (params !== undefined) {
+          for (const [name, value] of Object.entries(params)) {
+            text = text.split(`{${name}}`).join(String(value))
+          }
+        }
+        return text
+      }
+    },
   }
 
   // ── sidebarRight：官方 use-host-feeds.ts:36-77 的 NativeColumnFace ──────
@@ -152,21 +193,52 @@ export function createDockContext(options: DockContextOptions): DockContextBundl
     toggleExpanded: () => { options.toggleExpanded() },
   }
 
+  // ── dockkit slots：官方 SlotCore + mini inject ──────────────────────────
+  // SlotCore 本体零依赖（vendor/dsh-client-ui-slots 全量平移）；register 的
+  // 静态类型约束由 host 调用点 cast 承担（SlotMap merge 来自平移包自身的
+  // declare module）。'root' 是 SlotCore 构造时内置声明。
+  const slotCore = new SlotCore()
+  const slots = {
+    register: (options: Record<string, unknown>, component: unknown): (() => void) =>
+      slotCore.register(options as never, component as never),
+    inject: (name: string, factory: () => (() => void) | Iterable<() => void>): (() => void) =>
+      slotsInject(slotCore, name, factory),
+    subscribe: (name: string, fn: () => void): (() => void) => slotCore.subscribe(name, fn),
+    entries: (name: string): readonly unknown[] => slotCore.entries(name),
+  }
+  // ctx.inject 的可用性判定：dockkit 右栏的服务面（host provide）+ ctx 自身
+  // 固有成员（callback 以 ctx 为注入面，ctx.get 可达全部）。
+  const injectableNames = new Set(['betterSidebar', 'conversation', 'sidebarRight', 'sidebarRightTabs'])
+
   const ctx = {
     get: (name: string): unknown => {
       if (name === 'betterSidebar') return options.service
       if (name === 'conversation') return conversation
-      if (name === 'sidebarRight') return sidebarRightFace
+      // dockkit host provide 的 controller 优先；未挂载时回落 better-sidebar
+      // 的窄屏停靠面（use-host-feeds.ts:66 的 NativeColumnFace）。
+      if (name === 'sidebarRight') return provided.has(name) ? provided.get(name) : sidebarRightFace
       if (provided.has(name)) return provided.get(name)
       // betterLocale / remote：官方按 undefined 降级（Sidebar.tsx:125-129、index.tsx:348）。
       return undefined
     },
     provide: (name: string, factory: () => unknown): void => { provided.set(name, factory()) },
-    effect: (fn: () => (() => void) | void): (() => void) => {
+    effect: (fn: () => (() => void) | void, _label?: string): (() => void) => {
       const disposer = fn()
       return typeof disposer === 'function' ? disposer : () => {}
     },
-    inject: () => () => {},
+    inject: (deps: readonly string[], callback: (injected: unknown) => (() => void) | void): { dispose: () => void } => {
+      // 官方语义（cordis ctx.inject）：deps 全部可用时执行 callback（注入面
+      // 是 ctx 自身，ctx.get 可达服务）；这里 host 时序可控，缺失依赖显式
+      // warn 而不是静默等待（服务不会在本 mount 序列之后出现）。
+      const missing = deps.filter(name => !provided.has(name) && !injectableNames.has(name))
+      if (missing.length !== 0) {
+        console.warn(`[magic-desktop] ctx.inject 依赖未就绪: ${missing.join(', ')}`)
+        return { dispose: () => {} }
+      }
+      const disposer = callback(ctx)
+      return { dispose: typeof disposer === 'function' ? disposer : () => {} }
+    },
+    slots,
     sessions,
     locale,
     modules: {
@@ -197,7 +269,6 @@ export function createDockContext(options: DockContextOptions): DockContextBundl
     // host-half 服务面：client 运行时零消费（见文件头），显式 undefined。
     webServer: undefined,
     webRuntime: undefined,
-    slots: undefined,
     settings: undefined,
     invariants: undefined,
     tools: undefined,
@@ -213,6 +284,7 @@ export function createDockContext(options: DockContextOptions): DockContextBundl
 
   return {
     ctx,
+    slotCore,
     refreshSessions: () => {
       for (const fn of [...sessionListeners]) fn()
     },

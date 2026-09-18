@@ -118,9 +118,11 @@ export interface SidebarSlotRegisterOptions {
   priority?: number
   locale?: string
   registrant?: string
+  /** Store seat（ui-sidebar-right 的 rightbar.session 席声明共享 handle）。 */
+  store?: unknown
   /** Business-face factory; args depend on the slot scope. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mirrors the host slots signature, where inject args are untyped; unknown[] would reject concrete-typed implementations (contravariance)
-  inject?: (...args: any[]) => Record<string, unknown>
+  inject?: (...args: any[]) => object
   children?: Record<string, unknown>
 }
 
@@ -130,9 +132,11 @@ export interface SidebarSlotsService {
   /**
    * Run a callback for each declaration lifetime of a slot (the runtime
    * SlotRegistry.inject): a no-op while the slot is undeclared, so the
-   * settings section registration waits for the settings shell.
+   * settings section registration waits for the settings shell. The callback
+   * may return one disposer or a generator yielding several（ui-sidebar-right
+   * 的 seat 注册是原子 generator）。
    */
-  inject(key: string, callback: () => () => void): () => void
+  inject(key: string, callback: () => (() => void) | Iterable<() => void>): () => void
 }
 
 /** The client session list row the sidebar reads (cwd for the explorer). */
@@ -408,6 +412,16 @@ export interface SidebarLocaleService {
   subscribe(fn: () => void): () => void
   /** Register one locale's dictionary for a namespace; returns the disposer. */
   register(ns: string, locale: string, dict: Record<string, string>): () => void
+  /**
+   * Register a namespace's dictionaries in one call（ui-sidebar-right 形态：
+   * `register(NS, { zh, en })`）；返回 disposer。
+   */
+  register(ns: string, dicts: Record<string, Record<string, string>>): () => void
+  /**
+   * Bind a namespace to a translate function reading the active locale at
+   * call time（ui-sidebar-right 的 t 席：dockLabels/guide/PanelChrome 文案）。
+   */
+  bind(ns: string): (key: string, params?: Record<string, unknown>) => string
 }
 
 /** The composer draft face the sidebar reaches through `ctx.conversation.input`. */
