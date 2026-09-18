@@ -31,6 +31,7 @@ export function RightDock({
   dockTabRequest,
   fileRequest,
   bridge,
+  width = 520,
 }: {
   sessionId: string;
   cwd: string | undefined;
@@ -47,6 +48,8 @@ export function RightDock({
   dockTabRequest?: { tab: string; seq: number; sessionId: string } | null;
   fileRequest?: { path: string; seq: number; sessionId: string } | null;
   bridge: DockSessionBridge;
+  /** 坞宽（App 布局拖拽下发，2026-09-18；缺省 520，全屏时忽略）。 */
+  width?: number;
 }) {
   // dockkit 内部 ⛶（PanelChrome）与 App dockChrome 任一生效即全宽。
   const [dockkitFullscreen, setDockkitFullscreen] = useState(false);
@@ -58,8 +61,9 @@ export function RightDock({
       data-right-dock
       className={
         "vendor-bs min-h-0 bg-surface-container-lowest border-l border-surface-container-highest flex flex-col overflow-hidden shrink-0 " +
-        (effectiveFullscreen ? "flex-1 min-w-0" : "w-[min(520px,42vw)]")
+        (effectiveFullscreen ? "flex-1 min-w-0" : "")
       }
+      style={effectiveFullscreen ? undefined : { width: `min(${width}px, 60vw)` }}
     >
       <DockShell
         sessionId={sessionId}

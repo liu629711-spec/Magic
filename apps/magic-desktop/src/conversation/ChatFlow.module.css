@@ -48,3 +48,55 @@
 .flow [data-chat-flow] > [hidden='until-found'] {
   content-visibility: hidden;
 }
+
+/* 对话内容区宽度手柄（2026-09-18，3099 实测对齐）：贴内容列两侧 24px 的
+ * 40px col-resize 条；hover 时 ::after 画一条跟随指针 Y（±12px 实心、向外
+ * 渐隐至 ±52px）的高亮线，指针 Y 经 --dsh-width-handle-y 注入。空间不足
+ * （宽坞/全屏挤压）时手柄宽度自然缩到 0。 */
+.widthHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 30;
+  width: min(40px, calc((100% - var(--dsh-chat-content-width, 748px)) / 2 - 24px));
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.widthHandle[data-side='left'] {
+  right: calc(50% + var(--dsh-chat-content-width, 748px) / 2 + 24px);
+}
+
+.widthHandle[data-side='right'] {
+  left: calc(50% + var(--dsh-chat-content-width, 748px) / 2 + 24px);
+}
+
+.widthHandle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent calc(var(--dsh-width-handle-y, -100px) - 52px),
+    var(--dsw-alias-scrollbar-hover-l1, rgba(255, 255, 255, 0.16)) calc(var(--dsh-width-handle-y, -100px) - 12px),
+    var(--dsw-alias-scrollbar-hover-l1, rgba(255, 255, 255, 0.16)) calc(var(--dsh-width-handle-y, -100px) + 12px),
+    transparent calc(var(--dsh-width-handle-y, -100px) + 52px)
+  );
+}
+
+.widthHandle[data-side='left']::after {
+  right: 16px;
+}
+
+.widthHandle[data-side='right']::after {
+  left: 16px;
+}
+
+.widthHandle:hover::after,
+.widthHandle[data-dragging]::after {
+  opacity: 1;
+}

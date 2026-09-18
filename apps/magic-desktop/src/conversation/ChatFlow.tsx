@@ -338,7 +338,7 @@ function ConversationTabs({ active, onSelect }: {
   )
 }
 
-export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, headerActions, onOpenFile = ignoreFile }: {
+export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, onToggleTerminal, terminalOpen, headerActions, onOpenFile = ignoreFile }: {
   onOpenFile?: (path: string) => void
   store: ChatSessionStore
   onSend?: (text: string) => void
@@ -380,6 +380,9 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
     exportMarkdown?: () => void
     copyId?: () => void
   }
+  /** 底部终端面板开合（3099 实测形态：顶栏终端钮弹出对话区底部面板；App 持状态）。 */
+  onToggleTerminal?: () => void
+  terminalOpen?: boolean
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { snapshot } = state
@@ -612,8 +615,66 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   // 划选注释（M8）：待发送的注释文本（发送后拼成引用块并清空）。
   const [annotations, setAnnotations] = useState<string[]>([])
 
+  // 对话内容区宽度手柄（2026-09-18，3099 实测对齐）：内容列宽 clamp(680, 748 初值, 920)，
+  // 两侧 40px col-resize 条拖拽调节，经 --dsh-chat-content-width 驱动消息流/轨迹视图。
+  const CONTENT_MIN = 680
+  const CONTENT_MAX = 920
+  const [contentWidth, setContentWidth] = useState(748)
+  const contentWidthRef = useRef(contentWidth)
+  contentWidthRef.current = contentWidth
+  const widthDragRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
+  const onWidthHandleDown = (side: 'left' | 'right') => (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    handle.dataset.dragging = ''
+    widthDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: contentWidthRef.current }
+    const onMove = (move: PointerEvent) => {
+      const drag = widthDragRef.current
+      if (drag === null) return
+      // 左手柄向左拖 / 右手柄向右拖 = 加宽（对称取 2 倍位移，两侧空间同步扩张）。
+      const delta = side === 'left' ? drag.startX - move.clientX : move.clientX - drag.startX
+      const next = Math.min(CONTENT_MAX, Math.max(CONTENT_MIN, drag.startWidth + delta * 2))
+      setContentWidth(next)
+    }
+    const finish = () => {
+      widthDragRef.current = null
+      delete handle.dataset.dragging
+      handle.removeEventListener('pointermove', onMove)
+      handle.removeEventListener('pointerup', finish)
+      handle.removeEventListener('pointercancel', finish)
+    }
+    handle.addEventListener('pointermove', onMove)
+    handle.addEventListener('pointerup', finish)
+    handle.addEventListener('pointercancel', finish)
+  }
+  // 高亮线跟随指针 Y（3099 同款渐隐线；hover 即画，无需按下）。
+  const onWidthHandleMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const handle = event.currentTarget
+    const rect = handle.getBoundingClientRect()
+    handle.style.setProperty('--dsh-width-handle-y', `${event.clientY - rect.top}px`)
+  }
+
   return (
-    <div className="vendor-dsh-chat flex h-full flex-col bg-surface text-on-surface">
+    <div
+      className="vendor-dsh-chat relative flex h-full flex-col bg-surface text-on-surface"
+      style={{ '--dsh-chat-content-width': `${contentWidth}px` } as React.CSSProperties}
+    >
+      {/* 对话内容区宽度手柄（3099 实测形态：两侧 40px col-resize + 渐隐高亮线） */}
+      <div
+        className={css.widthHandle}
+        data-side="left"
+        data-conversation-width-handle="left"
+        onPointerDown={onWidthHandleDown('left')}
+        onPointerMove={onWidthHandleMove}
+      />
+      <div
+        className={css.widthHandle}
+        data-side="right"
+        data-conversation-width-handle="right"
+        onPointerDown={onWidthHandleDown('right')}
+        onPointerMove={onWidthHandleMove}
+      />
       {sessionHeader !== undefined && (
         <SessionHeader
           data={sessionHeader}
@@ -623,6 +684,8 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
           onExpandDock={onExpandDock}
           onCollapseDock={onCollapseDock}
           onOpenDockTab={onOpenDockTab}
+          onToggleTerminal={onToggleTerminal}
+          terminalOpen={terminalOpen}
           headerActions={headerActions}
         />
       )}

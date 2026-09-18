@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SessionSidebar } from "./sidebar/SessionSidebar";
+import { createSidebarStore } from "./vendor/dsh-better-sidebar/src/client/state.ts";
+import { Icon } from "./sidebar/Icon";
+// 底部终端面板（3099 形态）复用插件的 lazy terminal chunk（xterm 主包不进主 bundle）。
+const LazyTerminalView = lazy(
+  () => import("./vendor/dsh-better-sidebar/src/client/chunks/terminal.tsx").then(mod => ({ default: mod.TerminalView })),
+);
 // 右坞（2026-09-18）：三个真实 tab（文件/文件变动/终端）接本机 dsh web 的 /sidebar 通道。
 // 原 InspectorPanel/ReviewPanel（静态 mock）保留作历史参考，不再渲染。
 import { RightDock } from "./inspector/RightDock";
@@ -541,6 +547,112 @@ export function App() {
     dockTabRequest,
   };
 
+  // ── 布局拖拽（2026-09-18 用户裁定，3099 实测几何 + Codex 式阻力收起）──
+  // 左栏/右坞缘 8px 骑缝手柄拖动调宽；拖进阻力区位移衰减（明显变重），
+  // 拖过阻力上限即收起，收起后保留各自唯一打开入口（左栏 56px 图标条 /
+  // 顶栏右坞开关）。对话区宽度手柄在 ChatFlow（内容列 clamp 680-920）。
+  const SIDEBAR_RESIST = 220;
+  const SIDEBAR_COLLAPSE_BELOW = 180;
+  const SIDEBAR_MAX = 480;
+  const DOCK_RESIST = 420;
+  const DOCK_COLLAPSE_BELOW = 340;
+  const DOCK_MAX = 880;
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [dockWidth, setDockWidth] = useState(520);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
+  const dockWidthRef = useRef(dockWidth);
+  dockWidthRef.current = dockWidth;
+  // 阻力映射：正常区线性跟随；阻力区按 0.3 系数衰减（拖感明显变重），越过上限收起。
+  const resistWidth = (raw: number, resist: number): number =>
+    raw < resist ? resist - (resist - raw) * 0.3 : raw;
+  const onSidebarHandleDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = sidebarWidthRef.current;
+    let cleanup = (): void => {};
+    const onMove = (ev: PointerEvent): void => {
+      const raw = startWidth + (ev.clientX - startX);
+      if (raw <= SIDEBAR_COLLAPSE_BELOW) {
+        setSidebarCollapsed(true);
+        cleanup();
+        return;
+      }
+      setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(56, resistWidth(raw, SIDEBAR_RESIST))));
+    };
+    cleanup = (): void => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", cleanup);
+      handle.removeEventListener("pointercancel", cleanup);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", cleanup);
+    handle.addEventListener("pointercancel", cleanup);
+  }, []);
+  const onDockHandleDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = dockWidthRef.current;
+    let cleanup = (): void => {};
+    const onMove = (ev: PointerEvent): void => {
+      const raw = startWidth - (ev.clientX - startX);
+      if (raw <= DOCK_COLLAPSE_BELOW) {
+        setDockFullscreen(false);
+        setDockCollapsed(true);
+        cleanup();
+        return;
+      }
+      setDockWidth(Math.min(DOCK_MAX, Math.max(360, resistWidth(raw, DOCK_RESIST))));
+    };
+    cleanup = (): void => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", cleanup);
+      handle.removeEventListener("pointercancel", cleanup);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", cleanup);
+    handle.addEventListener("pointercancel", cleanup);
+  }, []);
+
+  // ── 底部终端面板（2026-09-18，3099 实测形态）：顶栏终端钮 → 对话区底部弹出
+  // 220px 面板（8px 骑缝手柄拖高、右上 × 收起、再点顶栏钮收起）。终端本体复用
+  // 插件 TerminalView（xterm + pty，lazy chunk），UI-tab 固定 tabId=term:bottom
+  // ——同一会话重开面板 reattach 同一 shell。
+  const [bottomTerminalOpen, setBottomTerminalOpen] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(220);
+  // TerminalView 消费独立 store（prefs 字体 / tabOpen 生命周期判定），与右坞 store 无关。
+  const [terminalStore] = useState(createSidebarStore);
+  const terminalHeightRef = useRef(terminalHeight);
+  terminalHeightRef.current = terminalHeight;
+  const toggleBottomTerminal = useCallback(() => setBottomTerminalOpen(value => !value), []);
+  const onTerminalResizeDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const startY = event.clientY;
+    const startHeight = terminalHeightRef.current;
+    let cleanup = (): void => {};
+    const onMove = (ev: PointerEvent): void => {
+      setTerminalHeight(Math.min(window.innerHeight - 260, Math.max(140, startHeight + (startY - ev.clientY))));
+    };
+    cleanup = (): void => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", cleanup);
+      handle.removeEventListener("pointercancel", cleanup);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", cleanup);
+    handle.addEventListener("pointercancel", cleanup);
+  }, []);
+
   // web 模式连接门（认证/探测/错误态整屏呈现）
   if (backendMode && web.status !== "ready") {
     return (
@@ -601,6 +713,9 @@ export function App() {
     <div className="h-screen overflow-hidden bg-surface text-on-surface font-headline-md text-headline-md antialiased selection:bg-primary-container selection:text-on-primary-container">
       <SessionSidebar
         activeSessionId={activeId}
+        width={sidebarWidth}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed(value => !value)}
         onOpenSession={openSession}
         onForkSession={forkSession}
         onExportSession={exportSession}
@@ -656,7 +771,14 @@ export function App() {
         recentLimit={recentLimit}
         sessionCwds={backendMode ? sessionCwds : undefined}
       />
-      <div className="pl-[260px] h-full flex">
+      <div className="relative h-full flex" style={{ paddingLeft: sidebarCollapsed ? 56 : sidebarWidth }}>
+        {/* 左栏拖拽手柄（8px 骑缝，3099 同款几何；拖进阻力区变重、越过上限收起成 56px 图标条） */}
+        <div
+          data-layout-handle="sidebar"
+          className="fixed top-0 h-full w-2 z-[45] -ml-1 cursor-col-resize touch-none select-none hover:bg-primary/20"
+          style={{ left: sidebarCollapsed ? 52 : sidebarWidth - 4 }}
+          onPointerDown={onSidebarHandleDown}
+        />
         <main className={dockFullscreen ? "hidden" : "flex-1 min-w-0 bg-surface"}>
           {view === "skills" ? (
             <SkillsHub
@@ -680,6 +802,8 @@ export function App() {
               dockCollapsed={dockCollapsed}
               onExpandDock={() => setDockCollapsed(false)}
               onCollapseDock={() => setDockCollapsed(true)}
+              onToggleTerminal={toggleBottomTerminal}
+              terminalOpen={bottomTerminalOpen}
               onOpenDockTab={tab => {
                 setDockCollapsed(false);
                 setDockTabRequest({ tab, seq: ++requestSeq.current, sessionId: activeId });
@@ -709,11 +833,21 @@ export function App() {
             />
           )}
         </main>
+        {/* 右坞拖拽手柄（8px 骑缝在坞左缘；阻力 + 越过上限收起，恢复入口=顶栏右坞开关） */}
+        {!dockCollapsed && !dockFullscreen && (
+          <div
+            data-layout-handle="dock"
+            className="fixed top-0 h-full w-2 z-[45] -ml-1 cursor-col-resize touch-none select-none hover:bg-primary/20"
+            style={{ right: dockWidth - 4 }}
+            onPointerDown={onDockHandleDown}
+          />
+        )}
         {/* 右坞：文件 / 文件变动 / 终端 / 团队（真实 dsh web /sidebar 通道，无 mock）；
             onQuoteFile：文件 @引用注入对话输入框草稿（跨模块桥）；
             teamOpenToken：图卡点成员/CEO 节点时切到「团队」tab；sendIntervention：成员干预写回会话 */}
         <RightDock
           key={dockSessionId}
+          width={dockWidth}
           bridge={dockBridge}
           fileRequest={fileRequest}
           sessionId={dockSessionId}
@@ -723,6 +857,45 @@ export function App() {
           sendIntervention={sendIntervention}
           {...dockChrome}
         />
+        {/* 底部终端面板（3099 实测形态）：对话区底部整条弹出，8px 骑缝拖高 + 右上 × 收起；
+            left 从侧栏右缘起（3099 同款），盖过对话区与右坞之间，贴视口底。 */}
+        {bottomTerminalOpen && backendMode && web.status === "ready" && (
+          <div
+            data-bottom-terminal
+            className="absolute z-40 flex flex-col bg-surface border-t border-surface-container-highest"
+            style={{ left: sidebarCollapsed ? 56 : sidebarWidth, right: 0, bottom: 0, height: terminalHeight }}
+          >
+            <div
+              data-bottom-terminal-resize
+              className="absolute -top-1 left-0 right-0 h-2 cursor-row-resize touch-none hover:bg-primary/20"
+              onPointerDown={onTerminalResizeDown}
+            />
+            <div className="flex h-8 shrink-0 items-center justify-between border-b border-surface-container-highest pr-1 pl-3">
+              <span className="flex items-center gap-1 text-[12px] text-outline">
+                <Icon name="terminal" className="text-[14px]" />
+                终端
+              </span>
+              <button
+                type="button"
+                title="折叠底部面板"
+                aria-label="折叠底部面板"
+                onClick={() => setBottomTerminalOpen(false)}
+                className="flex h-6 w-6 items-center justify-center rounded text-outline transition-colors hover:bg-hover hover:text-on-surface cursor-pointer"
+              >
+                <Icon name="close" className="text-[14px]" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <Suspense fallback={null}>
+                <LazyTerminalView
+                  scope={{ sessionId: activeId, cwd: dockCwd }}
+                  tabId="term:bottom"
+                  store={terminalStore}
+                />
+              </Suspense>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

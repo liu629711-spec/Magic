@@ -107,7 +107,7 @@ type DropHandlers = {
  *    打开文件夹/搜索文件与设置组 M1 无后端，置灰占位）。
  * 回退时删掉 RowActions 中 pin、拖拽 handlers、SearchPalette 引用即可。
  */
-export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenSettings, assigned, onAssign, recentLimit = 20, sessionCwds }: {
+export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenSettings, assigned, onAssign, recentLimit = 20, sessionCwds, width = 260, collapsed = false, onToggleCollapsed }: {
   activeSessionId: string
   onOpenSession: (id: string) => void
   onForkSession: (sourceId: string, forkId: string) => void
@@ -137,6 +137,12 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   showMockSections?: boolean
   /** 最近任务区最多渲染条数（设置页可调；缺省 20） */
   recentLimit?: number
+  /** 栏宽（App 布局拖拽下发，2026-09-18；缺省 260） */
+  width?: number
+  /** 收起态（56px 图标窄条，3099 同款；打开入口=条顶部按钮） */
+  collapsed?: boolean
+  /** 收起/展开切换（Header 收起钮 + 窄条打开钮） */
+  onToggleCollapsed?: () => void
 }) {
   const [sectionOpen, setSectionOpen] = useState(() => ({
     pinned: false,
@@ -643,10 +649,60 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   const pinnedZone = zoneHandlers("zone:pinned", { section: "pinned" });
   const taskZone = zoneHandlers("zone:task", { section: "task" });
 
+  // 收起窄条（2026-09-18 用户裁定 + 3099 实测同款）：56px 图标条，顶部「打开侧边栏」
+  // 即唯一恢复入口；新建/搜索/设置保持可达。
+  if (collapsed) {
+    return (
+      <aside
+        className="fixed left-0 top-0 h-full w-[56px] bg-surface-container-lowest z-50 flex flex-col items-center gap-1 py-space-sm select-none"
+        data-sidebar-collapsed
+      >
+        {[
+          { title: "打开侧边栏", icon: "dock_to_left", onClick: onToggleCollapsed },
+          {
+            title: "新建任务",
+            icon: "edit_square",
+            onClick: () => {
+              if (onCreateSession !== undefined) onCreateSession();
+              else newSession();
+            },
+          },
+          { title: "搜索任务", icon: "search", onClick: () => setPaletteOpen(true) },
+        ].map(item => (
+          <button
+            key={item.title}
+            type="button"
+            title={item.title}
+            aria-label={item.title}
+            onClick={item.onClick}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface cursor-pointer"
+          >
+            <Icon name={item.icon} className="text-[18px]" />
+          </button>
+        ))}
+        <div className="flex-1" />
+        {onOpenSettings !== undefined && (
+          <button
+            type="button"
+            title="设置"
+            aria-label="设置"
+            onClick={onOpenSettings}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface cursor-pointer"
+          >
+            <Icon name="settings" className="text-[18px]" />
+          </button>
+        )}
+      </aside>
+    );
+  }
+
   return (
-    <aside className="fixed left-0 top-0 h-full w-[260px] bg-surface-container-lowest z-50 flex flex-col select-none">
+    <aside
+      className="fixed left-0 top-0 h-full bg-surface-container-lowest z-50 flex flex-col select-none"
+      style={{ width }}
+    >
       <div className="flex flex-col h-full overflow-hidden">
-        <Header />
+        <Header onCollapsed={onToggleCollapsed} />
         {/* 顶部导航固定（2026-09-17 用户裁定）：新建任务/搜索任务/定时任务/技能扩展
             不随会话列表滚动 */}
         <div className="shrink-0 px-space-sm pb-space-md">
@@ -1014,7 +1070,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   );
 }
 
-function Header() {
+function Header({ onCollapsed }: { onCollapsed?: () => void }) {
   return (
     <div className="h-12 px-space-md flex items-center justify-between shrink-0">
       <div className="flex items-center gap-space-sm min-w-0">
@@ -1024,10 +1080,19 @@ function Header() {
           {product.version}
         </span>
       </div>
-      <Icon
-        name="dock_to_right"
-        className="text-outline hover:text-on-surface cursor-pointer transition-colors text-[18px] shrink-0"
-      />
+      {/* 收起侧边栏（2026-09-18 接线：拖拽调宽越过阻力上限也可收起；恢复=窄条顶部钮） */}
+      <button
+        type="button"
+        title="收起侧边栏"
+        aria-label="收起侧边栏"
+        onClick={onCollapsed}
+        className="text-outline hover:text-on-surface cursor-pointer transition-colors flex items-center justify-center h-7 w-7 rounded hover:bg-surface-container-low"
+      >
+        <Icon
+          name="dock_to_right"
+          className="text-[18px] shrink-0"
+        />
+      </button>
     </div>
   );
 }

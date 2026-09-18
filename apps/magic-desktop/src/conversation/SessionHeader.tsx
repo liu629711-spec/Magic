@@ -7,12 +7,14 @@
 // （官方 AgentPresetLabel：IconAgentPresetOutline16 + tsp fill 底 pill）+ Agent Team trigger
 // （官方 TeamAction：IconUserOutline16 + count 徽标，无边框 hover 底）；右=workspace
 // icon-only chip ▾（复制路径/资源管理器置灰）+「⋯」会话菜单（重命名/导出 Markdown/
-// 复制会话 ID）+ 终端 +「⊕ 侧边」+ right_panel 收起/展开右坞。能力未接的置灰并 title
-// 诚实标注。数据由 App 从 web.sessions 计算后经 ChatFlow 传入。
+// 复制会话 ID）+ 终端（弹对话区底部终端面板）+ 右坞收起时的打开入口（与右坞 tab 行
+// 收起钮同款右面板图标）。能力未接的置灰并 title 诚实标注。数据由 App 从 web.sessions
+// 计算后经 ChatFlow 传入。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   IconAgentPresetOutline16,
   IconChevronDownOutline14,
+  IconPanelLeftOutline16,
   IconUserOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
@@ -37,7 +39,7 @@ export interface SessionHeaderData {
   preset?: string
 }
 
-/** ghost 图标钮（16px 图标 + hover 反色；disabled 置灰且保留 title 诚实标注）。 */
+/** ghost 图标钮（28×28 钮 + 16px 图标，3099 顶栏实测尺寸；disabled 置灰且保留 title 诚实标注）。 */
 function GhostIconButton({ icon, label, caret, disabled, ariaExpanded, onClick }: {
   icon: string
   /** 即 title/aria-label（含置灰原因，如「附件面板待接入」）。 */
@@ -57,7 +59,7 @@ function GhostIconButton({ icon, label, caret, disabled, ariaExpanded, onClick }
       aria-expanded={ariaExpanded}
       disabled={disabled}
       onClick={onClick}
-      className={`flex h-6 min-w-6 items-center justify-center gap-0.5 rounded p-1 text-outline transition-colors ${
+      className={`flex h-7 w-7 items-center justify-center rounded text-outline transition-colors ${
         disabled
           ? 'cursor-not-allowed opacity-40'
           : 'cursor-pointer hover:bg-hover hover:text-on-surface'
@@ -117,7 +119,7 @@ function WorkspaceChip({ cwd, caret, ariaExpanded, onClick }: {
   )
 }
 
-export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpandDock, onOpenDockTab, headerActions }: {
+export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpandDock, onToggleTerminal, terminalOpen, headerActions }: {
   data: SessionHeaderData
   /** 切换会话（App 的 openSession）。 */
   onOpenSession?: (id: string) => void
@@ -128,8 +130,12 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
   /** 右坞展开/收起（corner 语义）。 */
   onExpandDock?: () => void
   onCollapseDock?: () => void
-  /** 打开右坞指定 tab（terminal 等 + ⊕侧边的 start 页；未接线时对应钮置灰）。 */
+  /** 打开右坞指定 tab（dockkit 通道；终端钮改弹底部面板后此通道仅备用）。 */
   onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'browser' | 'jobs' | 'start') => void
+  /** 终端钮（3099 实测形态：对话内容区底部弹出终端面板；未接线时置灰）。 */
+  onToggleTerminal?: () => void
+  /** 底部终端面板开合态（终端钮 aria-expanded）。 */
+  terminalOpen?: boolean
   /** 会话操作（⋯菜单；整组未接线时置灰）。 */
   headerActions?: {
     rename?: (title: string) => void
@@ -455,44 +461,35 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
               </div>
             )}
           </div>
-          {/* 终端（图二/图三：⊕侧边左边的按钮 = 终端，一键开右坞终端 tab） */}
+          {/* 终端（3099 实测：点按钮 = 对话内容区底部弹出终端面板，非右坞 tab；
+              再点收起，面板内 × 同样收起） */}
           <GhostIconButton
             icon="terminal"
             label="终端"
-            disabled={onOpenDockTab === undefined}
+            disabled={onToggleTerminal === undefined}
+            ariaExpanded={terminalOpen}
             onClick={() => {
               setMenu(null)
-              onExpandDock?.()
-              onOpenDockTab?.('terminal')
+              onToggleTerminal?.()
             }}
           />
-          {/* ⊕侧边（图二实测语义：打开右坞侧聊 fork 面板） */}
-          <button
-            type="button"
-            data-header-sidechat
-            title="侧边聊天"
-            onClick={() => {
-              setMenu(null)
-              onExpandDock?.()
-              onOpenDockTab?.('sidechat')
-            }}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-full border border-line px-2.5 text-[11.5px] text-ink-2 transition-colors hover:border-line-strong hover:text-ink cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden>add_circle</span>
-            <span>侧边</span>
-          </button>
-          {/* 右坞开关只在收起态出现在顶栏（图二最右；展开态的开关在 tab 行最右 ◨）：
-              收起后右坞整体消失（无竖条），此钮是唯一恢复入口。 */}
+          {/* 右坞开关（收起态出现在顶栏；图标与右坞 tab 行收起钮同款
+              IconPanelLeftOutline16——3099 实测两侧同一右面板形图标） */}
           {dockCollapsed === true && (
-            <GhostIconButton
-              icon="right_panel_open"
-              label="打开右坞"
+            <button
+              type="button"
+              data-header-dock-expand
+              title="打开右坞"
+              aria-label="打开右坞"
               disabled={onExpandDock === undefined}
               onClick={() => {
                 setMenu(null)
                 onExpandDock?.()
               }}
-            />
+              className="flex h-7 w-7 items-center justify-center rounded text-outline transition-colors hover:bg-hover hover:text-on-surface cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <IconPanelLeftOutline16 size={16} />
+            </button>
           )}
         </div>
 

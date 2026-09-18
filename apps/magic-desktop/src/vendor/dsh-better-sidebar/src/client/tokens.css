@@ -34,6 +34,10 @@ body {
   --dsw-alias-interactive-bg-hover: #292a2d; /* stitch surface-container-high */
   --dsw-alias-interactive-bg-hover-accent: #4d8eff; /* stitch primary-container */
   --dsw-alias-interactive-bg-active: #343538; /* stitch surface-container-highest */
+  /* 2026-09-18 补：dockkit slotCaret（tab 拖动插入指示）与 dockHint 引用的
+   * 新品牌变量；宿主 design-platform.css 暗色主题定义为 deepseek-450。
+   * 缺失时拖 tab 的插入位置完全不可见（黑主题下尤其）。 */
+  --dsw-alias-brand-primary-new-colorprimary-new-color: rgb(86, 134, 254);
 
   /* ── 状态色 ── */
   --dsw-alias-state-error-primary: #ffb4ab; /* stitch error */
@@ -51,6 +55,10 @@ body {
   --dsw-static-deepseek-450: rgb(86, 134, 254);
   --dsw-static-deepseek-500: rgb(65, 118, 230);
   --dsw-static-green-500: rgb(34, 197, 94);
+  /* 2026-09-18 补：FileTypeIcon 剪影上的镂空字母（md/ts 等类型字形）
+   * fill=var(--dsw-static-neutral-00)；缺失时字母整个透明——图标只剩
+   * 彩色 sheet 没有 "MD" 字样（3099 宿主两主题均为白）。 */
+  --dsw-static-neutral-00: rgb(255, 255, 255);
   --dsw-static-neutral-bluish-300: rgb(207, 211, 214);
   --dsw-static-red-600: rgb(236, 19, 19);
 
