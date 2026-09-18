@@ -5,6 +5,13 @@
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
+  /* 定位上下文收口（2026-09-18 整页滚动跑偏修复）：vendor 消息行的 sr-only 状态
+   * 标签（visuallyHidden，position:absolute 无 top/left）在没有 positioned 祖先时
+   * 包含块落到 html，逃逸本容器的 overflow 裁剪并把整页 scrollHeight 撑高（实测
+   * html 4957px、整页可滚 4089px，界面整体滚出视口）。加 relative 后所有绝对定位
+   * 后代的包含块回到消息流内部，随本容器滚动并正常裁剪。上游 DSH 由 ConversationRoot
+   * 提供同等约束。 */
+  position: relative;
 }
 
 .flowInner {
