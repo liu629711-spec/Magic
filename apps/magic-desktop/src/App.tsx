@@ -79,8 +79,12 @@ export function App() {
     }
     return initial;
   });
+  // storesRef 是「会话 → store」的唯一权威：ensureStore 会同步 state（触发中栏
+  // 重渲），而右坞 binding 面的 ensureStoreQuiet 只写 ref、不进 state（渲染期取用
+  // 不能 setState）。**绝不能再用 state 反向覆盖 ref**——那会把 quiet 建的库丢掉，
+  // 于是 getDockBinding 每次拿到新建的空 store，而 follow 流仍写在被丢弃的 store
+  // 上（表现为侧边聊天面板事件数恒为 0、消息流永远空）。
   const storesRef = useRef(stores);
-  storesRef.current = stores;
   // 进入应用为空白态（2026-09-17 用户裁定：关闭界面/应用再进来，默认不恢复上次
   // 打开的会话界面与内容）。
   const [activeId, setActiveId] = useState<string>("");
@@ -321,6 +325,23 @@ export function App() {
     return fresh;
   };
 
+  /**
+   * 建库但不触发 App 重渲（右坞面板的 binding 面专用）。getDockBinding 会被
+   * 面板在**渲染期**取用（SideNoteView 的 bindingOf），若这里走 ensureStore 的
+   * setStores，就是渲染期更新 App——React 报「Cannot update a component while
+   * rendering a different component」。右坞面板持有自己的 store 引用，不需要
+   * App 为它重渲（中栏 ChatFlow 的 store 仍走 ensureStore）。
+   */
+  const ensureStoreQuiet = (id: string): ChatSessionStore => {
+    const existing = storesRef.current[id];
+    if (existing !== undefined) return existing;
+    const fresh = new ChatSessionStore();
+    const mock = seedsRef.current[id];
+    if (mock !== undefined) fresh.seedWindow(mock);
+    storesRef.current = { ...storesRef.current, [id]: fresh };
+    return fresh;
+  };
+
   const openSession = (id: string) => {
     setView("chat"); // 打开会话即回到对话视图（技能/设置页点击会话行同样生效）
     if (id.length === 0) {
@@ -449,7 +470,7 @@ export function App() {
       current.parentSessionId !== undefined
         ? web.sessions.find(row => row.sessionId === current.parentSessionId)
         : undefined;
-    const children = web.sessions.filter(row => row.parentSessionId === activeId);
+    const children = web.sessions.filter(row => row.parentSessionId === activeId && row.origin === "subagent");
     return {
       id: current.sessionId,
       title: current.title,
@@ -470,10 +491,12 @@ export function App() {
 
   // web 模式：activeId 变化 → follow 事件流进对应 store（快照整窗替换 + 增量追加）。
   // 子代理会话必须用 subagent 地址（durable parent）——否则宿主报 session/agent-busy。
+  // 判据是 origin==='subagent'（fork 会话也带 parentSessionId，用它会误判）。
   useEffect(() => {
     if (!backendMode || web.status !== "ready" || activeId.length === 0) return;
     const target = ensureStore(activeId);
-    const parentId = web.sessions.find(row => row.sessionId === activeId)?.parentSessionId;
+    const row = web.sessions.find(item => item.sessionId === activeId);
+    const parentId = row?.origin === "subagent" ? row.parentSessionId : undefined;
     const dispose = web.follow(activeId, target, parentId);
     return () => {
       dispose();
@@ -546,6 +569,40 @@ export function App() {
     onToggleFullscreen: () => setDockFullscreen(v => !v),
     dockTabRequest,
   };
+
+  // Side Chat（sidenote fork 语义，2026-09-18）：子会话的对话流读取面
+  // （官方 ISessions.binding 等价）。store 不在注册表时惰性创建并接 follow 流
+  // ——fork 子会话可能从未被主视图打开，其转录窗口由面板经 binding 消费
+  // （3099 的面板拥有会话窗口，同语义）。follow 的 parentId 走 subagent 地址。
+  // followRef 登记每会话的活跃 follow 流（含建流时的 parentId，用于判断地址语义
+  // 是否变化）。binding 是「读取面」而非「订阅动作」：面板会在渲染期取用，
+  // 若每次取用都断旧流重连，快照永远来不及落窗（转录恒空）——故只在无活跃流、
+  // 或 parentId 从无到有（子代理需换 subagent 地址）时才重建。
+  const followRef = useRef(new Map<string, { dispose: () => void; parentId: string | undefined }>());
+  const getDockBinding = useCallback((id: string) => {
+    if (!backendMode || web.status !== "ready") return undefined;
+    const store = ensureStoreQuiet(id);
+    const row = web.sessions.find(item => item.sessionId === id);
+    const parentId = row?.origin === "subagent" ? row.parentSessionId : undefined;
+    const live = followRef.current.get(id);
+    if (live === undefined || live.parentId !== parentId) {
+      live?.dispose();
+      followRef.current.set(id, { dispose: web.follow(id, store, parentId), parentId });
+    }
+    const listeners = new Set<() => void>();
+    return {
+      events: () => store.eventEntries(),
+      subscribe: (fn: () => void) => {
+        listeners.add(fn);
+        const dispose = store.subscribe(fn);
+        return () => { listeners.delete(fn); dispose(); };
+      },
+      prompt: (text: string) => web.prompt(id, text),
+      running: () => web.sessions.find(row => row.sessionId === id)?.running === true,
+      rename: (title: string) => web.rename(id, title),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendMode, web.status, web.sessions, web.follow, web.prompt, web.rename]);
 
   // ── 布局拖拽（2026-09-18 用户裁定，3099 实测几何 + Codex 式阻力收起）──
   // 左栏/右坞缘 8px 骑缝手柄拖动调宽；拖进阻力区位移衰减（明显变重），
@@ -853,17 +910,24 @@ export function App() {
           sessionId={dockSessionId}
           cwd={dockCwd}
           onDraftText={pushDraft}
+          getBinding={getDockBinding}
           teamOpenToken={teamOpenToken}
           sendIntervention={sendIntervention}
           {...dockChrome}
         />
         {/* 底部终端面板（3099 实测形态）：对话区底部整条弹出，8px 骑缝拖高 + 右上 × 收起；
-            left 从侧栏右缘起（3099 同款），盖过对话区与右坞之间，贴视口底。 */}
+            水平范围=左栏右缘 → 右坞左缘（3099 实测：面板只盖对话区，right 在右坞打开时
+            停在坞左缘 `style.right`，坞收起/全屏时为 0），贴视口底。 */}
         {bottomTerminalOpen && backendMode && web.status === "ready" && (
           <div
             data-bottom-terminal
             className="absolute z-40 flex flex-col bg-surface border-t border-surface-container-highest"
-            style={{ left: sidebarCollapsed ? 56 : sidebarWidth, right: 0, bottom: 0, height: terminalHeight }}
+            style={{
+              left: sidebarCollapsed ? 56 : sidebarWidth,
+              right: !dockCollapsed && !dockFullscreen ? dockWidth : 0,
+              bottom: 0,
+              height: terminalHeight,
+            }}
           >
             <div
               data-bottom-terminal-resize

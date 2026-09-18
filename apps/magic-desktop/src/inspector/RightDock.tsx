@@ -25,6 +25,7 @@ export function RightDock({
   sessionId,
   cwd,
   onDraftText,
+  getBinding,
   collapsed,
   onToggleCollapsed,
   fullscreen,
@@ -37,6 +38,8 @@ export function RightDock({
   cwd: string | undefined;
   /** 官方 conversation.input 桥：注入文本到对话输入框草稿（追加语义）。 */
   onDraftText?: (text: string) => void;
+  /** 官方 ISessions.binding 等价（Side Chat fork 子会话转录/发送/运行态）。 */
+  getBinding?: Parameters<typeof DockShell>[0]['getBinding'];
   /** 旧通道：图卡「团队」tab；官方 Sidebar 无对应 tab，暂不消费。 */
   teamOpenToken?: number;
   /** 旧通道：成员干预（团队 tab 语义），同上暂不消费。 */
@@ -70,6 +73,7 @@ export function RightDock({
         cwd={cwd}
         bridge={bridge}
         onDraftText={onDraftText}
+        getBinding={getBinding}
         onFullscreenChange={setDockkitFullscreen}
         onCollapse={onToggleCollapsed}
         dockTabRequest={dockTabRequest}

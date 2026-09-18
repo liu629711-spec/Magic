@@ -25,6 +25,16 @@ export interface RemoteSessionRow {
   blank: boolean;
   cwd?: string;
   parentSessionId?: string;
+  /**
+   * 会话来源粗分类（SessionSummary.origin，官方契约
+   * `packages/api/session-controller/src/types.ts:163-172`）。
+   * **只有 subagent 子会话写 'subagent'**；fork 出的会话只写
+   * parentSessionId 而不写 origin（commands.ts:261-275 vs child-agent.ts:138-156）。
+   * follow 的地址类型由它决定：origin='subagent' 才用 subagent 地址，
+   * 否则用 session 地址——用 parentSessionId 判断会把 fork 会话打给
+   * subagent 地址，宿主回 `subagent/unauthorized`（history.ts:347-348）。
+   */
+  origin?: 'subagent';
   /** 会话模型选择（projections.values.modelSelection：pending 优先，其次 lastUsed） */
   model?: { provider: string; model: string };
   /** 会话预设 id（projections.values.agentPreset；官方 AgentPresetLabel 数据源） */
@@ -61,6 +71,7 @@ function toRow(raw: Record<string, unknown>): RemoteSessionRow {
     blank: raw.blank === true,
     cwd: typeof raw.cwd === "string" ? raw.cwd : undefined,
     parentSessionId: typeof raw.parentSessionId === "string" ? raw.parentSessionId : undefined,
+    origin: raw.origin === "subagent" ? "subagent" : undefined,
     model:
       typeof chosen?.provider === "string" && typeof chosen?.model === "string"
         ? { provider: chosen.provider, model: chosen.model }

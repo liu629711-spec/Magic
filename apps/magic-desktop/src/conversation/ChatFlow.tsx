@@ -373,7 +373,7 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   onExpandDock?: () => void
   onCollapseDock?: () => void
   /** 打开右坞指定 tab（顶行 terminal 等 + ⊕侧边 start 页）：透传给 SessionHeader。 */
-  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'browser' | 'jobs' | 'start') => void
+  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'side' | 'browser' | 'jobs' | 'start') => void
   /** 会话操作（顶行 ⋯ 菜单：重命名/导出 Markdown/复制会话 ID）：透传给 SessionHeader。 */
   headerActions?: {
     rename?: (title: string) => void
@@ -716,7 +716,9 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
             <div className={css.flowInner} data-chat-flow>
               {snapshot.order.map(key => {
                 const node = snapshot.nodes.get(key)
-                if (node === undefined || node.visibility === 'hidden') return null
+                if (node === undefined || node.visibility === 'hidden') {
+                  return null
+                }
                 const chatNode = node as ChatNode
                 const turn = turnOf(chatNode)
                 return (

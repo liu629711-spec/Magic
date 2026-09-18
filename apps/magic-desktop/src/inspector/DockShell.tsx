@@ -44,6 +44,8 @@ const DOCK_TAB_KIND: Record<string, string> = {
   terminal: 'terminal',
   browser: 'browser',
   sidechat: 'sidechat',
+  // sidenote fork 式侧聊（2026-09-18）：顶栏「⊕侧边」的承接 tab。
+  side: 'dsh-sidenote:side',
   // 'team'（CeoWorkspace）：官方无对应 tab，warn 后忽略。
 }
 
@@ -53,6 +55,12 @@ export interface DockShellProps {
   bridge: DockSessionBridge
   /** conversation.input 桥：树 @ 引用 / 划选「添加到对话」经 ctx.conversation 到这里。 */
   onDraftText?: (text: string) => void
+  /**
+   * 会话对话流读取面（官方 ISessions.binding 的本环境等价）：Side Chat 面板
+   * fork 子会话的转录/发送/运行态从这里读。App 侧由 ChatSessionStore 注册表 +
+   * web.follow/prompt 语义实现（DockContextOptions.getBinding 的完整形状）。
+   */
+  getBinding?: Parameters<typeof createDockContext>[0]['getBinding']
   /** dockkit 全屏模式（⛶）报告；RightDock 切 aside 宽度。 */
   onFullscreenChange?: (fullscreen: boolean) => void
   /** dockkit 收起按钮（◨）报告；RightDock → App onToggleCollapsed。 */
@@ -66,6 +74,7 @@ export function DockShell({
   cwd,
   bridge,
   onDraftText,
+  getBinding,
   onFullscreenChange,
   onCollapse,
   dockTabRequest,
@@ -73,8 +82,8 @@ export function DockShell({
 }: DockShellProps) {
   // latest-ref：bundle/options 在 mount 时闭包一次，读值全部经 latest 解引用，
   // props 更新无需重建 ctx（订阅随之保持稳定）。
-  const latest = useRef({ sessionId, cwd, bridge, onDraftText, onFullscreenChange, onCollapse })
-  latest.current = { sessionId, cwd, bridge, onDraftText, onFullscreenChange, onCollapse }
+  const latest = useRef({ sessionId, cwd, bridge, onDraftText, getBinding, onFullscreenChange, onCollapse })
+  latest.current = { sessionId, cwd, bridge, onDraftText, getBinding, onFullscreenChange, onCollapse }
 
   // 官方规则（vendor index.tsx:134-142）：每激活实例一套 store/service，无模块级单例。
   const [store] = useState(createSidebarStore)
@@ -91,6 +100,7 @@ export function DockShell({
       return { sessionId: current.sessionId || undefined, cwd: current.cwd, title: row?.title }
     },
     getRows: () => latest.current.bridge.sessions,
+    getBinding: (id) => latest.current.getBinding?.(id),
     onDraftText: (text) => { latest.current.onDraftText?.(text) },
     // dockkit 右栏自持 expanded（store.layout.expanded）；该 face 仅供
     // better-sidebar 的窄屏停靠读面（use-host-feeds），恒展开。
@@ -112,7 +122,26 @@ export function DockShell({
     setChunkModuleSystem(ctx.modules)
     attachLocale(ctx.locale)
     service.setSurface(native.surface)
-    const disposeBuiltins = registerBuiltins(ctx, service)
+    // sidenote fork 式侧聊的宿主面（dock-context 的 fork/binding 复用；
+    // latest 解引用保 props 更新无需重注册）。
+    const sideNote = {
+      onFork: (sessionId: string) => latest.current.bridge.fork(sessionId),
+      bindingOf: (id: string) => {
+        const binding = latest.current.getBinding?.(id)
+        if (binding === undefined) return undefined
+        return {
+          events: binding.events,
+          subscribe: binding.subscribe,
+          prompt: binding.prompt,
+          running: binding.running,
+        }
+      },
+      parentRunning: () => {
+        const current = latest.current
+        return current.bridge.sessions.find(row => row.sessionId === current.sessionId)?.running === true
+      },
+    }
+    const disposeBuiltins = registerBuiltins(ctx, service, { sideNote })
     const disposeSurface = () => {
       native.surface.dispose()
       service.setSurface(undefined)

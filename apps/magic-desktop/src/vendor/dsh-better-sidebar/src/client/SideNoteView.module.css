@@ -1,0 +1,124 @@
+/* Magic 补丁样式（2026-09-18）：SideNoteView（fork 式侧边聊天）的壳样式。
+   语义对齐 dsh-sidenote sidechat.module.css（parentStrip/hero/actions），
+   色值走 Magic stitch token（非上游 --dsw-alias-* 链）。 */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.parentStrip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--color-surface-container-highest, #2a2b2f);
+  background: transparent;
+  color: var(--color-outline, #8c909f);
+  font-size: 11.5px;
+  line-height: 16px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.parentStrip:hover {
+  color: var(--color-on-surface, #e3e2e6);
+  background: var(--color-surface-container, #1f1f23);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 12px;
+  border-top: 1px solid var(--color-surface-container-highest, #2a2b2f);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-surface-container-highest, #2a2b2f);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-on-surface-variant, #c2c6d6);
+  font-size: 11.5px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--color-surface-container, #1f1f23);
+  color: var(--color-on-surface, #e3e2e6);
+}
+
+.running {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--color-outline, #8c909f);
+  font-size: 11px;
+}
+
+.hero {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--color-outline, #8c909f);
+  text-align: center;
+}
+
+.heroTitle {
+  color: var(--color-on-surface-variant, #c2c6d6);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.heroDesc {
+  font-size: 12px;
+  line-height: 18px;
+  max-width: 260px;
+}
+
+.primary {
+  margin-top: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--color-surface-container-highest, #2a2b2f);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-on-surface-variant, #c2c6d6);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.primary:hover {
+  background: var(--color-surface-container, #1f1f23);
+  color: var(--color-on-surface, #e3e2e6);
+}
+
+.shimmer {
+  animation: sidenote-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes sidenote-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}

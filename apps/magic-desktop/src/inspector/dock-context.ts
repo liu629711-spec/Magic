@@ -50,6 +50,25 @@ export interface DockContextOptions {
   /** 每次读取取最新值（DockShell 以 latest-ref 模式供数）。 */
   getSession(): { sessionId: string | undefined; cwd: string | undefined; title: string | undefined }
   getRows(): DockSessionBridge['sessions']
+  /**
+   * 会话实时对话流读取面（官方 ISessions.binding 的本环境等价）：
+   * App 的 ChatSessionStore 注册表按会话 id 取 store（follow 流的落点），
+   * Side Chat 面板的转录/发送/运行态从这里读；未打开过的会话返回 undefined
+   * （官方对未知会话 binding() throw，调用方需容错——本环境返回 undefined 更温和）。
+   */
+  getBinding?: (id: string) => {
+    /** 转录事件窗口（follow 流已按 seq 归并；Side Chat 轮询读整窗）。
+     *  结构性事件面（官方 SessionEvent 镜像）：App 的 SessionEvent 联合
+     *  （vendor/dsh-chat）结构兼容，data 用 unknown 承接（dsh-chat 事件 data
+     *  是具名接口，无 index signature，不能用 Record<string, unknown> 约束）。 */
+    events(): readonly { type: string; seq: number; time: number; data: unknown }[]
+    subscribe(fn: () => void): () => void
+    /** 发送一条消息（session/prompt 语义；失败 reject）。 */
+    prompt(text: string): Promise<void>
+    /** 该会话 agent 是否在跑。 */
+    running(): boolean
+    rename(title: string): Promise<unknown>
+  } | undefined
   /** conversation.input 的唯一写通道：转发 App 草稿桥（追加语义）。 */
   onDraftText?: (text: string) => void
   /** ctx.get('sidebarRight').isExpanded 的取值（右坞可见性）。 */
@@ -101,6 +120,12 @@ export function createDockContext(options: DockContextOptions): DockContextBundl
         displayTitle: row.title,
         ...(row.running ? { running: true } : {}),
         ...(row.parentSessionId === undefined ? {} : { parentId: row.parentSessionId }),
+        // origin 取真实值（SessionSummary.origin）：只有 subagent 子会话才是
+        // 'subagent'，fork 出的会话带 parentId 但 origin 为空。此前按
+        // parentSessionId 一刀切标 subagent，会把 fork 会话混进任务管理/
+        // 子代理检测（SubagentView.tsx:78、subagent-detect.ts:34）与侧边线程
+        // 枚举（sidechat-core.ts:471）——2026-09-18 修正。
+        ...(row.origin === undefined ? {} : { origin: row.origin }),
       }
     }
     // 当前会话兜底行（cwd 以 DockShell 解析值优先——App 的 dockCwd 可能晚于列表到达）。
@@ -143,10 +168,32 @@ export function createDockContext(options: DockContextOptions): DockContextBundl
     },
     open(id: string): void { options.bridge.openSession(id) },
     fork(opts: { sessionId: string }): Promise<string> { return options.bridge.fork(opts.sessionId) },
+    // Side Chat 的转录/发送/运行态读取面（官方 ISessions.binding 的本环境等价）。
+    binding(id: string) {
+      if (options.getBinding === undefined) return undefined
+      const binding = options.getBinding(id)
+      if (binding === undefined) return undefined
+      return {
+        session: {
+          rename(title: string): Promise<unknown> { return binding.rename(title) },
+          prompt(content: readonly { type: 'text'; text: string }[], _mode?: string): Promise<unknown> {
+            const text = content.map(part => part.text).join('\n')
+            return binding.prompt(text)
+          },
+          subscribe(fn: () => void): () => void { return binding.subscribe(fn) },
+          getSnapshot(): unknown { return { running: binding.running() } },
+          // Side Chat 转录源（官方 Session.snapshotEvents 语义）：follow 流
+          // 的持久事件窗口整窗给出；映射层的 seed-cut/delta 逻辑照常工作。
+          snapshotEvents(): readonly { type: string; seq: number; time: number; data: unknown }[] {
+            return binding.events()
+          },
+        },
+      }
+    },
     scope(): Context { return createSessionScopeContext() },
-    // binding / openSubagent / subagentAddress / setSubagentCatalogOpen /
-    // refreshSubagents：官方可选成员。saved-session 重命名与 subagent 目录
-    // 在本环境无实现（undefined = 面板内对应动作降级），不在此桩。
+    // binding 已实现（见上）；openSubagent / subagentAddress / setSubagentCatalogOpen /
+    // refreshSubagents：官方可选成员。subagent 目录在本环境无实现
+    // （undefined = 面板内对应动作降级），不在此桩。
   }
 
   // ── locale：固定 zh 的 mini store + dockkit 词典面 ───────────────────────

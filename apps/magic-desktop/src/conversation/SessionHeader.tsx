@@ -5,15 +5,17 @@
 // 左=面包屑（父会话可点 / 当前标题，crumbSep 官方 `/` 分隔）+「N 个子代理」count trigger
 // （官方 lineage 无边框形态：tertiary 12px + IconChevronDownOutline14）+ 会话预设标签
 // （官方 AgentPresetLabel：IconAgentPresetOutline16 + tsp fill 底 pill）+ Agent Team trigger
-// （官方 TeamAction：IconUserOutline16 + count 徽标，无边框 hover 底）；右=workspace
-// icon-only chip ▾（复制路径/资源管理器置灰）+「⋯」会话菜单（重命名/导出 Markdown/
-// 复制会话 ID）+ 终端（弹对话区底部终端面板）+ 右坞收起时的打开入口（与右坞 tab 行
+// （官方 TeamAction：IconUserOutline16 + count 徽标，无边框 hover 底）；右=folder 图标胶囊 +
+// 独立 chevron 钮两元素组合（3099 实测 28×26+22×26，二者同开「复制路径」菜单）+
+// 「⋯」会话菜单（重命名/导出 Markdown/复制会话 ID）+ 终端（弹对话区底部终端面板）+
+// 「⊕侧边」（打开右坞 sidenote fork 式侧聊 tab）+ 右坞收起时的打开入口（与右坞 tab 行
 // 收起钮同款右面板图标）。能力未接的置灰并 title 诚实标注。数据由 App 从 web.sessions
 // 计算后经 ChatFlow 传入。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   IconAgentPresetOutline16,
   IconChevronDownOutline14,
+  IconNewChatOutline16,
   IconPanelLeftOutline16,
   IconUserOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -97,29 +99,41 @@ function HeaderMenuItem({ label, hint, disabled, title, onClick }: {
   )
 }
 
-/** workspace chip（图五/官方 icon-only 形态）：folder 图标 + ▾；点击开菜单（复制路径等）。 */
-function WorkspaceChip({ cwd, caret, ariaExpanded, onClick }: {
+/** workspace chip（3099 实测双元素组合控件，2026-09-18 恢复）：folder 图标胶囊
+    （28×26，左圆角）+ 独立 chevron 钮（22×26，右圆角），二者 onClick 同开菜单。
+    总宽 50px、高 26px——与右坞按钮组同高对齐。 */
+function WorkspaceChip({ cwd, ariaExpanded, onClick }: {
   cwd: string
-  caret?: boolean
   ariaExpanded?: boolean
   onClick?: () => void
 }) {
+  const sharedCls =
+    'flex h-[26px] items-center justify-center bg-surface-container text-on-surface-variant transition-colors first:rounded-l-[6px] last:rounded-r-[6px] hover:bg-surface-container-high cursor-pointer'
   return (
-    <button
-      type="button"
-      data-workspace-chip
-      title={cwd}
-      aria-expanded={ariaExpanded}
-      onClick={onClick}
-      className="flex h-[22px] min-w-0 items-center gap-0.5 rounded-md bg-surface-container px-1.5 text-on-surface-variant transition-colors hover:bg-surface-container-high cursor-pointer"
-    >
-      <span className="material-symbols-outlined shrink-0 text-[14px] leading-none" aria-hidden>folder</span>
-      {caret === true && <span className="text-[9px] leading-none" aria-hidden>▾</span>}
-    </button>
+    <span className="flex h-[26px] shrink-0" data-workspace-chip title={cwd}>
+      <button
+        type="button"
+        aria-label="工作目录"
+        aria-expanded={ariaExpanded}
+        onClick={onClick}
+        className={`${sharedCls} w-7`}
+      >
+        <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden>folder</span>
+      </button>
+      <button
+        type="button"
+        aria-label="工作目录菜单"
+        aria-expanded={ariaExpanded}
+        onClick={onClick}
+        className={`${sharedCls} w-[22px]`}
+      >
+        <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden>expand_more</span>
+      </button>
+    </span>
   )
 }
 
-export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpandDock, onToggleTerminal, terminalOpen, headerActions }: {
+export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpandDock, onOpenDockTab, onToggleTerminal, terminalOpen, headerActions }: {
   data: SessionHeaderData
   /** 切换会话（App 的 openSession）。 */
   onOpenSession?: (id: string) => void
@@ -131,7 +145,7 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
   onExpandDock?: () => void
   onCollapseDock?: () => void
   /** 打开右坞指定 tab（dockkit 通道；终端钮改弹底部面板后此通道仅备用）。 */
-  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'browser' | 'jobs' | 'start') => void
+  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'side' | 'browser' | 'jobs' | 'start') => void
   /** 终端钮（3099 实测形态：对话内容区底部弹出终端面板；未接线时置灰）。 */
   onToggleTerminal?: () => void
   /** 底部终端面板开合态（终端钮 aria-expanded）。 */
@@ -403,7 +417,6 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
             <div className="relative min-w-0 shrink-0">
               <WorkspaceChip
                 cwd={effectiveCwd}
-                caret
                 ariaExpanded={menu === 'folder'}
                 onClick={() => setMenu(current => (current === 'folder' ? null : 'folder'))}
               />
@@ -473,6 +486,29 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
               onToggleTerminal?.()
             }}
           />
+          {/* 「⊕侧边」（3099 实测 64×26 胶囊）：打开右坞 sidenote fork 式侧聊 tab
+              ——从当前会话 fork 独立演进的侧聊（与 better-sidebar 内建「侧边对话」
+              beta 管理页是两个东西，3099 上并存）。 */}
+          <button
+            type="button"
+            data-header-side-chat
+            title="打开侧边聊天（从当前会话 fork）"
+            aria-label="打开侧边聊天（从当前会话 fork）"
+            disabled={onOpenDockTab === undefined}
+            onClick={() => {
+              setMenu(null)
+              onExpandDock?.()
+              onOpenDockTab?.('side')
+            }}
+            className={`flex h-[26px] shrink-0 items-center gap-[5px] rounded-full border px-2.5 text-[12px] leading-[18px] transition-colors ${
+              onOpenDockTab === undefined
+                ? 'cursor-not-allowed border-line/50 text-ink-3 opacity-40'
+                : 'cursor-pointer border-line text-on-surface-variant hover:bg-hover hover:text-on-surface'
+            }`}
+          >
+            <IconNewChatOutline16 size={13} />
+            <span>侧边</span>
+          </button>
           {/* 右坞开关（收起态出现在顶栏；图标与右坞 tab 行收起钮同款
               IconPanelLeftOutline16——3099 实测两侧同一右面板形图标） */}
           {dockCollapsed === true && (

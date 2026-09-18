@@ -411,14 +411,30 @@ export function SideChatView(props: {
     return [info.preset, info.model ?? info.provider].filter(Boolean).join(' · ')
   }, [info])
 
-  /** Create this tab's thread (immediate-create tabs and hero retries). */
+  /** Create this tab's thread (immediate-create tabs and hero retries).
+   *
+   * Magic (2026-09-18, 3099-sidenote parity): the plugin's own sidechat.*
+   * routes are not served here, so thread creation falls back to the
+   * sessions service fork (the dsh-sidenote creation path): fork the parent
+   * session (a full-history child) and bind the tab to the child id. The
+   * child inherits the parent's log — the view's transcript cut (below)
+   * treats the inherited window the same way the host-side seed cut does. */
   const startThread = useCallback(async (): Promise<void> => {
     if (inFlightStarts.has(tab.id)) return
     inFlightStarts.add(tab.id)
     setBusy('starting')
     setError(null)
     try {
-      const { childId } = await api.sidechatStart(scope.sessionId)
+      let childId: string | undefined
+      try {
+        childId = (await api.sidechatStart(scope.sessionId)).childId
+      } catch {
+        // The plugin route is absent on this host: fork through the sessions
+        // service (sidenote's creation path — a full-history child session).
+        const fork = ctx.sessions.fork
+        if (fork === undefined) throw new Error('session fork is unavailable')
+        childId = await fork.call(ctx.sessions, { sessionId: scope.sessionId })
+      }
       ctx.get('betterSidebar')?.updateTab(tab.id, { meta: { threadId: childId } })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -452,14 +468,20 @@ export function SideChatView(props: {
 
   /** One transcript pull: the thread's own events beyond the cached tail
    *  (first attach = the whole seed-cut slice; polls = afterSeq deltas),
-   *  merged by seq. */
+   *  merged by seq.
+   *
+   * Magic (2026-09-18): the sidechat.events plugin route is not served here,
+   * so the pull falls back to the session binding's event window — the same
+   * durable stream the conversation shell follows (fork child included), with
+   * `assistant/live-chunk` transients appended, which `transcriptRows` maps
+   * natively. */
   const fetchThread = useCallback(async (childId: string): Promise<void> => {
     controllerRef.current?.abort()
     const controller = new AbortController()
     controllerRef.current = controller
+    const cache = cacheRef.current
+    const afterSeq = cache.entries.at(-1)?.event.seq
     try {
-      const cache = cacheRef.current
-      const afterSeq = cache.entries.at(-1)?.event.seq
       const { events, live } = await api.sidechatEvents(childId, afterSeq, controller.signal)
       // The live set is the CURRENT attempt, so it replaces whatever the
       // previous pull held; a settled step drops out of the host buffer and
@@ -471,11 +493,24 @@ export function SideChatView(props: {
         const incoming = events.map(event => ({ event: event as SidebarSessionEvent }))
         cache.entries = mergeBySeq(cache.entries, incoming)
       }
-      setRevision(value => value + 1)
     } catch {
-      // Aborted by a newer pull or a wire failure: keep the last rows.
+      // Route absent (Magic) or a wire failure: fall back to the session
+      // binding's event window — the same durable stream the conversation
+      // shell follows (fork child included), with `assistant/live-chunk`
+      // transients appended, which `transcriptRows` maps natively. The
+      // window replaces the cache wholesale (it is the full log view), so
+      // seed-cut / delta logic stays with the mapping.
+      const binding = ctx.sessions.binding?.(childId)
+      const bindingSession = binding?.session as {
+        snapshotEvents?: () => readonly SidebarSessionEvent[]
+      } | undefined
+      if (bindingSession?.snapshotEvents === undefined) return
+      const events = bindingSession.snapshotEvents()
+      cache.live = []
+      cache.entries = events.map(event => ({ event: event as SidebarSessionEvent }))
     }
-  }, [])
+    setRevision(value => value + 1)
+  }, [ctx])
 
   /** The thread header badge pull (live state + preset/model identity). */
   const fetchInfo = useCallback(async (childId: string): Promise<void> => {
@@ -621,7 +656,17 @@ export function SideChatView(props: {
     setBusy('sending')
     setError(null)
     try {
-      await api.sidechatPrompt(threadId, text)
+      try {
+        await api.sidechatPrompt(threadId, text)
+      } catch (routeError) {
+        // Route absent (Magic): deliver through the binding's session prompt
+        // (the sidenote path — session/prompt on the fork child).
+        const bindingSession = ctx.sessions.binding?.(threadId)?.session as {
+          prompt?: (content: readonly { type: 'text'; text: string }[], mode?: string) => Promise<unknown>
+        } | undefined
+        if (bindingSession?.prompt === undefined) throw routeError
+        await bindingSession.prompt([{ type: 'text', text }], 'queue')
+      }
       setComposer('')
       const field = composerRef.current
       if (field !== null) field.style.height = ''
@@ -638,8 +683,10 @@ export function SideChatView(props: {
     if (threadId === undefined || busy !== null) return
     try {
       await api.sidechatCancel(threadId)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+    } catch (routeError) {
+      // Route absent (Magic): the conversation shell owns turn cancellation;
+      // surface the failure honestly (the run usually ends on its own).
+      setError(routeError instanceof Error ? routeError.message : String(routeError))
     }
   }
 

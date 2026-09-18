@@ -55,6 +55,11 @@ export class ChatSessionStore {
     this.publish()
   }
 
+  /** 采纳外部事件窗口（Side Chat 面板读 App store 的 follow 流；结构兼容整窗替换）。 */
+  adoptWindow(events: readonly SessionEvent[]): void {
+    this.seedWindow(events)
+  }
+
   /** 追加一条持久事件（SDK 接线后由 session.event 流驱动）。 */
   appendEvent(event: SessionEvent): void {
     this.entries.push({ type: 'event', event })

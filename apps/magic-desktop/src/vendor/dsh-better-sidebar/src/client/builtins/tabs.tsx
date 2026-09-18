@@ -23,6 +23,7 @@ import { ChangesTab, opCountOf } from '../changes/ChangesTab.tsx'
 import { DiffTab } from '../DiffTab.tsx'
 import { SubagentView } from '../SubagentView.tsx'
 import { consumeSidechatSeed, SideChatView, sidechatThreadIdOf } from '../SideChatView.tsx'
+import { SideNoteView } from '../SideNoteView.tsx'
 import { api } from '../api.ts'
 import { BrowserView } from '../BrowserView.tsx'
 import { TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN } from '../../prefs-shared.ts'
@@ -62,6 +63,21 @@ export const TERMINAL_LIMIT = 3
 export interface BuiltinTabOptions {
   /** Returns the display title for newly opened terminal tabs. */
   terminalTitle?: () => string
+  /**
+   * Magic（2026-09-18，sidenote fork 语义）：fork 式侧边聊天 tab 的宿主面。
+   * fork = sessions.fork（App web.fork）；binding = dock-context 的
+   * sessions.binding 会话对话流读取面；parentRunning = 父会话运行态。
+   */
+  sideNote?: {
+    onFork: (sessionId: string) => Promise<string>
+    bindingOf: (id: string) => {
+      events(): readonly { type: string; seq: number; time: number; data: unknown }[]
+      subscribe(fn: () => void): () => void
+      prompt(text: string): Promise<void>
+      running(): boolean
+    } | undefined
+    parentRunning?: () => boolean
+  }
 }
 
 /** A client-side uuid for terminal tab identity (not shown in the UI). */
@@ -202,7 +218,9 @@ export function builtinTabs(_ctx: Context, options: BuiltinTabOptions = {}): rea
     },
     {
       id: 'sidechat',
-      title: () => t('sideChat'),
+      // Magic（2026-09-18）：beta 管理页用「侧边对话」区分 sidenote 的
+      // 「侧边聊天」——3099 上两者并存、名字不同。
+      title: () => t('sideChatBeta'),
       description: () => t('guideDescSidechat'),
       icon: sidechatTabIcon,
       order: 35,
@@ -250,6 +268,40 @@ export function builtinTabs(_ctx: Context, options: BuiltinTabOptions = {}): rea
       },
       component: ({ ctx, scope, tab, visible }) => (
         <SideChatView ctx={ctx} scope={scope} tab={tab} visible={visible} />
+      ),
+    },
+    {
+      // Magic（2026-09-18，3099-sidenote 对齐）：fork 式侧边聊天 tab——顶栏
+      // 「⊕侧边」与 guide 入口的承接面。sidenote 的 fork 语义（fork 子会话
+      // 继承主会话历史 → 独立对话 → 整段回流 / 保存为正式会话）；数据源走
+      // BuiltinTabOptions.sideNote 注入的宿主面（App 的 fork + follow 流）。
+      // 与上面的内建 sidechat（sidechat.* 插件路由的线程管理页）是两个面——
+      // 3099 上两者并存（sidenote 的侧边聊天 + better-sidebar 的侧边对话）。
+      id: 'dsh-sidenote:side',
+      title: () => t('sideChat'),
+      description: () => t('guideDescSidechat'),
+      icon: sidechatTabIcon,
+      order: 34,
+      // Native dockkit 下同 kind 每 pane 单实例（held 规则）：单实例语义即
+      // sidenote 的 openOrFocus（open 折叠为聚焦既有 tab）。
+      single: true,
+      createTab: () => ({
+        tab: {
+          id: `side:${crypto.randomUUID()}`,
+          type: 'dsh-sidenote:side',
+          title: t('sideChatUntitled'),
+        },
+      }),
+      component: ({ ctx, scope, tab, visible }) => (
+        <SideNoteView
+          ctx={ctx}
+          scope={scope}
+          tab={tab}
+          visible={visible}
+          onFork={sessionId => options.sideNote?.onFork(sessionId) ?? Promise.reject(new Error('sideNote host face is not wired'))}
+          bindingOf={id => options.sideNote?.bindingOf(id) ?? undefined}
+          parentRunning={options.sideNote?.parentRunning?.() ?? false}
+        />
       ),
     },
     {
