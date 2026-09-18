@@ -1,12 +1,20 @@
 // 会话头（M4，2026-09-18；同日图二顶行改版 → 2026-09-18 图二/3099 实测重排）：
-// Magic 组合网页版顶栏对齐（图二实测 + ui-conversation ConversationSessionHeader 插槽语义）：
-// 左=面包屑（父会话可点 › 当前标题，重命名时行内变输入框）+「N 个子代理」chip（下拉切换）
-// + 会话预设只读标签（投影 agentPreset 显示名，官方 AgentPresetLabel 语义）+ Agent Team chip
-// （agentTeams/view 名册/任务板面板）；右=workspace chip ▾（复制路径/资源管理器置灰）+「⋯」
-// 会话菜单（重命名/导出 Markdown/复制会话 ID）+ right_panel 收起/展开右坞 +「⊕ 侧边」
-// （展开右坞并打开「开始」页）。行为语义按官方 header.actions/utilities/corner 映射；
-// 能力未接的置灰并 title 诚实标注。数据由 App 从 web.sessions 计算后经 ChatFlow 传入。
+// Magic 组合网页版顶栏对齐（图五/3099 实测 + ui-conversation ConversationSessionHeader、
+// ui-subagent SubagentHeaderLineage、ui-agent-preset AgentPresetLabel、experimental
+// client-ui-agent-team TeamAction 官方源码逐段映射）：
+// 左=面包屑（父会话可点 / 当前标题，crumbSep 官方 `/` 分隔）+「N 个子代理」count trigger
+// （官方 lineage 无边框形态：tertiary 12px + IconChevronDownOutline14）+ 会话预设标签
+// （官方 AgentPresetLabel：IconAgentPresetOutline16 + tsp fill 底 pill）+ Agent Team trigger
+// （官方 TeamAction：IconUserOutline16 + count 徽标，无边框 hover 底）；右=workspace
+// icon-only chip ▾（复制路径/资源管理器置灰）+「⋯」会话菜单（重命名/导出 Markdown/
+// 复制会话 ID）+ 终端 +「⊕ 侧边」+ right_panel 收起/展开右坞。能力未接的置灰并 title
+// 诚实标注。数据由 App 从 web.sessions 计算后经 ChatFlow 传入。
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  IconAgentPresetOutline16,
+  IconChevronDownOutline14,
+  IconUserOutline16,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   leadSessionIdOf,
   viewAgentTeam,
@@ -27,24 +35,6 @@ export interface SessionHeaderData {
   cwd?: string
   /** 会话预设显示名（官方 AgentPresetLabel 语义：投影 agentPreset → agentPresets/list 名称；缺省不渲染）。 */
   preset?: string
-}
-
-/** workspace chip 色点小色板（项目现有强调色；按 cwd hash 取色，同路径稳定同色）。 */
-const WORKSPACE_DOT_COLORS = ['#4edea3', '#adc6ff', '#e8a262', '#c0c1ff'] as const
-
-/** cwd 末段（workspace chip 文案；反斜杠统一按 / 切）。 */
-function cwdBasename(cwd: string): string {
-  const normalized = cwd.replace(/\\/g, '/')
-  return normalized.slice(Math.max(0, normalized.lastIndexOf('/') + 1)) || cwd
-}
-
-/** 简单字符串 hash（色点取色用；非安全场景）。 */
-function hashString(value: string): number {
-  let hash = 0
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) % 9973
-  }
-  return hash
 }
 
 /** ghost 图标钮（16px 图标 + hover 反色；disabled 置灰且保留 title 诚实标注）。 */
@@ -105,14 +95,13 @@ function HeaderMenuItem({ label, hint, disabled, title, onClick }: {
   )
 }
 
-/** workspace chip（图二）：folder 图标 + cwd basename + 色点 + ▾；点击开菜单（复制路径等）。 */
+/** workspace chip（图五/官方 icon-only 形态）：folder 图标 + ▾；点击开菜单（复制路径等）。 */
 function WorkspaceChip({ cwd, caret, ariaExpanded, onClick }: {
   cwd: string
   caret?: boolean
   ariaExpanded?: boolean
   onClick?: () => void
 }) {
-  const dotColor = WORKSPACE_DOT_COLORS[hashString(cwd) % WORKSPACE_DOT_COLORS.length]
   return (
     <button
       type="button"
@@ -120,11 +109,9 @@ function WorkspaceChip({ cwd, caret, ariaExpanded, onClick }: {
       title={cwd}
       aria-expanded={ariaExpanded}
       onClick={onClick}
-      className="flex h-[22px] min-w-0 items-center gap-1 rounded-md bg-surface-container px-1.5 text-[12px] text-on-surface-variant transition-colors hover:bg-surface-container-high cursor-pointer"
+      className="flex h-[22px] min-w-0 items-center gap-0.5 rounded-md bg-surface-container px-1.5 text-on-surface-variant transition-colors hover:bg-surface-container-high cursor-pointer"
     >
       <span className="material-symbols-outlined shrink-0 text-[14px] leading-none" aria-hidden>folder</span>
-      <span className="max-w-[180px] truncate">{cwdBasename(cwd)}</span>
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} aria-hidden />
       {caret === true && <span className="text-[9px] leading-none" aria-hidden>▾</span>}
     </button>
   )
@@ -261,12 +248,12 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
     <div
       ref={rootRef}
       data-session-header
-      className="h-[30px] shrink-0 select-none bg-surface px-4 flex items-center"
+      className="min-h-[40px] shrink-0 select-none bg-surface pl-5 pr-7 pt-2.5"
     >
-      <div className="mx-auto flex w-full max-w-[var(--dsh-chat-content-width)] items-center gap-2 min-w-0">
-        {/* 左：面包屑 / 标题 + 子代理 chip + 分隔线 + workspace chip（图二顶行） */}
-        <div className="flex min-w-0 items-center gap-2 text-[13px]">
-          <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex w-full min-w-0 items-center gap-2.5">
+        {/* 左：面包屑 / 标题 + 子代理 count trigger + 预设标签 + Agent Team（官方 titleCluster） */}
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-1">
             {renaming ? (
               <input
                 data-session-rename-input
@@ -287,15 +274,16 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
                   data-session-parent={parent.id}
                   title={parent.title}
                   onClick={() => onOpenSession?.(parent.id)}
-                  className="max-w-[220px] truncate text-outline transition-colors hover:text-on-surface hover:underline cursor-pointer"
+                  className="max-w-[220px] truncate rounded-[12px] px-2 py-1 text-[14px] leading-5 text-outline transition-colors hover:bg-hover hover:text-on-surface cursor-pointer"
                 >
                   {parent.title}
                 </button>
-                <span className="shrink-0 text-outline/60" aria-hidden>›</span>
+                {/* 官方 crumbSep：14px caption 灰的 `/` 分隔 */}
+                <span className="shrink-0 text-[14px] leading-5 text-ink-3" aria-hidden>/</span>
                 <span
                   data-session-title
                   title={data.title}
-                  className="max-w-[320px] min-w-[72px] truncate font-medium text-on-surface"
+                  className="max-w-[320px] min-w-[72px] cursor-default truncate text-[14px] leading-5 font-medium text-on-surface"
                 >
                   {data.title}
                 </span>
@@ -304,64 +292,73 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
               <span
                 data-session-title
                 title={data.title}
-                className="max-w-[420px] min-w-[72px] truncate font-medium text-on-surface"
+                className="max-w-[420px] min-w-[72px] cursor-default truncate text-[14px] leading-5 font-medium text-on-surface"
               >
                 {data.title}
               </span>
             )}
           </div>
 
-          {/* 子代理 chip（无子会话不渲染；图二对标右侧面板的会话信息，功能保留） */}
+          {/* 子代理 count trigger（官方 SubagentHeaderLineage lineage 形态：
+              `/` 分隔 + 无边框 tertiary 钮 + chevron；下拉换会话） */}
           {data.children.length > 0 && (
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                data-subagent-chip
-                aria-expanded={childrenOpen}
-                onClick={toggleChildren}
-                className="flex h-6 items-center gap-1 rounded-full border border-line bg-field px-2.5 text-[11.5px] text-ink-2 transition-colors hover:border-line-strong hover:text-ink cursor-pointer"
-              >
-                <span>{data.children.length} 个子代理</span>
-                <span
-                  className={`text-[9px] text-ink-3 transition-transform ${childrenOpen ? 'rotate-180' : ''}`}
-                  aria-hidden
+            <div className="flex shrink-0 items-center gap-1">
+              <span className="text-[14px] leading-5 text-ink-3" aria-hidden>/</span>
+              <div className="relative">
+                <button
+                  type="button"
+                  data-subagent-chip
+                  aria-expanded={childrenOpen}
+                  aria-haspopup="tree"
+                  onClick={toggleChildren}
+                  className="flex min-h-[28px] items-center gap-1 rounded-md px-0.5 py-[3px] text-[12px] leading-[18px] text-ink-3 transition-colors hover:text-ink-2 cursor-pointer"
                 >
-                  ▾
-                </span>
-              </button>
-              {childrenOpen && (
-                <div
-                  data-subagent-list
-                  className="absolute left-0 top-full z-20 mt-1 max-h-64 w-64 overflow-y-auto rounded-[10px] border border-line bg-surface p-1 shadow-raised"
-                >
-                  {data.children.map(child => (
-                    <button
-                      key={child.id}
-                      type="button"
-                      data-subagent-item={child.id}
-                      title={child.title}
-                      onClick={() => {
-                        onOpenSession?.(child.id)
-                        setChildrenOpen(false)
-                      }}
-                      className="flex h-8 w-full items-center rounded-[6px] px-2 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-hover hover:text-ink cursor-pointer"
-                    >
-                      <span className="min-w-0 flex-1 truncate">{child.title}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+                  <span>{data.children.length} 个子代理</span>
+                  <IconChevronDownOutline14
+                    size={14}
+                    className={`shrink-0 transition-transform duration-100 ${childrenOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {childrenOpen && (
+                  <div
+                    data-subagent-list
+                    className="absolute left-0 top-full z-20 mt-1 max-h-64 w-64 overflow-y-auto rounded-[10px] border border-line bg-surface p-1 shadow-raised"
+                  >
+                    {data.children.map(child => (
+                      <button
+                        key={child.id}
+                        type="button"
+                        data-subagent-item={child.id}
+                        title={child.title}
+                        onClick={() => {
+                          onOpenSession?.(child.id)
+                          setChildrenOpen(false)
+                        }}
+                        className="flex h-8 w-full items-center rounded-[6px] px-2 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-hover hover:text-ink cursor-pointer"
+                      >
+                        <span className="min-w-0 flex-1 truncate">{child.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* 会话预设（官方 AgentPresetLabel 语义：只读标签，投影 agentPreset 的显示名） */}
+          {/* 会话预设（官方 AgentPresetLabel：图标 + 名字的只读 tsp fill 标签） */}
           {data.preset !== undefined && data.preset.length > 0 && (
-            <span data-session-preset title="会话预设" className="shrink-0 text-[11.5px] text-outline">
-              {data.preset}
+            <span
+              data-session-preset
+              title="会话预设"
+              className="flex h-[22px] max-w-[180px] shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap rounded-md bg-surface-container pr-0.5 text-[12px] leading-[22px] text-on-surface-variant"
+            >
+              <IconAgentPresetOutline16 size={14} className="shrink-0 opacity-70" />
+              <span className="truncate">{data.preset}</span>
             </span>
           )}
 
-          {/* Agent Team 名册/任务板（真实数据源：官方 agent-team Remote 通道）。
+          {/* Agent Team（官方 TeamAction trigger：人形图标 + 文案 + count 徽标，
+              无边框透明钮 hover 底；面板=名册/任务板，真实数据源 agent-team Remote 通道）。
               拉取失败不置灰，仅把 title 标为「团队数据不可用」，错误在面板内展示并可重试。 */}
           <div className="relative shrink-0">
             <button
@@ -370,23 +367,18 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
               aria-expanded={teamOpen}
               title={teamError !== null ? '团队数据不可用' : 'Agent Team'}
               onClick={toggleTeam}
-              className="flex h-6 items-center gap-1 rounded-full border border-line px-2.5 text-[11.5px] text-ink-2 transition-colors hover:border-line-strong hover:text-ink cursor-pointer"
+              className="flex min-h-[28px] items-center gap-[5px] rounded-md px-[7px] py-[3px] text-[12px] leading-[18px] text-on-surface-variant transition-colors hover:bg-hover cursor-pointer"
             >
+              <IconUserOutline16 size={14} className="shrink-0" />
               <span>Agent Team</span>
               {team !== null && (
                 <span
                   data-agent-team-count
-                  className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-field px-1 text-[10px] text-ink-3"
+                  className="flex h-4 min-w-4 items-center justify-center rounded-lg bg-surface-container-high px-1 text-[10px] leading-4 text-ink-3 tabular-nums"
                 >
                   {team.members.length}
                 </span>
               )}
-              <span
-                className={`text-[9px] text-ink-3 transition-transform ${teamOpen ? 'rotate-180' : ''}`}
-                aria-hidden
-              >
-                ▾
-              </span>
             </button>
             {teamOpen && (
               <AgentTeamPanel
@@ -399,7 +391,7 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
           </div>
         </div>
 
-        {/* 右：workspace chip ▾ + ⋯ + 右坞收起/展开 + ⊕侧边（图二顺序，margin-left:auto 靠右） */}
+        {/* 右：workspace icon-only chip ▾ + ⋯ + 终端 + ⊕侧边 + 右坞开关（官方 utilities/corner 顺序） */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5" data-header-icons>
           {effectiveCwd !== undefined && effectiveCwd.length > 0 && (
             <div className="relative min-w-0 shrink-0">

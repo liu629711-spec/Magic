@@ -310,9 +310,10 @@ function ConversationTabs({ active, onSelect }: {
   return (
     <div
       data-conversation-tabs
-      className="h-10 shrink-0 select-none border-b border-surface-container-highest bg-surface px-4"
+      className="flex h-10 shrink-0 select-none items-stretch border-b border-surface-container-highest bg-surface pr-7 pl-7"
     >
-      <div className="mx-auto flex h-full w-full max-w-[var(--dsh-chat-content-width)] items-center gap-1">
+      {/* 官方 ui-conversation tabs：gap 36px、贴左、文字 tab + 底边高亮条 */}
+      <div className="flex items-stretch gap-9">
         {tabs.map(item => {
           const isActive = item.id === active
           return (
@@ -322,10 +323,10 @@ function ConversationTabs({ active, onSelect }: {
               data-conversation-tab={item.id}
               data-active={isActive || undefined}
               onClick={() => onSelect(item.id)}
-              className={`flex h-full items-center border-b-2 px-3 text-[12.5px] transition-colors cursor-pointer ${
+              className={`flex cursor-pointer items-center border-b-2 border-t-2 border-t-transparent text-[13px] leading-4 font-medium transition-colors ${
                 isActive
-                  ? 'border-primary font-medium text-on-surface'
-                  : 'border-transparent text-outline hover:text-on-surface'
+                  ? 'border-b-primary text-on-surface'
+                  : 'border-b-transparent text-outline hover:text-on-surface'
               }`}
             >
               {item.label}
