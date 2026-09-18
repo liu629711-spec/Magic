@@ -61,8 +61,12 @@ export const TabContent = memo(function TabContent(props: TabContentProps) {
  * entirely — re-enabling them is the settings page's job.
  * Magic local patch (2026-09-14): the bottom workbench is terminal-only —
  * files/changes/tasks/browser/sidechat live in the right sidebar, so the
- * + menu offers the terminal alone. */
-const BOTTOM_TAB_IDS = new Set(['terminal'])
+ * + menu offers the terminal alone.
+ * Magic local patch (2026-09-18): the self-drawn right dock is retired and the
+ * official Sidebar IS the right dock now — git/tasks/sidechat/browser must be
+ * reachable from the + menu again (editor/diff stay open-driven, per the
+ * upstream hidden semantics). */
+const BOTTOM_TAB_IDS = new Set(['editor', 'git', 'terminal', 'subagent', 'sidechat', 'browser', 'diff'])
 
 export function buildNewTabOptions(state: SidebarState, ctx: Context, scope: SessionScope): NewTabOption[] {
   const service = ctx.get('betterSidebar')

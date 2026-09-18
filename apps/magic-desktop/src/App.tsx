@@ -235,7 +235,7 @@ export function App() {
   // @ 引用桥（2026-09-18）：右坞「@文件」→ 对话输入框草稿 `@<相对路径> `。
   // 受控注入 token：seq 变化 = 一次注入（PromptBar 按 seq 消费）。
   const [draftInjection, setDraftInjection] = useState<{ seq: number; text: string } | null>(null);
-  const quoteFile = (path: string) => setDraftInjection({ seq: Date.now(), text: `@${path} ` });
+  const pushDraft = (text: string) => setDraftInjection({ seq: Date.now(), text: `${text} ` });
   // 只消费一次：子组件（PromptBar）的 effect 先于父组件 effect 执行，故这里在它追加草稿后
   // 立刻清空注入——之后切会话/切视图都不会重复追加。不在对话视图（无输入框）时注入被丢弃。
   useEffect(() => {
@@ -718,7 +718,7 @@ export function App() {
           fileRequest={fileRequest}
           sessionId={dockSessionId}
           cwd={dockCwd}
-          onQuoteFile={quoteFile}
+          onDraftText={pushDraft}
           teamOpenToken={teamOpenToken}
           sendIntervention={sendIntervention}
           {...dockChrome}

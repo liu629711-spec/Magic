@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import type { RemoteSessionRow } from '../adapters/dsh-web/web-backend'
 import { RemoteMux } from '../adapters/dsh-web/mux'
 import { ChatSessionStore } from '../conversation/chat-store'
 import { ChatFlow } from '../conversation/ChatFlow'
-import { api, type SessionScope } from '../vendor/better-sidebar/api'
-import type { SidebarStore } from '../vendor/better-sidebar/state'
-import { normalizeBrowserUrl, embeddabilityOf } from '../vendor/better-sidebar/browser'
+import { api, type SessionScope } from '../vendor/dsh-better-sidebar/src/client/api'
+import type { SidebarStore } from '../vendor/dsh-better-sidebar/src/client/state'
+import { normalizeBrowserUrl, embeddabilityOf } from '../vendor/dsh-better-sidebar/src/client/browser'
 
 export interface DockSessionBridge {
   sessions: RemoteSessionRow[]

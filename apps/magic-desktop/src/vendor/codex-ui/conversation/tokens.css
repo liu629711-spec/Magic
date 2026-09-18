@@ -1,5 +1,5 @@
-/* vendored token bridge for codex-ui@0.1.0（用户确认可用）ConversationView
- * 模式照抄 apps/magic-desktop/src/vendor/better-sidebar/tokens.css：
+﻿/* vendored token bridge for codex-ui@0.1.0（用户确认可用）ConversationView
+ * 模式照抄 apps/magic-desktop/src/vendor/dsh-better-sidebar/src/client/tokens.css：
  * - 源 CSS（conversation/ConversationView.module.css）的全部颜色已提取为 --cv-* 语义令牌，
  *   组件零改动，换主题只换本文件变量表。
  * - 两层作用域：`:root, body` 兜底（值必须是具体色值，不能 var() 嵌套）+ `.vendor-cv` 挂载点作用域。
