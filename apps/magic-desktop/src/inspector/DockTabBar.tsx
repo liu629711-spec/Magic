@@ -25,7 +25,7 @@ export function DockTabBar({ tabs, active, changesCount, fullscreen, onToggleFul
         {tab.id !== 'start' && <button type="button" className={button} aria-label={`关闭 ${tab.label}`} onClick={() => onCloseTab(tab.id)}><Icon name="close" className="text-[14px]" /></button>}
       </div>)}
     </div>
-    <button type="button" className={button} aria-label="添加面板" title="开始" onClick={onStart}><Icon name="add" className="text-[18px]" /></button>
+    <button type="button" className={button + (active === 'start' ? ' bg-surface-container-high text-on-surface' : '')} aria-label="添加面板" title="添加面板" onClick={onStart}><Icon name="add" className="text-[18px]" /></button>
     <button type="button" className={button} aria-label={fullscreen ? '退出全屏' : '全屏'} disabled={!onToggleFullscreen} onClick={onToggleFullscreen}><Icon name={fullscreen ? 'fullscreen_exit' : 'fullscreen'} className="text-[18px]" /></button>
     <button type="button" className={button} aria-label="收起右坞" disabled={!onCollapse} onClick={onCollapse}><Icon name="right_panel_close" className="text-[18px]" /></button>
   </div>

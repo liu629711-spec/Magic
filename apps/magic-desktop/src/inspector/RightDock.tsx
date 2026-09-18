@@ -67,11 +67,15 @@ export function RightDock({sessionId,cwd,onQuoteFile,teamOpenToken,sendIntervent
  // 会话切换：editor tab 的路径属于上一会话 cwd，全部关闭。
  useEffect(()=>{setEditorTabs([])},[sessionId]);
  const closeTab=(id:DockTabId)=>{
-   if(id.startsWith('editor:')){setEditorTabs(prev=>prev.filter(tab=>tab.id!==id));if(active===id)setActive('start');return}
+   if(id.startsWith('editor:')){setEditorTabs(prev=>prev.filter(tab=>tab.id!==id));if(active===id)setActive(opened.at(-1)??'start');return}
    const next=opened.filter(t=>t!==id);setOpened(next);if(active===id)setActive(next.at(-1)??'start');
  };
  const definitions=[...DOCK_TABS,{id:'team' as const,label:'团队',icon:'groups'},...editorTabs.map(tab=>({id:tab.id as DockTabId,label:tab.path.slice(Math.max(tab.path.lastIndexOf('/'),tab.path.lastIndexOf('\\'))+1),icon:'description'}))];
- const tabs=[...(active==='start'||opened.length===0&&editorTabs.length===0?[START]:[]),...opened.map(id=>definitions.find(t=>t.id===id)!).filter(Boolean),...editorTabs.map(tab=>definitions.find(t=>t.id===tab.id)!).filter(Boolean)];
+ // 「开始」页不占 tab 标题（2026-09-18 用户裁定：打开右坞不该有没用的主页 tab）——
+ // 它只是 + 的目录视图（active==='start' 时无高亮 tab，点任一 tab/卡片即离开）。
+ const tabs=[...opened.map(id=>definitions.find(t=>t.id===id)!).filter(Boolean),...editorTabs.map(tab=>definitions.find(t=>t.id===tab.id)!).filter(Boolean)];
+ // 有会话且还没开任何面板时，默认进「文件」（开始页对日常使用没用）。
+ useEffect(()=>{if(sessionId && opened.length===0 && editorTabs.length===0){setOpened(['files']);setActive('files')}},[sessionId]);
  // 收起 = 右坞整体消失（图二：无竖条单独区域；顶栏 ◨ 是唯一恢复入口）。
  if(collapsed===true) return null;
  return <aside data-right-dock className={'vendor-bs min-h-0 bg-surface-container-lowest border-l border-surface-container-highest flex flex-col overflow-hidden shrink-0 ' + (fullscreen?'flex-1 min-w-0':'w-[min(520px,42vw)]')}>
