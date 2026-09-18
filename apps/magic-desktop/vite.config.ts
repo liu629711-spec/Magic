@@ -1,5 +1,23 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+
+// vendor 平移包的对外包名解析（与 tsconfig.json paths 一一对应）：上游源码的
+// 包名 import 原样保留，构建期重写到 vendor 内的实现/类型 shim。
+const vendorAliases: Record<string, string> = {
+  "@deepseek-ai/dsh-brand": "src/vendor/dsh-brand/index.ts",
+  "@deepseek-ai/dsh-session/types": "src/vendor/dsh-session/types.ts",
+  "@deepseek-ai/dsh-client-store": "src/vendor/dsh-client-store/src/index.ts",
+  "@deepseek-ai/dsh-client-ui-slots": "src/vendor/dsh-client-ui-slots/src/index.ts",
+  "@deepseek-ai/dsh-client-ui-dockkit": "src/vendor/ui-dockkit/src/index.ts",
+  "@deepseek-ai/dsh-client-ui-layout/client": "src/vendor/dsh-client-host-types/ui-layout.ts",
+  "@deepseek-ai/dsh-client-ui-session/client": "src/vendor/dsh-client-host-types/ui-session.ts",
+  "@deepseek-ai/dsh-client-locale/client": "src/vendor/dsh-client-host-types/locale.ts",
+  "@deepseek-ai/dsh-client-ui-renderer/client": "src/vendor/dsh-client-host-types/ui-renderer.ts",
+  "@deepseek-ai/dsh-client-ui-conversation/client": "src/vendor/dsh-client-host-types/conversation.ts",
+  "@deepseek-ai/dsh-client-resources/client": "src/vendor/dsh-client-host-types/resources.ts",
+};
+const here = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
 
 // SDK 接线（M1，浏览器 dev 形态）：把 DSH web 通道同源代理到本机 `dsh web` 实例。
 // 目标可用 VITE_DSH_WEB_ORIGIN 覆盖（默认 3099 = Magic 插件全挂的调试实例）。
@@ -20,6 +38,11 @@ function rewriteFenceHeaders(proxy: { on: (event: string, listener: (req: { setH
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: Object.fromEntries(
+      Object.entries(vendorAliases).map(([find, relative]) => [find, here("./" + relative)]),
+    ),
+  },
   server: {
     port: 5173,
     strictPort: true,

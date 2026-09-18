@@ -16,7 +16,20 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "paths": {
+      "@deepseek-ai/dsh-brand": ["./src/vendor/dsh-brand/index.ts"],
+      "@deepseek-ai/dsh-session/types": ["./src/vendor/dsh-session/types.ts"],
+      "@deepseek-ai/dsh-client-store": ["./src/vendor/dsh-client-store/src/index.ts"],
+      "@deepseek-ai/dsh-client-ui-slots": ["./src/vendor/dsh-client-ui-slots/src/index.ts"],
+      "@deepseek-ai/dsh-client-ui-dockkit": ["./src/vendor/ui-dockkit/src/index.ts"],
+      "@deepseek-ai/dsh-client-ui-layout/client": ["./src/vendor/dsh-client-host-types/ui-layout.ts"],
+      "@deepseek-ai/dsh-client-ui-session/client": ["./src/vendor/dsh-client-host-types/ui-session.ts"],
+      "@deepseek-ai/dsh-client-locale/client": ["./src/vendor/dsh-client-host-types/locale.ts"],
+      "@deepseek-ai/dsh-client-ui-renderer/client": ["./src/vendor/dsh-client-host-types/ui-renderer.ts"],
+      "@deepseek-ai/dsh-client-ui-conversation/client": ["./src/vendor/dsh-client-host-types/conversation.ts"],
+      "@deepseek-ai/dsh-client-resources/client": ["./src/vendor/dsh-client-host-types/resources.ts"]
+    }
   },
   "include": ["src"]
 }
