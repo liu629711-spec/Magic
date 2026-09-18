@@ -401,6 +401,38 @@ export function App() {
       .map(row => row.sessionId);
   }, [web.status, web.sessions]);
 
+  // 会话预设显示名映射（图二顶栏「标准模式」段；官方 AgentPresetLabel 语义：
+  // 投影 agentPreset 存 id，显示名经 agentPresets/list 映射。args 双形状兜底同 SkillsHub）。
+  const [presetNames, setPresetNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!backendMode || web.status !== "ready") return;
+    let cancelled = false;
+    void (async () => {
+      for (const args of [{}, { _request: {} }] as Record<string, unknown>[]) {
+        try {
+          const roster = await dshRpc<{ presets?: { id?: string; name?: string }[] }>(
+            "agentPresets/list",
+            args,
+          );
+          if (cancelled) return;
+          const map: Record<string, string> = {};
+          for (const preset of roster.presets ?? []) {
+            if (typeof preset.id === "string" && typeof preset.name === "string" && preset.name.length > 0) {
+              map[preset.id] = preset.name;
+            }
+          }
+          setPresetNames(map);
+          return;
+        } catch {
+          /* 下一种 args 形状 */
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [backendMode, web.status]);
+
   // 会话头数据（M4，2026-09-18）：从真实会话列表算父会话与子代理/子会话；
   // mock 模式（无 web 数据）返回 undefined → 对话区不渲染会话头。
   const sessionHeader = useMemo<SessionHeaderData | undefined>(() => {
@@ -415,15 +447,20 @@ export function App() {
     return {
       id: current.sessionId,
       title: current.title,
-      // 工作目录（图四顶行 workspace chip 展示/复制，2026-09-18）。
+      // 工作目录（图二顶行 workspace chip 展示/复制，2026-09-18）。
       cwd: current.cwd,
+      // 会话预设显示名（图二「标准模式」段；官方 AgentPresetLabel 语义）。
+      preset:
+        current.preset !== undefined
+          ? (presetNames[current.preset] ?? current.preset)
+          : undefined,
       parent:
         parentRow !== undefined
           ? { id: parentRow.sessionId, title: parentRow.title }
           : undefined,
       children: children.map((row, index) => ({ id: row.sessionId, title: subagentTitle(row, index) })),
     };
-  }, [backendMode, web.status, web.sessions, activeId]);
+  }, [backendMode, web.status, web.sessions, activeId, presetNames]);
 
   // web 模式：activeId 变化 → follow 事件流进对应 store（快照整窗替换 + 增量追加）。
   // 子代理会话必须用 subagent 地址（durable parent）——否则宿主报 session/agent-busy。
@@ -479,18 +516,26 @@ export function App() {
   }, [promptToSession]);
   // 打开右坞「团队」tab（图卡点成员/CEO 节点）：token 自增，RightDock 监听后切 tab。
   const [teamOpenToken, setTeamOpenToken] = useState(0);
-  const openTeamTab = useCallback(() => { setTeamOpenToken(value => value + 1); }, []);
+  const openTeamTab = useCallback(() => { setDockCollapsed(false); setTeamOpenToken(value => value + 1); }, []);
   // 右坞 chrome 状态（2026-09-18 图四顶行接线）：收起态 + 全屏态 + 切 tab 请求。
   const [dockCollapsed, setDockCollapsed] = useState(false);
   const [dockFullscreen, setDockFullscreen] = useState(false);
   // 切 tab 请求（{tab, seq}，seq 区分同 tab 的重复点击）：RightDock 监听 seq 变化切 tab。
-  const [dockTabRequest, setDockTabRequest] = useState<{ tab: string; seq: number } | null>(null);
+  const [dockTabRequest, setDockTabRequest] = useState<{ tab: string; seq: number; sessionId: string } | null>(null);
+  const [fileRequest, setFileRequest] = useState<{path:string;seq:number;sessionId:string}|null>(null);
+  const requestSeq = useRef(0);
+  const openFile = useCallback((path:string) => {
+    setDockCollapsed(false);
+    setFileRequest({path,sessionId:activeId,seq:++requestSeq.current});
+  },[activeId]);
+  useEffect(()=>{setDockFullscreen(false);setDockCollapsed(false);setDockTabRequest(null);setFileRequest(null)},[activeId]);
+  const dockBridge = { sessions:web.sessions, fork:web.fork, follow:web.follow, prompt:web.prompt, selectModel:web.selectModel, openSession };
   // L agent 契约（并行开发）：RightDock 按同名 props 消费——
   // collapsed/onToggleCollapsed/fullscreen/onToggleFullscreen/dockTabRequest。
   // 契约由另一 agent 在 RightDock.tsx 落地；此处先以 any 展开避免契约未合入时 tsc 失败。
-  const dockChrome: any = {
+  const dockChrome = {
     collapsed: dockCollapsed,
-    onToggleCollapsed: () => setDockCollapsed(v => !v),
+    onToggleCollapsed: () => { setDockFullscreen(false); setDockCollapsed(v => !v); },
     fullscreen: dockFullscreen,
     onToggleFullscreen: () => setDockFullscreen(v => !v),
     dockTabRequest,
@@ -612,7 +657,7 @@ export function App() {
         sessionCwds={backendMode ? sessionCwds : undefined}
       />
       <div className="pl-[260px] h-full flex">
-        <main className="flex-1 min-w-0 bg-surface">
+        <main className={dockFullscreen ? "hidden" : "flex-1 min-w-0 bg-surface"}>
           {view === "skills" ? (
             <SkillsHub
               backendReady={backendMode && web.status === "ready"}
@@ -623,6 +668,7 @@ export function App() {
               key={activeId}
               store={store}
               onSend={handleSend}
+              onOpenFile={openFile}
               modelPicker={modelPicker}
               composerChips={composerChips}
               mentionOptions={mentionOptions}
@@ -636,7 +682,7 @@ export function App() {
               onCollapseDock={() => setDockCollapsed(true)}
               onOpenDockTab={tab => {
                 setDockCollapsed(false);
-                setDockTabRequest({ tab, seq: Date.now() });
+                setDockTabRequest({ tab, seq: ++requestSeq.current, sessionId: activeId });
               }}
               headerActions={
                 backendMode && activeId.length > 0
@@ -667,6 +713,9 @@ export function App() {
             onQuoteFile：文件 @引用注入对话输入框草稿（跨模块桥）；
             teamOpenToken：图卡点成员/CEO 节点时切到「团队」tab；sendIntervention：成员干预写回会话 */}
         <RightDock
+          key={dockSessionId}
+          bridge={dockBridge}
+          fileRequest={fileRequest}
           sessionId={dockSessionId}
           cwd={dockCwd}
           onQuoteFile={quoteFile}

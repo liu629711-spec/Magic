@@ -27,6 +27,8 @@ export interface RemoteSessionRow {
   parentSessionId?: string;
   /** 会话模型选择（projections.values.modelSelection：pending 优先，其次 lastUsed） */
   model?: { provider: string; model: string };
+  /** 会话预设 id（projections.values.agentPreset；官方 AgentPresetLabel 数据源） */
+  preset?: string;
 }
 
 function titleOfSummary(raw: Record<string, unknown>): string {
@@ -63,6 +65,7 @@ function toRow(raw: Record<string, unknown>): RemoteSessionRow {
       typeof chosen?.provider === "string" && typeof chosen?.model === "string"
         ? { provider: chosen.provider, model: chosen.model }
         : undefined,
+    preset: typeof values?.agentPreset === "string" ? values.agentPreset : undefined,
   };
 }
 

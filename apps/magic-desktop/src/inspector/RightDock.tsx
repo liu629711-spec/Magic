@@ -1,23 +1,3 @@
-/**
- * 右坞（Right Dock）：右侧停靠面板，把已 vendored 的 better-sidebar 真实能力
- * （审查=文件变动 / 终端 / 文件树）与团队 tab 接进 Magic 客户端。默认宽 520px、
- * tab 行在顶部（stitch 图五形态：胶囊激活态 + 徽标 + ×/＋/全屏，见 DockTabBar.tsx）。
- * 出处：stitch_codex_ui_clone/codex_01_stream_autonomous_flow/code.html L343-344
- * （<!-- RIGHT: Code Diff, Staged Files & Review Dock -->，右栏 520px）。
- *
- * 数据全部来自本机 dsh web 实例的 /sidebar/* 真实路由（经 Vite 代理同源），无 mock：
- * - 文件     → FileTree + /sidebar/api/fs.tree（根 = 当前会话 cwd，懒加载逐层列目录）
- *              + 行点击 → 坞内文件预览（fs.read 真实内容）；行上「@文件」→ 对话输入框草稿
- * - 文件变动 → /sidebar/api/git.status 列真实改动 + /sidebar/api/git.diff 取真实 diff，
- *              diff 体渲染复用 vendored DiffFiles
- * - 终端     → TerminalView + /sidebar/ws/terminal（真实 PTY，支持 echo hi 等输入）
- * 没有打开会话时面板区显示「选择一个会话」。
- *
- * 诚实边界（本坞目前没接通的部分，代码里都是显式空实现，不造假数据）：
- * - 设计稿的「浏览器」面板无可靠真实数据源：仅在 ＋ 菜单内置灰占位（能力未接入）。
- * - 「审查」即原「文件变动」（真实 git status + diff），对应设计稿审查列的可见入口。
- * - 历史提交（git.log）与暂存/提交操作未接：本坞只做「看」的真实闭环。
- */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Icon } from "../sidebar/Icon";
 import { api, createSidebarStore, DiffFiles, FileTree, formatBytes, relativeTo, TerminalView, t } from "../vendor/better-sidebar/index.ts";
@@ -29,314 +9,84 @@ import { summarizeResults, uploadHintText, uploadToDir, type UploadItem } from "
 // CEO 委派图卡右坞（2026-09-18）：图卡点成员/CEO 节点打开的「团队」tab = 成员详情 / 团队总览。
 import { CeoWorkspace } from "../vendor/ceo/client/CeoWorkspace.ts";
 import { ceoT } from "../vendor/ceo/client/dict.ts";
-import { getCeoRoster, getCeoRosterSessionId, getSelectedCeoMember, subscribeCeoSelection } from "../vendor/ceo/client/selection.ts";
-import { displayCeoSeat } from "../vendor/ceo/team.ts";
 
-/** tab 固定清单：审查 / 终端 / 文件（顺序渲染；「团队」按需追加）。
- *  审查 = 原「文件变动」= git 变更 review；团队为 Magic 特有，随名册/图卡显隐。 */
+import { DockBrowser, DockJobs, DockSideChat, type DockSessionBridge } from './DockPanels';
+import { resolveFilePath } from './file-path';
 const DOCK_TABS: DockTabDef[] = [
-  { id: "changes", label: "审查", icon: "review" },
-  { id: "terminal", label: "终端", icon: "terminal" },
-  { id: "files", label: "文件", icon: "folder_open" },
+ {id:'files',label:'文件',icon:'folder_open'}, {id:'changes',label:'文件变动',icon:'difference'},
+ {id:'jobs',label:'任务管理',icon:'checklist'}, {id:'terminal',label:'终端',icon:'terminal'},
+ {id:'browser',label:'浏览器',icon:'language'}, {id:'sidechat',label:'侧边聊天',icon:'chat_bubble_outline'},
 ];
-const TEAM_TAB_ICON = "groups";
-
-/** ＋ 菜单候选顺序（文件 / 审查 / 终端 / 团队）。 */
-const MENU_TABS: DockTabDef[] = [
-  { id: "files", label: "文件", icon: "folder_open" },
-  { id: "changes", label: "审查", icon: "review" },
-  { id: "terminal", label: "终端", icon: "terminal" },
-  { id: "team", label: "团队", icon: TEAM_TAB_ICON },
-];
-
-/** dockTabRequest 契约：映射宿主 tab 名字符串 → 本坞 tab id。未知名忽略。 */
-const TAB_NAME_TO_ID: Record<string, DockTabId> = {
-  terminal: "terminal",
-  files: "files",
-  changes: "changes",
-  team: "team",
+const START: DockTabDef = {id:'start',label:'开始',icon:'home'};
+/** 图三「开始」页条目图标色（文件/任务管理=琥珀、文件变动=绿、浏览器=蓝；其余默认描边色）。 */
+const DOCK_ICON_TONE: Partial<Record<string, string>> = {
+  files: 'text-[#e8a262]',
+  changes: 'text-[#4edea3]',
+  jobs: 'text-[#e8a262]',
+  browser: 'text-[#4d93f8]',
 };
-
-/**
- * 终端 tab id：非 `agent:` 前缀即宿主眼里的「UI 终端」，宿主按 (sessionId, tab)
- * 维护 PTY。固定值即可——每个会话的 PTY 表是独立的，同一会话复用同一 shell。
- */
-const DOCK_TERMINAL_TAB = "terminal:magic-rightdock";
-
-/** 空数组常量：FileTree 的 revealed 入参（避免每次渲染新建引用触发其内部 memo 失效）。 */
 const NO_REVEALED: string[] = [];
-
-export function RightDock({
-  sessionId,
-  cwd,
-  onQuoteFile,
-  teamOpenToken,
-  sendIntervention,
-  collapsed,
-  onToggleCollapsed,
-  fullscreen,
-  onToggleFullscreen,
-  dockTabRequest,
-}: {
-  sessionId: string;
-  cwd: string | undefined;
-  /** @ 引用桥：把 `@<相对路径> ` 注入对话输入框草稿（App 持注入 token）。 */
-  onQuoteFile?: (path: string) => void;
-  /** 图卡点成员/CEO 节点：token 自增 → 切到「团队」tab（App 持 token）。 */
-  teamOpenToken?: number;
-  /** 成员干预（halt/redirect/resume/retry/replan）写回当前会话（App 的 promptToSession）。 */
-  sendIntervention?: (message: string) => void;
-  /** 收起为 44px 竖条（状态归 App 持有）；未传 = 不收起。 */
-  collapsed?: boolean;
-  onToggleCollapsed?: () => void;
-  /** 全屏占满中栏右侧剩余宽（状态归 App 持有）；未传 = 不全屏且 ⛶ 置灰。 */
-  fullscreen?: boolean;
-  onToggleFullscreen?: () => void;
-  /** 外部切 tab 请求：seq 变化 → 恢复该 tab 可见并激活（terminal|files|changes|team）。 */
-  dockTabRequest?: { tab: string; seq: number } | null;
+const DOCK_TERMINAL_TAB = 'terminal:magic-rightdock';
+export function RightDock({sessionId,cwd,onQuoteFile,teamOpenToken,sendIntervention,collapsed,onToggleCollapsed,fullscreen,onToggleFullscreen,dockTabRequest,fileRequest,bridge}: {
+ sessionId:string; cwd:string|undefined; onQuoteFile?:(path:string)=>void; teamOpenToken?:number;
+ sendIntervention?:(message:string)=>void; collapsed?:boolean; onToggleCollapsed?:()=>void;
+ fullscreen?:boolean; onToggleFullscreen?:()=>void;
+ dockTabRequest?:{tab:string;seq:number;sessionId:string}|null;
+ fileRequest?:{path:string;seq:number;sessionId:string}|null;
+ bridge:DockSessionBridge;
 }) {
-  // 一个会话一份侧栏状态（展开集合 / 布局），store 实例随坞存活，会话切换只换内部状态。
-  const storeRef = useRef<SidebarStore | undefined>(undefined);
-  if (storeRef.current === undefined) storeRef.current = createSidebarStore();
-  const store = storeRef.current;
-
-  useEffect(() => {
-    store.setSession(sessionId.length > 0 ? sessionId : undefined);
-  }, [store, sessionId]);
-
-  // 侧卡偏好（终端字体、工作区路径检测开关等）走插件自己的 settings 路由；取不到就用默认值。
-  useEffect(() => {
-    void loadPrefs(api).then(prefs => store.setPrefs(prefs));
-  }, [store]);
-
-  const snapshot = useSyncExternalStore(
-    useCallback((onChange: () => void) => store.subscribe(onChange), [store]),
-    useCallback(() => store.getSnapshot(), [store]),
-  );
-
-  // cwd 兜底：会话摘要偶尔不带 cwd，而 fs/git 路由都以它作为根，这里向宿主问一次。
-  const [resolvedCwd, setResolvedCwd] = useState<string | undefined>(cwd);
-  useEffect(() => {
-    setResolvedCwd(cwd);
-    if (cwd !== undefined || sessionId.length === 0) return;
-    let cancelled = false;
-    api.sessionCwd({ sessionId })
-      .then(view => {
-        if (!cancelled && view.cwd.length > 0) setResolvedCwd(view.cwd);
-      })
-      .catch(() => {
-        // 取不到 cwd 就保持空态：fs/git 路由随后会用宿主侧会话信息自行解析或报错。
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, cwd]);
-
-  const scope = useMemo<SessionScope>(
-    () => ({ sessionId, ...(resolvedCwd !== undefined ? { cwd: resolvedCwd } : {}) }),
-    [sessionId, resolvedCwd],
-  );
-
-  const [active, setActive] = useState<DockTabId>("files");
-  const open = sessionId.length > 0;
-
-  // 可见 tab 管理（× 关闭 / ＋ 恢复）：hiddenTabs 只把 tab 从行里隐藏，
-  // 内容组件按 active 条件挂载，被隐藏 tab 的内容自然不再渲染。
-  const [hiddenTabs, setHiddenTabs] = useState<ReadonlySet<DockTabId>>(() => new Set());
-  const closeTab = useCallback((id: DockTabId) => {
-    setHiddenTabs(prev => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }, []);
-  const reopenTab = useCallback((id: DockTabId) => {
-    setHiddenTabs(prev => {
-      if (!prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    setActive(id);
-  }, []);
-  // 会话切换：恢复默认可见集合（新会话从完整面板开始）。
-  useEffect(() => { setHiddenTabs(new Set()); }, [sessionId]);
-
-  // 团队 tab（2026-09-18）：订阅 selection store 的名册/选中态（图卡 publishCeoTeam 写入）。
-  const roster = useSyncExternalStore(subscribeCeoSelection, getCeoRoster, getCeoRoster);
-  const selectedMember = useSyncExternalStore(subscribeCeoSelection, getSelectedCeoMember, getSelectedCeoMember);
-  const rosterSessionId = useSyncExternalStore(subscribeCeoSelection, getCeoRosterSessionId, getCeoRosterSessionId);
-  // 被图卡显式打开过（openWorkspace token 自增）后，即使名册暂空也保留 tab（避免死 tab 消失）。
-  const [teamForced, setTeamForced] = useState(false);
-  const lastTeamToken = useRef(teamOpenToken ?? 0);
-  useEffect(() => {
-    const token = teamOpenToken ?? 0;
-    if (token === lastTeamToken.current) return;
-    lastTeamToken.current = token;
-    setTeamForced(true);
-    setActive("team");
-  }, [teamOpenToken]);
-  // 名册是模块级单例：切换会话时收起显式打开态，且只认当前会话的名册
-  // （否则非 CEO 会话会残留上一个会话的「团队」死 tab）。
-  useEffect(() => { setTeamForced(false); }, [sessionId]);
-  const rosterHere = rosterSessionId === undefined || rosterSessionId === sessionId;
-  const showTeam = open && ((roster.length > 0 && rosterHere) || teamForced);
-  const teamTitle = selectedMember === null ? "团队总览" : displayCeoSeat(selectedMember, roster);
-  const dockTabs = showTeam
-    ? [...DOCK_TABS, { id: "team" as DockTabId, label: teamTitle, icon: TEAM_TAB_ICON }]
-    : DOCK_TABS;
-
-  // 外部切 tab 请求（App 侧 dockTabRequest）：seq 变化 → 恢复该 tab 可见并激活。
-  // team 需要显式打开（否则名册为空时是死 tab）；未知名忽略。
-  const lastDockTabSeq = useRef(0);
-  useEffect(() => {
-    if (dockTabRequest === null || dockTabRequest === undefined) return;
-    if (dockTabRequest.seq === lastDockTabSeq.current) return;
-    lastDockTabSeq.current = dockTabRequest.seq;
-    const requested = TAB_NAME_TO_ID[dockTabRequest.tab];
-    if (requested === undefined) return;
-    if (requested === "team") setTeamForced(true);
-    setHiddenTabs(prev => {
-      if (!prev.has(requested)) return prev;
-      const next = new Set(prev);
-      next.delete(requested);
-      return next;
-    });
-    setActive(requested);
-  }, [dockTabRequest]);
-
-  // 可见 tab 与激活派生：active 指向的 tab 被 × 关闭后自动落到第一个可见 tab；
-  // 全部关光 = null（内容区显示「从 ＋ 添加面板」空态）。
-  const visibleTabs = dockTabs.filter(tab => !hiddenTabs.has(tab.id));
-  const effectiveActive: DockTabId | null = visibleTabs.some(tab => tab.id === active)
-    ? active
-    : visibleTabs[0]?.id ?? null;
-  // ＋ 菜单候选：团队项与 tab 行同源（仅可用时出现）；浏览器置灰项在 DockTabBar 内置。
-  const menuTabs: DockTabDef[] = showTeam ? MENU_TABS : MENU_TABS.filter(tab => tab.id !== "team");
-
-  // 审查徽标 = 变更文件数。激活审查 tab 时由 ChangesTab 的 gitStatus 结果上报（同一份数据，
-  // 不双请求）；未激活但可见时这里自拉一次（会话/cwd/可见性变化时刷新）；拿不到 = null 不显示。
-  const [changesCount, setChangesCount] = useState<number | null>(null);
-  const changesActive = effectiveActive === "changes";
-  useEffect(() => {
-    if (!open || hiddenTabs.has("changes") || collapsed === true) {
-      setChangesCount(null);
-      return;
-    }
-    if (changesActive) return; // 激活中：由 ChangesTab 上报
-    let cancelled = false;
-    api.gitStatus(scope)
-      .then(result => {
-        if (!cancelled) setChangesCount(result.entries.length);
-      })
-      .catch(() => {
-        if (!cancelled) setChangesCount(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [scope, open, hiddenTabs, changesActive, collapsed]);
-
-  // ▾ 菜单「重置布局」：恢复全部 tab + 退出全屏 + 展开（全屏/收起状态归 App，经回调归还）。
-  const resetLayout = useCallback(() => {
-    setHiddenTabs(new Set());
-    setActive("files");
-    if (fullscreen === true) onToggleFullscreen?.();
-    if (collapsed === true) onToggleCollapsed?.();
-  }, [fullscreen, collapsed, onToggleFullscreen, onToggleCollapsed]);
-
-  // 文件预览状态上提：团队 tab 的产出文件点击复用坞内预览（切回文件 tab + 打开路径）。
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
-  useEffect(() => { setPreviewPath(null); }, [sessionId]);
-  const openFileInDock = useCallback((path: string) => {
-    setPreviewPath(path);
-    setActive("files");
-  }, []);
-
-  // 收起态：44px 竖条，只留展开按钮（tab 行与内容都不渲染；所有 hooks 已在上方执行完毕）。
-  if (collapsed) {
-    return (
-      <aside className="vendor-bs w-[44px] shrink-0 bg-surface-container-lowest border-l border-surface-container-highest flex flex-col items-center overflow-hidden py-2">
-        <button
-          type="button"
-          title={onToggleCollapsed === undefined ? "未接线" : "展开右坞"}
-          aria-label="展开右坞"
-          disabled={onToggleCollapsed === undefined}
-          onClick={() => onToggleCollapsed?.()}
-          className={
-            onToggleCollapsed === undefined
-              ? "w-7 h-7 rounded-md flex items-center justify-center text-outline opacity-40 cursor-not-allowed"
-              : "w-7 h-7 rounded-md flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer"
-          }
-        >
-          <Icon name="right_panel_open" className="text-[18px]" />
-        </button>
-      </aside>
-    );
-  }
-
-  return (
-    <aside
-      className={`vendor-bs bg-surface-container-lowest border-l border-surface-container-highest flex flex-col overflow-hidden ${
-        /* 全屏 = 占满左栏以外全部宽度（固定宽而非 flex-1：与中栏 main 的 flex-1 平分会
-         * 导致只到一半宽，实测 520→548px；2026-09-18 回归修复） */
-        fullscreen === true ? "w-[calc(100vw-260px)] shrink-0" : "w-[520px] shrink-0"
-      }`}
-    >
-      <DockTabBar
-        tabs={visibleTabs}
-        menuTabs={menuTabs}
-        active={effectiveActive}
-        disabled={!open}
-        changesCount={changesCount}
-        fullscreen={fullscreen === true}
-        onToggleFullscreen={onToggleFullscreen}
-        onSelect={setActive}
-        onCloseTab={closeTab}
-        onReopenTab={reopenTab}
-        onResetLayout={resetLayout}
-      />
-      {!open ? (
-        <div className="flex-1 min-h-0 flex items-center justify-center text-[13px] text-outline">
-          选择一个会话
-        </div>
-      ) : effectiveActive === null ? (
-        /* 全部面板被 × 关光：空态引导从 ＋ 恢复 */
-        <div className="flex-1 min-h-0 flex items-center justify-center text-[13px] text-outline">
-          从 ＋ 添加面板
-        </div>
-      ) : (
-        /* flex 列容器：vendored 组件根（.explorerBody / .terminalWrap）是 flex:1，需要确定高度的父层 */
-        <div className="flex-1 min-h-0 flex flex-col">
-          {effectiveActive === "files" ? (
-            <FilesTab
-              scope={scope}
-              store={store}
-              snapshot={snapshot}
-              onQuoteFile={onQuoteFile}
-              previewPath={previewPath}
-              onOpenPreview={setPreviewPath}
-              onClosePreview={() => { setPreviewPath(null); }}
-            />
-          ) : effectiveActive === "changes" ? (
-            <ChangesTab scope={scope} onCountChange={setChangesCount} />
-          ) : effectiveActive === "team" ? (
-            <CeoWorkspace
-              sessionId={sessionId}
-              sendIntervention={sendIntervention}
-              onOpenFile={openFileInDock}
-              onClose={() => { setActive("files"); }}
-              t={ceoT}
-            />
-          ) : (
-            <TerminalView scope={scope} tabId={DOCK_TERMINAL_TAB} store={store} />
-          )}
-        </div>
-      )}
-    </aside>
-  );
+ const [store] = useState(createSidebarStore);
+ useEffect(()=>{store.setSession(sessionId || undefined)},[store,sessionId]);
+ useEffect(()=>{void loadPrefs(api).then(prefs=>store.setPrefs(prefs))},[store]);
+ const snapshot = useSyncExternalStore(useCallback(fn=>store.subscribe(fn),[store]),useCallback(()=>store.getSnapshot(),[store]));
+ const [resolvedCwd,setResolvedCwd] = useState(cwd);
+ useEffect(()=>{let cancelled=false;setResolvedCwd(cwd);if(!cwd && sessionId) void api.sessionCwd({sessionId}).then(v=>{if(!cancelled)setResolvedCwd(v.cwd)}).catch(()=>{/* File requests report missing cwd. */});return()=>{cancelled=true}},[cwd,sessionId]);
+ const scope = useMemo<SessionScope>(()=>({sessionId,cwd:resolvedCwd}),[sessionId,resolvedCwd]);
+ const [opened,setOpened] = useState<DockTabId[]>([]);
+ const [active,setActive] = useState<DockTabId>('start');
+ const [previewPath,setPreviewPath] = useState<string|null>(null);
+ const [changesCount,setChangesCount] = useState<number|null>(null);
+ const reopenTab = useCallback((id:DockTabId)=>{if(id!=='start')setOpened(prev=>prev.includes(id)?prev:[...prev,id]);setActive(id)},[]);
+ const openFileInDock = useCallback((path:string)=>{const resolved=resolveFilePath(path,resolvedCwd);if(resolved!==null){setPreviewPath(resolved);reopenTab('files')}},[resolvedCwd,reopenTab]);
+ const lastFile = useRef(0);
+ useEffect(()=>{if(fileRequest && fileRequest.sessionId===sessionId && fileRequest.seq!==lastFile.current){if(!resolvedCwd && !/^(?:[a-z]:[\\/]|[/\\])/i.test(fileRequest.path))return;lastFile.current=fileRequest.seq;openFileInDock(fileRequest.path)}},[fileRequest,sessionId,openFileInDock,resolvedCwd]);
+ const lastTab = useRef(0);
+ useEffect(()=>{if(dockTabRequest && dockTabRequest.sessionId===sessionId && dockTabRequest.seq!==lastTab.current){lastTab.current=dockTabRequest.seq;const tab=[...DOCK_TABS,{id:'team' as const},START].find(t=>t.id===dockTabRequest.tab);if(tab)reopenTab(tab.id)}},[dockTabRequest,sessionId,reopenTab]);
+ const lastTeam=useRef(teamOpenToken ?? 0);
+ useEffect(()=>{if(teamOpenToken!==undefined && lastTeam.current!==teamOpenToken){lastTeam.current=teamOpenToken;reopenTab('team')}},[teamOpenToken,reopenTab]);
+ const closeTab=(id:DockTabId)=>{const next=opened.filter(t=>t!==id);setOpened(next);if(active===id)setActive(next.at(-1)??'start');if(id==='files')setPreviewPath(null)};
+ const definitions=[...DOCK_TABS,{id:'team' as const,label:'团队',icon:'groups'}];
+ const tabs=[...(active==='start'||opened.length===0?[START]:[]),...opened.map(id=>definitions.find(t=>t.id===id)!).filter(Boolean)];
+ return <aside data-right-dock className={'vendor-bs min-h-0 bg-surface-container-lowest border-l border-surface-container-highest flex flex-col overflow-hidden shrink-0 ' + (collapsed?'w-[44px]':fullscreen?'flex-1 min-w-0':'w-[min(520px,42vw)]')}>
+ <div className={collapsed?'hidden':'contents'}>
+ <DockTabBar tabs={tabs} active={active} changesCount={changesCount} fullscreen={fullscreen===true} onToggleFullscreen={onToggleFullscreen} onSelect={setActive} onCloseTab={closeTab} onStart={()=>setActive('start')} onCollapse={onToggleCollapsed}/>
+ {active==='start' && <div data-dock-guide className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2.5 overflow-y-auto py-6">
+  {/* 罗盘英雄图（官方 GuideBody.tsx:70-83 CompassGlyph 56px 语义） */}
+  <span className="material-symbols-outlined mb-3 text-[56px] leading-none text-outline opacity-40" aria-hidden>explore</span>
+  {DOCK_TABS.map(tab => (
+    <button type="button" key={tab.id} disabled={!sessionId} onClick={() => reopenTab(tab.id)}
+      title={tab.label}
+      className="flex h-14 w-[380px] max-w-full shrink-0 items-center gap-3 rounded-[24px] border border-line bg-surface px-5 text-[15px] text-on-surface transition-colors hover:border-line-strong hover:bg-surface-container-low focus-visible:outline focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-40">
+      <Icon name={tab.icon} className={`text-[18px] ${DOCK_ICON_TONE[tab.id] ?? 'text-outline'}`} />
+      {tab.label}
+    </button>
+  ))}
+  {!sessionId && <p className="pt-2 text-xs text-outline">选择会话后打开面板</p>}
+ </div>}
+ {opened.map(id=><div key={id} hidden={active!==id} className={active===id?'flex-1 min-h-0 flex flex-col':'hidden'}>
+ {id==='files'?<FilesTab scope={scope} store={store} snapshot={snapshot} onQuoteFile={onQuoteFile} previewPath={previewPath} onOpenPreview={openFileInDock} onClosePreview={()=>setPreviewPath(null)}/>:
+ id==='changes'?<ChangesTab scope={scope} onCountChange={setChangesCount}/>:
+ id==='terminal'?<TerminalView scope={scope} tabId={DOCK_TERMINAL_TAB} store={store}/>:
+ id==='browser'?<DockBrowser store={store}/>:
+ id==='jobs'?<DockJobs scope={scope} bridge={bridge}/>:
+ id==='sidechat'?<DockSideChat scope={scope} bridge={bridge} onOpenFile={openFileInDock}/>:
+ <CeoWorkspace sessionId={sessionId} sendIntervention={sendIntervention} onOpenFile={openFileInDock} onClose={()=>closeTab('team')} t={ceoT}/>}
+ </div>)}
+ </div>
+ {collapsed && <button type="button" aria-label="展开右坞" className="h-10 text-outline hover:text-on-surface" onClick={onToggleCollapsed}><Icon name="right_panel_open" /></button>}
+ </aside>
 }
+
 
 /** 文件 tab：真实文件树 + 真实上传（拖拽 / 右键「上传到此处」）+ 坞内文件预览 + @引用。
  *  预览状态由 RightDock 持有（团队 tab 的产出文件点击也要复用坞内预览）。 */

@@ -1,12 +1,11 @@
-// 会话头（M4，2026-09-18；同日图四顶行改版）：对话区顶部一条会话头，形态对齐
-// stitch_codex_ui_clone/codex_01_stream_autonomous_flow/screen.png 顶行：
-// 左=面包屑（父会话可点 › 当前标题，重命名时行内变输入框）+ workspace chip
-// （folder 图标+色点+cwd basename，点击复制路径并短提示「已复制」）+「⋯」会话菜单
-// （重命名/导出 Markdown/复制会话 ID）；右=子代理 chip + Agent Team chip（功能保留，
-// 设计稿无对应物，按功能放在图标组左侧）+ ghost 图标组（folder▾ 路径菜单 |
-// image 附件置灰 | terminal 右坞终端 | 1px 分隔线 | right_panel_close/open 右坞收起/展开）。
-// 行为语义按官方 header.actions/utilities/corner 映射；能力未接的置灰并 title 诚实标注。
-// 数据由 App 从 web.sessions 计算后经 ChatFlow 传入（mock 模式无 web 数据 → 不渲染本头）。
+// 会话头（M4，2026-09-18；同日图二顶行改版 → 2026-09-18 图二/3099 实测重排）：
+// Magic 组合网页版顶栏对齐（图二实测 + ui-conversation ConversationSessionHeader 插槽语义）：
+// 左=面包屑（父会话可点 › 当前标题，重命名时行内变输入框）+「N 个子代理」chip（下拉切换）
+// + 会话预设只读标签（投影 agentPreset 显示名，官方 AgentPresetLabel 语义）+ Agent Team chip
+// （agentTeams/view 名册/任务板面板）；右=workspace chip ▾（复制路径/资源管理器置灰）+「⋯」
+// 会话菜单（重命名/导出 Markdown/复制会话 ID）+ right_panel 收起/展开右坞 +「⊕ 侧边」
+// （展开右坞并打开「开始」页）。行为语义按官方 header.actions/utilities/corner 映射；
+// 能力未接的置灰并 title 诚实标注。数据由 App 从 web.sessions 计算后经 ChatFlow 传入。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   leadSessionIdOf,
@@ -26,6 +25,8 @@ export interface SessionHeaderData {
   children: { id: string; title: string }[]
   /** 会话工作目录（workspace chip 展示/复制；缺省不渲染 chip）。 */
   cwd?: string
+  /** 会话预设显示名（官方 AgentPresetLabel 语义：投影 agentPreset → agentPresets/list 名称；缺省不渲染）。 */
+  preset?: string
 }
 
 /** workspace chip 色点小色板（项目现有强调色；按 cwd hash 取色，同路径稳定同色）。 */
@@ -104,43 +105,28 @@ function HeaderMenuItem({ label, hint, disabled, title, onClick }: {
   )
 }
 
-/** workspace chip（图四）：folder 图标 + cwd basename + 色点；点击复制完整路径。 */
-function WorkspaceChip({ cwd }: { cwd: string }) {
-  const [copied, setCopied] = useState(false)
-  const copiedTimer = useRef<number | undefined>(undefined)
-  useEffect(() => () => window.clearTimeout(copiedTimer.current), [])
-  const copy = useCallback(() => {
-    void navigator.clipboard.writeText(cwd)
-      .then(() => {
-        setCopied(true)
-        window.clearTimeout(copiedTimer.current)
-        copiedTimer.current = window.setTimeout(() => setCopied(false), 1600)
-      })
-      .catch(() => undefined)
-  }, [cwd])
+/** workspace chip（图二）：folder 图标 + cwd basename + 色点 + ▾；点击开菜单（复制路径等）。 */
+function WorkspaceChip({ cwd, caret, ariaExpanded, onClick }: {
+  cwd: string
+  caret?: boolean
+  ariaExpanded?: boolean
+  onClick?: () => void
+}) {
   const dotColor = WORKSPACE_DOT_COLORS[hashString(cwd) % WORKSPACE_DOT_COLORS.length]
   return (
-    <span className="relative min-w-0">
-      <button
-        type="button"
-        data-workspace-chip
-        title={copied ? '已复制' : cwd}
-        onClick={copy}
-        className="flex h-[22px] min-w-0 items-center gap-1 rounded-md bg-surface-container px-1.5 text-[12px] text-on-surface-variant transition-colors hover:bg-surface-container-high cursor-pointer"
-      >
-        <span className="material-symbols-outlined shrink-0 text-[14px] leading-none" aria-hidden>folder</span>
-        <span className="max-w-[180px] truncate">{cwdBasename(cwd)}</span>
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} aria-hidden />
-      </button>
-      {copied && (
-        <span
-          data-workspace-copied
-          className="absolute left-0 top-full z-20 mt-1 rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] text-ink-2 shadow-raised"
-        >
-          已复制
-        </span>
-      )}
-    </span>
+    <button
+      type="button"
+      data-workspace-chip
+      title={cwd}
+      aria-expanded={ariaExpanded}
+      onClick={onClick}
+      className="flex h-[22px] min-w-0 items-center gap-1 rounded-md bg-surface-container px-1.5 text-[12px] text-on-surface-variant transition-colors hover:bg-surface-container-high cursor-pointer"
+    >
+      <span className="material-symbols-outlined shrink-0 text-[14px] leading-none" aria-hidden>folder</span>
+      <span className="max-w-[180px] truncate">{cwdBasename(cwd)}</span>
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} aria-hidden />
+      {caret === true && <span className="text-[9px] leading-none" aria-hidden>▾</span>}
+    </button>
   )
 }
 
@@ -155,8 +141,8 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
   /** 右坞展开/收起（corner 语义）。 */
   onExpandDock?: () => void
   onCollapseDock?: () => void
-  /** 打开右坞指定 tab（terminal 等；未接线时对应钮置灰）。 */
-  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team') => void
+  /** 打开右坞指定 tab（terminal 等 + ⊕侧边的 start 页；未接线时对应钮置灰）。 */
+  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'browser' | 'jobs' | 'start') => void
   /** 会话操作（⋯菜单；整组未接线时置灰）。 */
   headerActions?: {
     rename?: (title: string) => void
@@ -278,7 +264,7 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
       className="h-[30px] shrink-0 select-none bg-surface px-4 flex items-center"
     >
       <div className="mx-auto flex w-full max-w-[var(--dsh-chat-content-width)] items-center gap-2 min-w-0">
-        {/* 左：面包屑 + workspace chip + ⋯（图四顶行顺序） */}
+        {/* 左：面包屑 / 标题 + 子代理 chip + 分隔线 + workspace chip（图二顶行） */}
         <div className="flex min-w-0 items-center gap-2 text-[13px]">
           <div className="flex min-w-0 items-center gap-1.5">
             {renaming ? (
@@ -324,52 +310,8 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
               </span>
             )}
           </div>
-          {effectiveCwd !== undefined && effectiveCwd.length > 0 && (
-            <WorkspaceChip cwd={effectiveCwd} />
-          )}
-          {/* ⋯：重命名 / 导出 Markdown / 复制会话 ID（headerActions 未接线整组置灰） */}
-          <div className="relative shrink-0">
-            <GhostIconButton
-              icon="more_horiz"
-              label={headerActions === undefined ? '会话操作未接线' : '更多操作'}
-              disabled={headerActions === undefined}
-              ariaExpanded={menu === 'more'}
-              onClick={() => setMenu(current => (current === 'more' ? null : 'more'))}
-            />
-            {menu === 'more' && headerActions !== undefined && (
-              <div
-                data-session-more-menu
-                className="absolute left-0 top-full z-20 mt-1 w-44 rounded-[10px] border border-line bg-surface p-1 shadow-raised"
-              >
-                <HeaderMenuItem
-                  label="重命名"
-                  disabled={headerActions.rename === undefined}
-                  onClick={openRename}
-                />
-                <HeaderMenuItem
-                  label="导出 Markdown"
-                  disabled={headerActions.exportMarkdown === undefined}
-                  onClick={() => {
-                    headerActions.exportMarkdown?.()
-                    setMenu(null)
-                  }}
-                />
-                <HeaderMenuItem
-                  label="复制会话 ID"
-                  disabled={headerActions.copyId === undefined}
-                  onClick={() => {
-                    headerActions.copyId?.()
-                    setMenu(null)
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* 右：子代理 chip + Agent Team + ghost 图标组（margin-left:auto 靠右） */}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {/* 子代理 chip（无子会话不渲染；功能保留，设计稿无对应物） */}
+          {/* 子代理 chip（无子会话不渲染；图二对标右侧面板的会话信息，功能保留） */}
           {data.children.length > 0 && (
             <div className="relative shrink-0">
               <button
@@ -412,6 +354,13 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
             </div>
           )}
 
+          {/* 会话预设（官方 AgentPresetLabel 语义：只读标签，投影 agentPreset 的显示名） */}
+          {data.preset !== undefined && data.preset.length > 0 && (
+            <span data-session-preset title="会话预设" className="shrink-0 text-[11.5px] text-outline">
+              {data.preset}
+            </span>
+          )}
+
           {/* Agent Team 名册/任务板（真实数据源：官方 agent-team Remote 通道）。
               拉取失败不置灰，仅把 title 标为「团队数据不可用」，错误在面板内展示并可重试。 */}
           <div className="relative shrink-0">
@@ -448,13 +397,14 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
               />
             )}
           </div>
+        </div>
 
-          {/* ghost 图标组：folder▾｜image｜terminal｜分隔线｜右坞收起/展开 */}
-          <div className="flex shrink-0 items-center gap-0.5" data-header-icons>
-            <div className="relative shrink-0">
-              <GhostIconButton
-                icon="folder"
-                label="工作目录"
+        {/* 右：workspace chip ▾ + ⋯ + 右坞收起/展开 + ⊕侧边（图二顺序，margin-left:auto 靠右） */}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5" data-header-icons>
+          {effectiveCwd !== undefined && effectiveCwd.length > 0 && (
+            <div className="relative min-w-0 shrink-0">
+              <WorkspaceChip
+                cwd={effectiveCwd}
                 caret
                 ariaExpanded={menu === 'folder'}
                 onClick={() => setMenu(current => (current === 'folder' ? null : 'folder'))}
@@ -467,8 +417,7 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
                   <HeaderMenuItem
                     label="复制路径"
                     hint={pathCopied ? '已复制' : undefined}
-                    disabled={effectiveCwd === undefined || effectiveCwd.length === 0}
-                    title={effectiveCwd === undefined || effectiveCwd.length === 0 ? '无工作目录' : effectiveCwd}
+                    title={effectiveCwd}
                     onClick={copyCwd}
                   />
                   {/* 本机 App 打开属桌面壳阶段（官方 header.utilities 语义）；web 阶段诚实置灰。 */}
@@ -476,29 +425,70 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
                 </div>
               )}
             </div>
-            {/* 设计稿的附件钮：能力未接，置灰并诚实标注。 */}
-            <GhostIconButton icon="image" label="附件面板待接入" disabled />
+          )}
+          <div className="relative shrink-0">
             <GhostIconButton
-              icon="terminal"
-              label="终端"
-              disabled={onOpenDockTab === undefined}
-              onClick={() => {
-                setMenu(null)
-                onOpenDockTab?.('terminal')
-              }}
+              icon="more_horiz"
+              label={headerActions === undefined ? '会话操作未接线' : '更多操作'}
+              disabled={headerActions === undefined}
+              ariaExpanded={menu === 'more'}
+              onClick={() => setMenu(current => (current === 'more' ? null : 'more'))}
             />
-            <span className="mx-1 h-4 w-px bg-line" aria-hidden />
-            <GhostIconButton
-              icon={dockCollapsed === true ? 'right_panel_open' : 'right_panel_close'}
-              label={dockCollapsed === true ? '展开右坞' : '收起右坞'}
-              disabled={dockCollapsed === true ? onExpandDock === undefined : onCollapseDock === undefined}
-              onClick={() => {
-                setMenu(null)
-                ;(dockCollapsed === true ? onExpandDock : onCollapseDock)?.()
-              }}
-            />
+            {menu === 'more' && headerActions !== undefined && (
+              <div
+                data-session-more-menu
+                className="absolute right-0 top-full z-20 mt-1 w-44 rounded-[10px] border border-line bg-surface p-1 shadow-raised"
+              >
+                <HeaderMenuItem
+                  label="重命名"
+                  disabled={headerActions.rename === undefined}
+                  onClick={openRename}
+                />
+                <HeaderMenuItem
+                  label="导出 Markdown"
+                  disabled={headerActions.exportMarkdown === undefined}
+                  onClick={() => {
+                    headerActions.exportMarkdown?.()
+                    setMenu(null)
+                  }}
+                />
+                <HeaderMenuItem
+                  label="复制会话 ID"
+                  disabled={headerActions.copyId === undefined}
+                  onClick={() => {
+                    headerActions.copyId?.()
+                    setMenu(null)
+                  }}
+                />
+              </div>
+            )}
           </div>
+          <GhostIconButton
+            icon={dockCollapsed === true ? 'right_panel_open' : 'right_panel_close'}
+            label={dockCollapsed === true ? '展开右坞' : '收起右坞'}
+            disabled={dockCollapsed === true ? onExpandDock === undefined : onCollapseDock === undefined}
+            onClick={() => {
+              setMenu(null)
+              ;(dockCollapsed === true ? onExpandDock : onCollapseDock)?.()
+            }}
+          />
+          {/* ⊕侧边（图二实测语义：打开右坞侧聊 fork 面板） */}
+          <button
+            type="button"
+            data-header-sidechat
+            title="侧边聊天"
+            onClick={() => {
+              setMenu(null)
+              onExpandDock?.()
+              onOpenDockTab?.('sidechat')
+            }}
+            className="flex h-6 shrink-0 items-center gap-1 rounded-full border border-line px-2.5 text-[11.5px] text-ink-2 transition-colors hover:border-line-strong hover:text-ink cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden>add_circle</span>
+            <span>侧边</span>
+          </button>
         </div>
+
       </div>
     </div>
   )

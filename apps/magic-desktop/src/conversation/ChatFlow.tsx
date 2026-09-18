@@ -65,6 +65,7 @@ import { ProducedFiles } from './ProducedFiles.tsx'
 import { MagicFeedbackActions } from './MagicFeedbackActions.tsx'
 import type { ChatSessionStore } from './chat-store.ts'
 import css from './ChatFlow.module.css'
+import { resolveFilePath } from '../inspector/file-path'
 
 const t: ChatTranslate = createChatTranslate(chatZh, commonZh)
 const ct: ConversationTranslate = createConversationTranslate(conversationZh, commonZh)
@@ -73,7 +74,7 @@ const renderToolview = makeRenderToolview(ct)
 const SESSION_ID = 'magic-local-session'
 const CWD = 'd:/Harmess/Magic'
 
-const openFile = (_path: string, _options?: unknown): void => {}
+const ignoreFile = (_path: string): void => {}
 const openSkill = (_name: string): void => {}
 const inspectCall = (_callId: string): void => {}
 const forkAt = (_seq: number): void => {}
@@ -85,7 +86,7 @@ const fileMentions = (): undefined => undefined
 const ownerBase = {
   cwd: CWD,
   openSkill,
-  openFile,
+  openFile: ignoreFile,
   inspectCall,
   forkAt,
   loadImage,
@@ -116,7 +117,7 @@ interface SeatProps {
   producedByTurn: ReadonlyMap<number, readonly string[]>
   fileMentions: ChatNodeOwnerProps['fileMentions']
   /** CEO 图卡接线（2026-09-18）：整窗透传给 renderNode。 */
-  ceo: Pick<RenderContext, 'sessionId' | 'taskBoard' | 'openWorkspace'>
+  ceo: Pick<RenderContext, 'sessionId' | 'taskBoard' | 'openWorkspace' | 'openFile' | 'cwd'>
 }
 
 /** 一个 Chat 节点的座位：Turn-process 折叠推导 + 分发（照 ChatNodeSeat 逻辑移植）。 */
@@ -182,11 +183,14 @@ interface RenderContext {
   sessionId?: string
   taskBoard: CeoTeamGraphTaskBoard
   openWorkspace: () => void
+  openFile: (path: string) => void
+  cwd?: string
 }
 
 /** kind→组件分发（替代 renderSlot 键控注册表；base 货币 + node + t）。 */
 function renderNode(node: ChatNode, ctx: RenderContext) {
-  const base = { ...ownerBase, sessionId: SESSION_ID, t, fileMentions: ctx.fileMentions }
+  const openFile = ctx.openFile
+  const base = { ...ownerBase, sessionId: ctx.sessionId ?? SESSION_ID, cwd: ctx.cwd, openFile, t, fileMentions: ctx.fileMentions }
   switch (node.kind) {
     case 'user':
     case 'steering':
@@ -208,7 +212,7 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
       return (
         <ToolCallTree
           node={node}
-          cwd={CWD}
+          cwd={ctx.cwd}
           openFile={openFile}
           inspectCall={inspectCall}
           loadImage={loadImage}
@@ -333,7 +337,8 @@ function ConversationTabs({ active, onSelect }: {
   )
 }
 
-export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, headerActions }: {
+export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, headerActions, onOpenFile = ignoreFile }: {
+  onOpenFile?: (path: string) => void
   store: ChatSessionStore
   onSend?: (text: string) => void
   /** 会话头数据（M4，2026-09-18）：App 从真实会话列表算出；mock/无数据时不传 → 不渲染头。 */
@@ -366,8 +371,8 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   /** 右坞展开/收起（顶行 corner 语义）：透传给 SessionHeader。 */
   onExpandDock?: () => void
   onCollapseDock?: () => void
-  /** 打开右坞指定 tab（顶行 terminal 等图标）：透传给 SessionHeader。 */
-  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team') => void
+  /** 打开右坞指定 tab（顶行 terminal 等 + ⊕侧边 start 页）：透传给 SessionHeader。 */
+  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'browser' | 'jobs' | 'start') => void
   /** 会话操作（顶行 ⋯ 菜单：重命名/导出 Markdown/复制会话 ID）：透传给 SessionHeader。 */
   headerActions?: {
     rename?: (title: string) => void
@@ -405,8 +410,8 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   // 图卡点成员/CEO 节点 → 打开右坞团队 tab（App 提供）。
   const openCeoWorkspace = useCallback(() => { onOpenCeoWorkspace?.() }, [onOpenCeoWorkspace])
   const ceo = useMemo(
-    () => ({ sessionId, taskBoard, openWorkspace: openCeoWorkspace }),
-    [sessionId, taskBoard, openCeoWorkspace],
+    () => ({ sessionId, taskBoard, openWorkspace: openCeoWorkspace, openFile: onOpenFile, cwd }),
+    [sessionId, taskBoard, openCeoWorkspace, onOpenFile, cwd],
   )
   // 决策抽屉发送：prompt 当前会话；成功/失败都回成 { ok } 信封（对齐原 register.ts 语义）。
   const sendDecision = useMemo(() => {
@@ -472,24 +477,46 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
     return map
   }, [snapshot])
 
-  // 正文文件引用 chip（2026-09-17 收尾）：把本轮产出路径解析进 MarkdownText 的
-  // inline-code 提及缝——正文里提到 `App.tsx` 等即变为可点文件 chip。
-  const fileMentions = useMemo<ChatNodeOwnerProps['fileMentions']>(() => {
-    return (owner) => {
-      const paths = producedByTurn.get(owner.turn) ?? []
-      if (paths.length === 0) return undefined
-      return {
-        resolve: (value: string) => {
-          const hit = paths.find(p => p === value
-            || p.endsWith(`/${value}`)
-            || p.slice(Math.max(0, p.lastIndexOf('/') + 1)) === value)
-          if (hit === undefined) return undefined
-          const name = hit.slice(Math.max(0, hit.lastIndexOf('/') + 1))
-          return { open: () => { openFile(hit) }, label: name, title: hit }
-        },
+  // 正文文件引用 chip（图四实测对齐）：官方正文 mention chip 的词表 = 会话真实文件
+  // （读/写过的都能解析），点击在右坞打开。这里从全会话 tool-call 提取 edit/write 与
+  // read 家族的目标路径作为词表（producedByTurn 只覆盖「本次产出」，不含只读文件）。
+  const knownFiles = useMemo(() => {
+    const paths = new Set<string>()
+    for (const node of snapshot.nodes.values()) {
+      if (node.kind !== 'tool-call') continue
+      const chatNode = node as ChatNode
+      const block = (chatNode as ChatNode<'tool-call'>).data.root
+      const name = isSettledTool(block) ? block.call?.name ?? '' : block.name
+      const argsRaw = isSettledTool(block) ? block.call?.argsRaw ?? '' : block.argsRaw
+      if (!/(edit|write|patch|apply|str-replace|read|view|open)/.test(name.toLowerCase())) continue
+      let path: unknown = null
+      try {
+        const args: unknown = JSON.parse(argsRaw)
+        if (args !== null && typeof args === 'object') {
+          const record = args as Record<string, unknown>
+          path = record.file_path ?? record.path ?? record.file
+        }
+      } catch {
+        path = null
       }
+      if (typeof path === 'string' && path.length > 0) paths.add(path)
     }
-  }, [producedByTurn])
+    return [...paths]
+  }, [snapshot])
+  const fileMentions = useMemo<ChatNodeOwnerProps['fileMentions']>(() => {
+    if (knownFiles.length === 0) return () => undefined
+    return () => ({
+      resolve: (value: string) => {
+        const hit = knownFiles.find(p => p === value
+          || p.endsWith(`/${value}`)
+          || p.endsWith(`\\${value}`)
+          || p.slice(Math.max(0, p.lastIndexOf('/') + 1)) === value)
+        if (hit === undefined) return undefined
+        const name = hit.slice(Math.max(0, Math.max(hit.lastIndexOf('/'), hit.lastIndexOf('\\')) + 1))
+        return { open: () => { onOpenFile(hit) }, label: name, title: hit }
+      },
+    })
+  }, [knownFiles, onOpenFile])
 
   // Turn-process 展开状态（DSH 存 chat store；本地为组件状态，按轮）。
   const [openTurns, setOpenTurnsState] = useState<ReadonlySet<number>>(() => new Set())
@@ -606,6 +633,16 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
           <div
             ref={flowRef}
             data-conversation-scroll
+            onClickCapture={event => {
+              const target = event.target
+              if (!(target instanceof Element)) return
+              const anchor = target.closest('a[href]')
+              const href = anchor?.getAttribute('href')
+              if (!href || resolveFilePath(href) === null) return
+              event.preventDefault()
+              event.stopPropagation()
+              onOpenFile(href)
+            }}
             className={css.flow}
             onScroll={event => {
               const el = event.currentTarget
