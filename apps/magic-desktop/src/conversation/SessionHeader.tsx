@@ -11,7 +11,7 @@
 // 「⊕侧边」（打开右坞 sidenote fork 式侧聊 tab）+ 右坞收起时的打开入口（与右坞 tab 行
 // 收起钮同款右面板图标）。能力未接的置灰并 title 诚实标注。数据由 App 从 web.sessions
 // 计算后经 ChatFlow 传入。
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   IconAgentPresetOutline16,
   IconChevronDownOutline14,
@@ -73,12 +73,14 @@ function GhostIconButton({ icon, label, caret, disabled, ariaExpanded, onClick }
   )
 }
 
-/** 头部小菜单项（⋯ / folder▾ 菜单共用；hint 用于「已复制」类瞬时反馈）。 */
-function HeaderMenuItem({ label, hint, disabled, title, onClick }: {
+/** 头部小菜单项（⋯ / workspace chip 菜单共用；hint 用于「已复制」类瞬时反馈；
+    icon 用于打开方式菜单的宿主应用图标——3099 实测每项带真实应用图标）。 */
+function HeaderMenuItem({ label, hint, disabled, title, icon, onClick }: {
   label: string
   hint?: string
   disabled?: boolean
   title?: string
+  icon?: ReactNode
   onClick?: () => void
 }) {
   return (
@@ -93,42 +95,161 @@ function HeaderMenuItem({ label, hint, disabled, title, onClick }: {
           : 'cursor-pointer text-ink-2 hover:bg-hover hover:text-ink'
       }`}
     >
-      <span className="truncate">{label}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        {icon !== undefined && <span className="flex size-[18px] shrink-0 items-center justify-center">{icon}</span>}
+        <span className="truncate">{label}</span>
+      </span>
       {hint !== undefined && <span className="shrink-0 text-[11px] text-ink-3">{hint}</span>}
     </button>
   )
 }
 
-/** workspace chip（3099 实测双元素组合控件，2026-09-18 恢复）：folder 图标胶囊
-    （28×26，左圆角）+ 独立 chevron 钮（22×26，右圆角），二者 onClick 同开菜单。
-    总宽 50px、高 26px——与右坞按钮组同高对齐。 */
-function WorkspaceChip({ cwd, ariaExpanded, onClick }: {
-  cwd: string
-  ariaExpanded?: boolean
-  onClick?: () => void
-}) {
+/** workspace chip（3099 实测 open-in-app split button，2026-09-19 重做）：主钮 =
+    在记忆应用中打开工作目录（图标为宿主 PNG，/open-in-app/icon/<id>；3099 实测
+    explorer 图标即黄色文件夹），chevron 钮 = 「选择打开方式」菜单（官方
+    ui-open-in-app OpenInAppAction：应用列表 + 复制路径；apps 来自
+    GET /open-in-app/apps，启动 POST /open-in-app/open {app, path}，选择持久化
+    localStorage dsh.open-in-app.choice——controller.ts:22-87）。宿主未探测到可
+    命名应用时回落纯复制路径菜单（folder 字形）。 */
+const OPEN_IN_APP_LABELS: Record<string, string> = {
+  explorer: '文件资源管理器',
+  cursor: 'Cursor',
+  vscode: 'VS Code',
+  finder: '访达',
+  windowsterminal: 'Windows Terminal',
+  gitbash: 'Git Bash',
+}
+const OPEN_IN_APP_CHOICE_KEY = 'dsh.open-in-app.choice'
+/** 应用图标加载失败过的 id：404 只请求一次，回落通用方形 SVG（官方 failedIcons 语义）。 */
+const failedAppIcons = new Set<string>()
+
+function AppIconImage({ id, size }: { id: string; size: number }) {
+  const [failed, setFailed] = useState(() => failedAppIcons.has(id))
+  if (failed) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+        <rect x={3} y={3} width={18} height={18} rx={5} />
+      </svg>
+    )
+  }
+  return (
+    <img
+      src={`/open-in-app/icon/${id}`}
+      width={size}
+      height={size}
+      alt=""
+      aria-hidden
+      draggable={false}
+      onError={() => {
+        failedAppIcons.add(id)
+        setFailed(true)
+      }}
+    />
+  )
+}
+
+function WorkspaceChip({ cwd }: { cwd: string }) {
+  const [apps, setApps] = useState<string[] | null>(null)
+  const [choice, setChoice] = useState(() => window.localStorage.getItem(OPEN_IN_APP_CHOICE_KEY) ?? '')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [errorFlash, setErrorFlash] = useState(false)
+  const rootRef = useRef<HTMLSpanElement>(null)
+  // 宿主探测一次（controller.ts run()：网络失败 = 空列表 = 无应用形态）。
+  useEffect(() => {
+    let cancelled = false
+    void fetch('/open-in-app/apps', { headers: { accept: 'application/json' } })
+      .then(response => (response.ok ? response.json() as Promise<{ apps?: unknown }> : Promise.reject(new Error(String(response.status)))))
+      .then(payload => {
+        if (cancelled) return
+        const list = Array.isArray(payload.apps) ? payload.apps.filter((id): id is string => typeof id === 'string') : []
+        setApps(list)
+      })
+      .catch(() => { if (!cancelled) setApps([]) })
+    return () => { cancelled = true }
+  }, [])
+  // 点击 chip 外部收起菜单。
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (event: MouseEvent) => {
+      if (rootRef.current !== null && !rootRef.current.contains(event.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [menuOpen])
+  const namedApps = (apps ?? []).filter(id => OPEN_IN_APP_LABELS[id] !== undefined)
+  const current = namedApps.find(id => id === choice) ?? namedApps[0]
+  const launch = useCallback((appId: string) => {
+    void fetch('/open-in-app/open', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ app: appId, path: cwd }),
+    }).then(response => {
+      if (response.ok) return
+      setErrorFlash(true)
+      window.setTimeout(() => setErrorFlash(false), 2000)
+    }).catch(() => {
+      setErrorFlash(true)
+      window.setTimeout(() => setErrorFlash(false), 2000)
+    })
+  }, [cwd])
+  const copyCwd = useCallback(() => {
+    void navigator.clipboard.writeText(cwd).catch(() => undefined)
+  }, [cwd])
+  // 应用形态（官方同款：主钮 = 记忆应用图标直开；chevron = 应用菜单）。
+  const hasApps = namedApps.length > 0
   const sharedCls =
     'flex h-[26px] items-center justify-center bg-surface-container text-on-surface-variant transition-colors first:rounded-l-[6px] last:rounded-r-[6px] hover:bg-surface-container-high cursor-pointer'
+  const currentLabel = current !== undefined ? OPEN_IN_APP_LABELS[current] : undefined
   return (
-    <span className="flex h-[26px] shrink-0" data-workspace-chip title={cwd}>
+    <span className="relative flex h-[26px] shrink-0" data-workspace-chip title={errorFlash ? '打开失败' : cwd} ref={rootRef}>
       <button
         type="button"
-        aria-label="工作目录"
-        aria-expanded={ariaExpanded}
-        onClick={onClick}
+        aria-label={hasApps && current !== undefined && currentLabel !== undefined ? `在 ${currentLabel} 中打开工作目录` : '工作目录'}
+        aria-expanded={menuOpen}
+        title={errorFlash ? '打开失败' : hasApps ? '在本地打开' : cwd}
+        disabled={errorFlash}
+        onClick={() => {
+          if (current !== undefined) launch(current)
+        }}
         className={`${sharedCls} w-7`}
       >
-        <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden>folder</span>
+        {hasApps && current !== undefined
+          ? <AppIconImage id={current} size={15} />
+          : <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden>folder</span>}
       </button>
       <button
         type="button"
-        aria-label="工作目录菜单"
-        aria-expanded={ariaExpanded}
-        onClick={onClick}
+        aria-label={hasApps ? '选择打开方式' : '工作目录菜单'}
+        aria-expanded={menuOpen}
+        title={hasApps ? '选择打开方式' : '工作目录菜单'}
+        onClick={() => setMenuOpen(open => !open)}
         className={`${sharedCls} w-[22px]`}
       >
         <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden>expand_more</span>
       </button>
+      {menuOpen && (
+        <div
+          data-session-folder-menu
+          className="absolute right-0 top-full z-20 mt-1 w-48 rounded-[10px] border border-line bg-surface p-1 shadow-raised"
+        >
+          {namedApps.map(id => (
+            <HeaderMenuItem
+              key={id}
+              label={OPEN_IN_APP_LABELS[id]}
+              title={cwd}
+              icon={<AppIconImage id={id} size={16} />}
+              onClick={() => {
+                setMenuOpen(false)
+                setChoice(id)
+                window.localStorage.setItem(OPEN_IN_APP_CHOICE_KEY, id)
+                launch(id)
+              }}
+            />
+          ))}
+          {hasApps && <div className="my-1 h-px bg-line" aria-hidden />}
+          <HeaderMenuItem label="复制路径" title={cwd} onClick={() => { copyCwd(); setMenuOpen(false) }} />
+        </div>
+      )}
     </span>
   )
 }
@@ -144,8 +265,8 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
   /** 右坞展开/收起（corner 语义）。 */
   onExpandDock?: () => void
   onCollapseDock?: () => void
-  /** 打开右坞指定 tab（dockkit 通道；终端钮改弹底部面板后此通道仅备用）。 */
-  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'side' | 'browser' | 'jobs' | 'start') => void
+  /** 打开右坞指定 tab（dockkit 通道；终端钮弹底部面板；trajectory=调用轨迹）。 */
+  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'side' | 'trajectory' | 'browser' | 'jobs' | 'start') => void
   /** 终端钮（3099 实测形态：对话内容区底部弹出终端面板；未接线时置灰）。 */
   onToggleTerminal?: () => void
   /** 底部终端面板开合态（终端钮 aria-expanded）。 */
@@ -159,14 +280,11 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
 }) {
   const [childrenOpen, setChildrenOpen] = useState(false)
   const [teamOpen, setTeamOpen] = useState(false)
-  // ⋯ / folder▾ 两个小菜单（互斥）。
-  const [menu, setMenu] = useState<'more' | 'folder' | null>(null)
+  // ⋯ 小菜单（workspace chip 菜单已内聚进 WorkspaceChip）。
+  const [menu, setMenu] = useState<'more' | null>(null)
   // 行内重命名（⋯菜单 → 标题位变输入框，回车提交 / Esc 取消 / 失焦提交）。
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
-  // folder▾ 菜单「复制路径」的瞬时反馈。
-  const [pathCopied, setPathCopied] = useState(false)
-  const pathCopiedTimer = useRef<number | undefined>(undefined)
   // Agent Team 面板数据（真实数据源：官方 agent-team 服务 Remote 通道 agentTeams/view）。
   const [team, setTeam] = useState<AgentTeamView | null>(null)
   const [teamLoading, setTeamLoading] = useState(false)
@@ -209,9 +327,6 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
     void load()
   }, [load])
 
-  // 卸载时清掉复制反馈定时器。
-  useEffect(() => () => window.clearTimeout(pathCopiedTimer.current), [])
-
   // 点击头外部收起所有浮层（子代理列表 / Agent Team 面板 / ⋯、folder 菜单）。
   useEffect(() => {
     if (!childrenOpen && !teamOpen && menu === null) return
@@ -251,18 +366,6 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
     setRenaming(false)
     if (next.length > 0 && next !== data.title) headerActions?.rename?.(next)
   }, [renaming, renameValue, data.title, headerActions])
-
-  // folder▾ 菜单：复制工作目录路径（菜单项上短暂显示「已复制」）。
-  const copyCwd = useCallback(() => {
-    if (effectiveCwd === undefined) return
-    void navigator.clipboard.writeText(effectiveCwd)
-      .then(() => {
-        setPathCopied(true)
-        window.clearTimeout(pathCopiedTimer.current)
-        pathCopiedTimer.current = window.setTimeout(() => setPathCopied(false), 1200)
-      })
-      .catch(() => undefined)
-  }, [effectiveCwd])
 
   return (
     <div
@@ -411,31 +514,10 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
           </div>
         </div>
 
-        {/* 右：workspace icon-only chip ▾ + ⋯ + 终端 + ⊕侧边 + 右坞开关（官方 utilities/corner 顺序） */}
+        {/* 右：workspace open-in-app split chip + ⋯ + 终端 + ⊕侧边 + 右坞开关（官方 utilities/corner 顺序） */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5" data-header-icons>
           {effectiveCwd !== undefined && effectiveCwd.length > 0 && (
-            <div className="relative min-w-0 shrink-0">
-              <WorkspaceChip
-                cwd={effectiveCwd}
-                ariaExpanded={menu === 'folder'}
-                onClick={() => setMenu(current => (current === 'folder' ? null : 'folder'))}
-              />
-              {menu === 'folder' && (
-                <div
-                  data-session-folder-menu
-                  className="absolute right-0 top-full z-20 mt-1 w-48 rounded-[10px] border border-line bg-surface p-1 shadow-raised"
-                >
-                  <HeaderMenuItem
-                    label="复制路径"
-                    hint={pathCopied ? '已复制' : undefined}
-                    title={effectiveCwd}
-                    onClick={copyCwd}
-                  />
-                  {/* 本机 App 打开属桌面壳阶段（官方 header.utilities 语义）；web 阶段诚实置灰。 */}
-                  <HeaderMenuItem label="在资源管理器中打开" disabled title="桌面壳阶段开放" />
-                </div>
-              )}
-            </div>
+            <WorkspaceChip cwd={effectiveCwd} />
           )}
           <div className="relative shrink-0">
             <GhostIconButton
@@ -451,7 +533,7 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
                 className="absolute right-0 top-full z-20 mt-1 w-44 rounded-[10px] border border-line bg-surface p-1 shadow-raised"
               >
                 <HeaderMenuItem
-                  label="重命名"
+                  label="重命名任务"
                   disabled={headerActions.rename === undefined}
                   onClick={openRename}
                 />
@@ -464,11 +546,22 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
                   }}
                 />
                 <HeaderMenuItem
-                  label="复制会话 ID"
+                  label="复制任务 ID"
                   disabled={headerActions.copyId === undefined}
                   onClick={() => {
                     headerActions.copyId?.()
                     setMenu(null)
+                  }}
+                />
+                {/* 调用轨迹（2026-09-19，用户裁定）：从右坞新开 tab 查看当前任务的
+                    事件时间线； descriptor hidden，不进开始页。 */}
+                <HeaderMenuItem
+                  label="查看调用轨迹"
+                  disabled={onOpenDockTab === undefined}
+                  onClick={() => {
+                    setMenu(null)
+                    onExpandDock?.()
+                    onOpenDockTab?.('trajectory')
                   }}
                 />
               </div>
@@ -487,13 +580,13 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
             }}
           />
           {/* 「⊕侧边」（3099 实测 64×26 胶囊）：打开右坞 sidenote fork 式侧聊 tab
-              ——从当前会话 fork 独立演进的侧聊（与 better-sidebar 内建「侧边对话」
+              ——从当前任务 fork 独立演进（与 better-sidebar 内建「侧边对话」
               beta 管理页是两个东西，3099 上并存）。 */}
           <button
             type="button"
             data-header-side-chat
-            title="打开侧边聊天（从当前会话 fork）"
-            aria-label="打开侧边聊天（从当前会话 fork）"
+            title="打开侧边聊天（从当前任务 fork）"
+            aria-label="打开侧边聊天（从当前任务 fork）"
             disabled={onOpenDockTab === undefined}
             onClick={() => {
               setMenu(null)

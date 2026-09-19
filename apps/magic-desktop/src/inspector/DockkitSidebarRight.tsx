@@ -162,6 +162,11 @@ export function DockkitSidebarRight({ ctx, slotCore, sessionId, onFullscreenChan
   }, [storeHandle, sessionId])
 
   // dockkit 收起按钮 → App 级收起（aside null；顶栏 ◨ 恢复，与旧壳一致）。
+  // 黑屏根因备忘（2026-09-19）：最后一个非 guide tab 关闭时官方 plan 会自动把列
+  // 收起（stores.ts closeTab: closeTab+setExpanded(false)）→ App 隐藏 aside →
+  // 重开时本组件重挂载、defaultSeed 重新播种开始页——无需也无法在 notify 期
+  // openTab 补种（此时 surface 已随 RightbarSeat 卸载，require() 会抛
+  // "no session surface is mounted"，未捕获异常会卸载整棵 React 树=全屏黑）。
   const collapseReported = useRef(false)
   useEffect(() => {
     const instance = storeHandle.create(sessionId)
@@ -173,7 +178,7 @@ export function DockkitSidebarRight({ ctx, slotCore, sessionId, onFullscreenChan
         onCollapse?.()
       }
     })
-  }, [storeHandle, sessionId, onCollapse])
+  }, [storeHandle, sessionId, onCollapse, controller])
 
   // 面板宽度：aside 内容宽（ResizeObserver 首帧即回调；初值 520 与列宽一致）。
   const containerRef = useRef<HTMLDivElement | null>(null)

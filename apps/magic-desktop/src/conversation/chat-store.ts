@@ -55,9 +55,18 @@ export class ChatSessionStore {
     this.publish()
   }
 
-  /** 采纳外部事件窗口（Side Chat 面板读 App store 的 follow 流；结构兼容整窗替换）。 */
+  /** 采纳外部事件窗口（Side Chat 面板读 App store 的 follow 流；结构兼容整窗替换）。
+   *  同窗幂等（2026-09-19）：events() 每次调用返回新数组（内部事件对象同源），
+   *  内容一致时不替换不广播——渲染期 adopt（订阅触发的重渲）不会自激成环
+   *  （adopt → publish → 重渲 → adopt 的环曾致页面整体死循环）。 */
   adoptWindow(events: readonly SessionEvent[]): void {
-    this.seedWindow(events)
+    if (
+      events.length === this.entries.length &&
+      events.every((event, index) => this.entries[index]?.event === event)
+    ) {
+      return;
+    }
+    this.seedWindow(events);
   }
 
   /** 追加一条持久事件（SDK 接线后由 session.event 流驱动）。 */

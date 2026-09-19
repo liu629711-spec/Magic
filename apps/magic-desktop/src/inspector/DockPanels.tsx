@@ -14,6 +14,15 @@ export interface DockSessionBridge {
   prompt: (id: string, text: string) => Promise<void>
   selectModel: (id: string, provider: string, model: string) => Promise<void>
   openSession: (id: string) => void
+  /** 模型目录（App 级 session/modelCatalog；侧边分身 composer 的模型列表）。 */
+  modelCatalog?: { key: string; name: string; tag?: string; provider: string }[]
+  /** 任务当前模型（RemoteSessionRow.model）。 */
+  sessionModelOf?: (id: string) => { provider: string; model: string } | undefined
+  /** 命令执行（/permission、/mode 等；commands/execute，agentId=会话 id）。 */
+  runCommand?: (id: string, line: string) => void
+  /** @ 候选（skills/list）与 / 命令（commands/list）——App 级列表，侧边分身复用。 */
+  mentionOptions?: { key: string; name: string; desc: string; glyph?: string; attach?: boolean }[]
+  commandOptions?: { key: string; name: string; desc: string }[]
 }
 const button = 'rounded px-2 py-1 text-xs text-on-surface-variant hover:bg-surface-container-high active:bg-surface-container-highest focus-visible:outline focus-visible:outline-primary disabled:opacity-40 disabled:cursor-not-allowed'
 const errorText = (e: unknown) => e instanceof Error ? e.message : String(e)

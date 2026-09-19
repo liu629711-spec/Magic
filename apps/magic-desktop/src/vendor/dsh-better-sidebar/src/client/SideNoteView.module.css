@@ -1,6 +1,8 @@
-/* Magic 补丁样式（2026-09-18）：SideNoteView（fork 式侧边聊天）的壳样式。
-   语义对齐 dsh-sidenote sidechat.module.css（parentStrip/hero/actions），
-   色值走 Magic stitch token（非上游 --dsw-alias-* 链）。 */
+/* Magic 补丁样式（2026-09-18；2026-09-19 按 3099 实测侧边面板重排）：
+   SideNoteView（fork 式侧边聊天）的壳样式。结构对齐 3099 侧边面板：
+   parentStrip（主线状态条）→ toolbar（整段回流/保存为正式会话）→ provenance
+   （继承自主会话 · 截至第 N 轮 fork，共 M 条）→ 转录体（ChatFlow docked）→
+   inputArea（面板自备简洁输入区）。色值走 Magic stitch token。 */
 
 .root {
   display: flex;
@@ -30,37 +32,30 @@
   background: var(--color-surface-container, #1f1f23);
 }
 
-.body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.actions {
+/* 工具行：转录上方的轻量文本钮（3099 侧边面板 toolbar 形态）。 */
+.toolbar {
   display: flex;
   flex: none;
-  gap: 8px;
   align-items: center;
-  padding: 6px 12px;
-  border-top: 1px solid var(--color-surface-container-highest, #2a2b2f);
+  gap: 10px;
+  padding: 6px 12px 2px;
 }
 
-.action {
+.toolAction {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
-  border: 1px solid var(--color-surface-container-highest, #2a2b2f);
-  border-radius: 8px;
+  padding: 2px 4px;
+  border: 0;
   background: transparent;
   color: var(--color-on-surface-variant, #c2c6d6);
   font-size: 11.5px;
   line-height: 16px;
   cursor: pointer;
+  border-radius: 4px;
 }
 
-.action:hover {
+.toolAction:hover {
   background: var(--color-surface-container, #1f1f23);
   color: var(--color-on-surface, #e3e2e6);
 }
@@ -72,6 +67,22 @@
   margin-left: auto;
   color: var(--color-outline, #8c909f);
   font-size: 11px;
+}
+
+/* 来源行：fork 溯源（3099 provenance 文案）。 */
+.provenance {
+  flex: none;
+  padding: 2px 12px 6px;
+  color: var(--color-outline, #8c909f);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .hero {

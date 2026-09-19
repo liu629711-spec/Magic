@@ -6,13 +6,14 @@
 // 「整段回流」把结论写回主会话输入框 → 「保存为正式会话」fork 子会话转正。
 // 转录渲染直接走 ChatFlow（主会话同款消息流/思考块/工具卡），轻于 sidenote 的
 // 自绘面板而视觉一致。
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { IconNewChatOutline16, IconShareOutline16, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'
 import type { SessionScope } from './api.ts'
 import type { SidebarTab } from './state.ts'
 import { ChatSessionStore } from '../../../../conversation/chat-store.ts'
 import { ChatFlow } from '../../../../conversation/ChatFlow.tsx'
+import { buildComposerChips } from '../../../../conversation/composer-facts.ts'
 import css from './SideNoteView.module.css'
 
 /** fork 子会话 id 寄存在 tab.meta（刷新恢复；sidenote 的 meta.childId 同形）。 */
@@ -52,8 +53,18 @@ export function SideNoteView(props: {
   } | undefined
   /** 主会话运行态（父会话三态指示条的数据源）。 */
   parentRunning?: boolean
+  /** 分身 composer 数据面（BuiltinTabOptions.sideNote.chat）：模型/命令/@候选，
+      与主会话同源、按子会话 id 参数化——缺项诚实降级。 */
+  chat?: {
+    modelCatalog?: { key: string; name: string; tag?: string; provider: string }[]
+    sessionModelOf?: (sessionId: string) => { provider: string; model: string } | undefined
+    selectModel?: (sessionId: string, provider: string, model: string) => void
+    runCommand?: (sessionId: string, line: string) => void
+    mentionOptions?: { key: string; name: string; desc: string; glyph?: string; attach?: boolean }[]
+    commandOptions?: { key: string; name: string; desc: string }[]
+  }
 }) {
-  const { ctx, scope, tab, onFork, bindingOf } = props
+  const { ctx, scope, tab, onFork, bindingOf, chat } = props
   const key = sideNoteKey(scope.sessionId, tab.id)
   // 读 childId：meta 优先，其次模块级已得结果（重挂后 meta 已被 records.drop
   // 清空时的自愈来源）。render 期读——随后被写成 state 驱动重渲。
@@ -117,12 +128,54 @@ export function SideNoteView(props: {
     if (binding === undefined) return
     return binding.subscribe(() => bump(v => v + 1))
   }, [binding])
+  // 来源行（3099 实测「继承自主会话 · 截至第 N 轮 fork，共 M 条」）：只在首次
+  // 灌窗时冻结——follow 快照含继承前缀，首灌即 fork 时刻的完整继承态。
+  const [provenance, setProvenance] = useState<{ turns: number; count: number } | undefined>(undefined)
   useEffect(() => {
     if (events === undefined) return
     childStore.adoptWindow(events as never[])
-  }, [childStore, events])
+    if (provenance === undefined) {
+      const snap = childStore.getSnapshot().snapshot
+      // binding 先于 follow 快照解析时首灌为空窗——等非空快照再冻结来源行。
+      if (snap.order.length === 0) return
+      let maxTurn = -1
+      for (const key of snap.order) {
+        const node = snap.nodes.get(key) as { location?: { kind?: string; turn?: { turn?: number } } } | undefined
+        const turn = node?.location?.kind === 'turn' || node?.location?.kind === 'step' ? node.location.turn?.turn : undefined
+        if (typeof turn === 'number') maxTurn = Math.max(maxTurn, turn)
+      }
+      setProvenance({ turns: maxTurn + 1, count: snap.order.length })
+    }
+  }, [childStore, events, provenance])
 
   const running = binding?.running() === true
+  // 分身 composer 数据（2026-09-19，用户裁定「侧边=会话内的分身」）：与主会话
+  // 同一套 PromptBar（模型/上下文圆环/访问模式/工作模式），数据按子会话 id 取。
+  // childState 订阅让投影（permissions/contextPressure 等）随 follow 灌窗刷新。
+  const childState = useSyncExternalStore(childStore.subscribe, childStore.getSnapshot)
+  const modelPicker = chat?.modelCatalog !== undefined && chat.modelCatalog.length > 0 && childId !== undefined
+    ? {
+        options: chat.modelCatalog,
+        currentKey: (() => {
+          const model = chat.sessionModelOf?.(childId)
+          return model !== undefined ? `${model.provider}:${model.model}` : undefined
+        })(),
+        onChange: (key: string) => {
+          const option = chat.modelCatalog?.find(m => m.key === key)
+          if (option === undefined) return
+          chat.selectModel?.(childId, option.provider, key.slice(option.provider.length + 1))
+        },
+      }
+    : undefined
+  const composerChips = useMemo(
+    () =>
+      buildComposerChips({
+        values: childState.projections?.values ?? {},
+        recentEventData: type => childStore.recentEventData(type),
+        onCommand: line => chat?.runCommand?.(childId ?? '', line),
+      }),
+    [childState, childStore, chat, childId],
+  )
 
   /** 整段回流（sidenote reflow）：把子会话最终结论注入主会话输入框草稿。 */
   const reflow = useCallback(() => {
@@ -174,7 +227,7 @@ export function SideNoteView(props: {
         <div className={css.hero}>
           <IconNewChatOutline16 size={22} />
           <div className={`${css.heroTitle} ${css.shimmer}`}>正在准备侧边聊天…</div>
-          <div className={css.heroDesc}>从当前会话 fork，独立演进不回流主线</div>
+          <div className={css.heroDesc}>从当前任务 fork，独立演进不回流主线</div>
         </div>
       </div>
     )
@@ -182,34 +235,24 @@ export function SideNoteView(props: {
 
   return (
     <div className={css.root}>
-      {/* 主会话状态条（sidenote parentStrip）：点回主线 */}
+      {/* 主任务状态条（3099 parentStrip：点回主线） */}
       <button
         type="button"
         className={css.parentStrip}
-        title="回到主会话"
+        title="回到主任务"
         onClick={() => { ctx.sessions.open?.(scope.sessionId) }}
       >
         <StateDot state={props.parentRunning === true ? 'ongoing' : 'done'} />
         <span>{props.parentRunning === true ? '主线：运行中' : '主线：空闲'}</span>
       </button>
-      <div className={css.body}>
-        <ChatFlow
-          store={childStore}
-          sessionId={childId}
-          cwd={scope.cwd}
-          onSend={(text: string) => {
-            void binding.prompt(text).catch(() => undefined)
-          }}
-          onOpenFile={() => undefined}
-        />
-      </div>
-      <div className={css.actions}>
-        <button type="button" className={css.action} title="把最终结论写回主会话输入框" onClick={reflow}>
+      {/* 工具行：分身专属动作（整段回流/保存为正式任务） */}
+      <div className={css.toolbar}>
+        <button type="button" className={css.toolAction} title="把最终结论写回主任务输入框" onClick={reflow}>
           <IconShareOutline16 size={14} />
           整段回流
         </button>
-        <button type="button" className={css.action} title="fork 子会话为独立主会话并关闭本面板" onClick={promote}>
-          保存为正式会话
+        <button type="button" className={css.toolAction} title="fork 子任务转正 → 打开 → 关本 tab" onClick={promote}>
+          保存为正式任务
         </button>
         {running && (
           <span className={css.running}>
@@ -217,6 +260,30 @@ export function SideNoteView(props: {
             <span>侧边：运行中</span>
           </span>
         )}
+      </div>
+      {/* 来源行（继承溯源：截至第 N 轮 fork，共 M 条） */}
+      {provenance !== undefined && (
+        <div className={css.provenance}>
+          继承自主任务 · 截至第 {provenance.turns} 轮 fork，共 {provenance.count} 条
+        </div>
+      )}
+      <div className={css.body}>
+        {/* 全会话分身（2026-09-19 用户裁定）：完整 ChatFlow——消息流/思考块/工具卡/
+            composer（模型/上下文/访问模式/工作模式/语音/发送）/统计条与主会话一致，
+            数据面按子会话 id 参数化（chat face）。 */}
+        <ChatFlow
+          store={childStore}
+          sessionId={childId}
+          cwd={scope.cwd}
+          modelPicker={modelPicker}
+          composerChips={composerChips}
+          mentionOptions={chat?.mentionOptions}
+          commandOptions={chat?.commandOptions}
+          onSend={(text: string) => {
+            void binding.prompt(text).catch(() => undefined)
+          }}
+          onOpenFile={() => undefined}
+        />
       </div>
     </div>
   )

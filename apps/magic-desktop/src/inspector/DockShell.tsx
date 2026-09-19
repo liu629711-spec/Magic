@@ -46,6 +46,9 @@ const DOCK_TAB_KIND: Record<string, string> = {
   sidechat: 'sidechat',
   // sidenote fork 式侧聊（2026-09-18）：顶栏「⊕侧边」的承接 tab。
   side: 'dsh-sidenote:side',
+  // 调用轨迹（2026-09-19）：⋯ 菜单「查看调用轨迹」的承接 tab（descriptor
+  // hidden——不进开始页 guide）。
+  trajectory: 'magic:trajectory',
   // 'team'（CeoWorkspace）：官方无对应 tab，warn 后忽略。
 }
 
@@ -140,6 +143,18 @@ export function DockShell({
         const current = latest.current
         return current.bridge.sessions.find(row => row.sessionId === current.sessionId)?.running === true
       },
+      // 分身 composer 数据面（2026-09-19）：与主会话同源（bridge），按子会话 id
+      // 参数化——SideNoteView 据此渲染与主会话一致的完整 composer。
+      chat: {
+        modelCatalog: latest.current.bridge.modelCatalog,
+        sessionModelOf: (id: string) => latest.current.bridge.sessionModelOf?.(id),
+        selectModel: (id: string, provider: string, model: string) => {
+          void latest.current.bridge.selectModel(id, provider, model).catch(() => undefined)
+        },
+        runCommand: (id: string, line: string) => latest.current.bridge.runCommand?.(id, line),
+        mentionOptions: latest.current.bridge.mentionOptions,
+        commandOptions: latest.current.bridge.commandOptions,
+      },
     }
     const disposeBuiltins = registerBuiltins(ctx, service, { sideNote })
     const disposeSurface = () => {
@@ -171,6 +186,7 @@ export function DockShell({
   useEffect(() => { store.setSession(sessionId || undefined) }, [store, sessionId])
 
   // fileRequest 通道 → 官方 openFile（native openResource，editor tab per-path 去重）。
+  // 同 dockTabRequest：重挂载时的过期请求在 seat 未就绪时会抛，包保护诚实丢弃。
   const lastFileSeq = useRef(0)
   useEffect(() => {
     if (fileRequest === null || fileRequest === undefined) return
@@ -180,10 +196,18 @@ export function DockShell({
     lastFileSeq.current = fileRequest.seq
     const resolved = resolveFilePath(fileRequest.path, cwd)
     if (resolved === null) return
-    service.openFile({ sessionId, cwd }, resolved)
+    try {
+      service.openFile({ sessionId, cwd }, resolved)
+    } catch (error) {
+      console.warn("[magic-desktop] fileRequest 打开失败（seat 未就绪，已丢弃）:", error)
+    }
   }, [fileRequest, sessionId, cwd, service])
 
   // dockTabRequest 通道 → 官方 openTab（native surface → dockkit openTab）。
+  // 2026-09-19 黑屏修复：本 effect 在右坞重挂载时会因 App 持久的 dockTabRequest
+  // 重新开火，而此刻 dockkit seat 的 binding 可能尚未发布（controller.require 抛
+  // "no session surface is mounted"，effect 异常无上层边界 → 整棵树卸载=全屏黑）。
+  // 故 openTab 包 try/catch 诚实丢弃过期请求（坞内容有默认开始页兜底）。
   const lastTabSeq = useRef(0)
   useEffect(() => {
     if (dockTabRequest === null || dockTabRequest === undefined) return
@@ -195,8 +219,12 @@ export function DockShell({
       return
     }
     // 官方 files 窗口语义：无路径 editor 窗口即资源管理器（vendor intercept.tsx:51）。
-    if (kind === 'editor') service.openTab({ type: 'editor', title: t('files') })
-    else service.openTab({ type: kind })
+    try {
+      if (kind === 'editor') service.openTab({ type: 'editor', title: t('files') })
+      else service.openTab({ type: kind })
+    } catch (error) {
+      console.warn("[magic-desktop] dockTabRequest 打开失败（seat 未就绪，已丢弃）:", error)
+    }
   }, [dockTabRequest, sessionId, service])
 
   return (

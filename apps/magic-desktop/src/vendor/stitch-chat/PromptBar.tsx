@@ -197,11 +197,12 @@ export default function PromptBar({
   const [listening, setListening] = useState(false);
   const [auto, setAuto] = useState(demo);
   const [autoStep, setAutoStep] = useState(0);
-  const [expanded, setExpanded] = useState(false);
-  const wide = expanded || tall;
+  /** 2026-09-19 用户裁定（图二）：composer 恒两行——第一行纯输入，第二行
+   *  workspace/工作模式 chips + 模型 + 上下文 + 语音 + 发送同排。旧的
+   *  「文本变宽才换行展开」动态逻辑随之移除，wide 恒真。 */
+  const wide = true;
   /** 上下文圆环数据（2026-09-18 官方化）：控制行是否含 ContextMeter 列由此决定 */
   const contextChip = composerChips?.context;
-  const hasContext = contextChip !== undefined;
   const [rowBox, setRowBox] = useState<{ top: number; height: number } | null>(null);
   const [engaged, setEngaged] = useState(false);
   const [modelBox, setModelBox] = useState<{ top: number; height: number } | null>(null);
@@ -383,30 +384,18 @@ export default function PromptBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftInjection?.seq]);
 
-  /* Move wrapped text above the controls, then grow to a compact maximum. */
+  /* Auto-grow the input to a compact maximum (wrap is guaranteed by the
+   * two-row layout — the input always owns the full first row). */
   useLayoutEffect(() => {
     const input = inputRef.current;
-    const controls = controlsRef.current;
-    const measure = measureRef.current;
-    const modelButton = modelRef.current;
-    if (!input || !controls || !measure || !modelButton) return;
-
-    // 28px 方钮：附件 +（上下文圆环）+ 听写 + 发送；模型钮宽度实测
-    const fixedControlsWidth = 28 * (hasContext ? 4 : 3) + modelButton.offsetWidth;
-    const inlineGaps = 4 * (wide ? (hasContext ? 4 : 3) : (hasContext ? 5 : 4));
-    const inlineInputWidth = controls.clientWidth - fixedControlsWidth - inlineGaps;
-    const needsFullWidth = draft.includes("\n") || measure.offsetWidth + 8 > inlineInputWidth;
-    if (needsFullWidth !== expanded) {
-      setExpanded(needsFullWidth);
-    }
-
+    if (!input) return;
     const minHeight = 28;
     const maxHeight = 100;
     input.style.height = "0px";
     const contentHeight = input.scrollHeight;
     input.style.height = `${Math.min(Math.max(contentHeight, minHeight), maxHeight)}px`;
     input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
-  }, [draft, expanded, hasContext]);
+  }, [draft]);
 
   /* clicking anywhere outside the composer closes the open menus */
   useEffect(() => {
@@ -679,34 +668,9 @@ export default function PromptBar({
           </div>
         )}
 
-        <div
-          ref={controlsRef}
-          className={`grid items-end gap-x-1 gap-y-1.5 ${
-            wide
-              ? hasContext
-                ? "grid-cols-[28px_auto_28px_28px_28px]"
-                : "grid-cols-[28px_auto_28px_28px]"
-              : hasContext
-                ? "grid-cols-[28px_minmax(0,1fr)_auto_28px_28px_28px]"
-                : "grid-cols-[28px_minmax(0,1fr)_auto_28px_28px]"
-          }`}
-        >
-          <button
-            type="button"
-            aria-label="添加附件与来源"
-            aria-expanded={plusOpen}
-            onClick={() => {
-              setModelOpen(false);
-              setPlusOpen((current) => !current);
-              inputRef.current?.focus();
-            }}
-            className={`flex size-7 shrink-0 items-center justify-center justify-self-start text-ink-3 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] ${
-              pill ? "rounded-full" : "rounded-[8px]"
-            } ${plusOpen ? "bg-hover text-ink" : ""} ${wide ? "col-start-1 row-start-2" : "col-start-1 row-start-1"}`}
-          >
-            <Icon size={16} strokeWidth={2}><path d="M12 5v14M5 12h14" /></Icon>
-          </button>
-
+        {/* 两行 composer（2026-09-19 用户裁定，对齐 3099）：
+            第一行=纯输入；第二行=附件+ / workspace / 工作模式 …（右）模型 / 上下文 / 语音 / 发送 */}
+        <div ref={controlsRef} className="flex flex-col gap-1">
           <textarea
             ref={inputRef}
             rows={1}
@@ -747,122 +711,132 @@ export default function PromptBar({
             }}
             placeholder={listening ? "正在听写…" : placeholder ?? "输入消息，@ 唤起来源，/ 唤起命令"}
             aria-label="输入"
-            className={`${tall ? "min-h-[68px] px-2 py-2 text-[14px] leading-5" : "min-h-7 px-1 py-[5px] text-[13px] leading-[18px]"} min-w-0 w-full resize-none bg-transparent text-ink outline-none [overflow-wrap:anywhere] placeholder:text-ink-3 ${
-              wide ? "col-span-full col-start-1 row-start-1" : "col-start-2 row-start-1"
-            }`}
+            className="min-h-7 w-full resize-none bg-transparent px-1 py-[5px] text-[13px] leading-[18px] text-ink outline-none [overflow-wrap:anywhere] placeholder:text-ink-3"
           />
 
-          {/* model picker（2026-09-18 官方化，照官方 ModelSelect.tsx:263-285 trigger）：
-              16px 数据图标 + 模型名(13/500) + 14px chevron；28px 胶囊透明底，
-              hover 交互悬停色；max-width 360px，超长截断。 */}
-          <button
-            ref={modelRef}
-            type="button"
-            aria-expanded={modelOpen}
-            aria-haspopup="menu"
-            aria-label="选择模型"
-            onClick={() => {
-              setPlusOpen(false);
-              if (modelOpen) {
+          {/* 第二行控制排 */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="添加附件与来源"
+              aria-expanded={plusOpen}
+              onClick={() => {
                 setModelOpen(false);
-                setModelPane("root");
-              } else {
-                setModelPane("root");
-                setModelOpen(true);
-              }
-            }}
-            className={`flex h-7 min-w-0 max-w-[360px] shrink-0 items-center gap-1 rounded-[999px] py-0 pl-2 pr-1 text-[13px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink ${
-              wide ? "col-start-2 row-start-2 justify-self-start" : "col-start-3 row-start-1"
-            }`}
-          >
-            <span className="flex-none">
-              <Icon size={16} strokeWidth={1.8}>{GLYPHS.data}</Icon>
-            </span>
-            <span className="min-w-0 truncate">{activeModel.name}</span>
-            <span className={`flex-none text-ink-3 transition-transform duration-150 ${modelOpen ? "rotate-180" : ""}`}>
-              <Icon size={14} strokeWidth={2}><path d="M6 9l6 6 6-6" /></Icon>
-            </span>
-          </button>
+                setPlusOpen((current) => !current);
+                inputRef.current?.focus();
+              }}
+              className={`flex size-7 shrink-0 items-center justify-center text-ink-3 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] ${
+                pill ? "rounded-full" : "rounded-[8px]"
+              } ${plusOpen ? "bg-hover text-ink" : ""}`}
+            >
+              <Icon size={16} strokeWidth={2}><path d="M12 5v14M5 12h14" /></Icon>
+            </button>
 
-          {/* 上下文圆环（2026-09-18 官方化）：官方顺序 model→ContextMeter→Stop→Send，
-              Magic 无 Stop，故位于模型钮与发送键之间；旧底部 context 文本 chip 移除 */}
-          {contextChip !== undefined ? (
-            <span className={wide ? "col-start-3 row-start-2" : "col-start-4 row-start-1"}>
+            {/* 访问模式 / 工作模式 chips（2026-09-19 移入控制排左端，3099 同排） */}
+            {composerChips?.permission !== undefined ? (
+              <button
+                type="button"
+                onClick={composerChips.permission.onClick}
+                className="flex h-7 min-w-0 shrink items-center overflow-hidden rounded-full px-2 text-[12px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink"
+              >
+                <span className="truncate">{composerChips.permission.label}</span>
+              </button>
+            ) : null}
+            {composerChips?.workMode !== undefined ? (
+              <button
+                type="button"
+                onClick={composerChips.workMode.onClick}
+                className="flex h-7 min-w-0 shrink items-center overflow-hidden rounded-full bg-field px-2 text-[12px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink"
+              >
+                <span className="truncate">{composerChips.workMode.label}</span>
+              </button>
+            ) : null}
+
+            <span className="min-w-2 flex-1" aria-hidden />
+
+            {/* model picker（2026-09-18 官方化，照官方 ModelSelect.tsx:263-285 trigger）：
+                16px 数据图标 + 模型名(13/500) + 14px chevron；28px 胶囊透明底，
+                hover 交互悬停色；max-width 360px，超长截断。 */}
+            <button
+              ref={modelRef}
+              type="button"
+              aria-expanded={modelOpen}
+              aria-haspopup="menu"
+              aria-label="选择模型"
+              onClick={() => {
+                setPlusOpen(false);
+                if (modelOpen) {
+                  setModelOpen(false);
+                  setModelPane("root");
+                } else {
+                  setModelPane("root");
+                  setModelOpen(true);
+                }
+              }}
+              className="flex h-7 min-w-0 max-w-[360px] shrink-0 items-center gap-1 rounded-[999px] py-0 pl-2 pr-1 text-[13px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink"
+            >
+              <span className="flex-none">
+                <Icon size={16} strokeWidth={1.8}>{GLYPHS.data}</Icon>
+              </span>
+              <span className="min-w-0 truncate">{activeModel.name}</span>
+              <span className={`flex-none text-ink-3 transition-transform duration-150 ${modelOpen ? "rotate-180" : ""}`}>
+                <Icon size={14} strokeWidth={2}><path d="M6 9l6 6 6-6" /></Icon>
+              </span>
+            </button>
+
+            {/* 上下文圆环（2026-09-18 官方化）：官方顺序 model→ContextMeter→Stop→Send，
+                Magic 无 Stop，故位于模型钮与发送键之间 */}
+            {contextChip !== undefined ? (
               <ContextMeter
                 percent={contextChip.percent}
                 detail={contextChip.detail}
                 breakdown={contextChip.breakdown}
               />
-            </span>
-          ) : null}
-
-          {/* dictation（裁定 4：占位） */}
-          <button
-            type="button"
-            aria-label={listening ? "停止听写" : "开始听写"}
-            aria-pressed={listening}
-            onClick={() => setListening((current) => !current)}
-            className={`flex size-7 shrink-0 items-center justify-center transition-[background-color,color,transform] duration-150 active:scale-[0.94] ${
-              pill ? "rounded-full" : "rounded-[8px]"
-            } ${listening ? "bg-accent-tint text-accent-ink" : "text-ink-3 hover:bg-hover hover:text-ink"} ${wide ? (hasContext ? "col-start-4" : "col-start-3") + " row-start-2" : (hasContext ? "col-start-5" : "col-start-4") + " row-start-1"}`}
-          >
-            {listening ? (
-              <span className="flex h-3.5 items-center gap-[2.5px]">
-                {[0, 1, 2].map((i) => (
-                  <span
-                    key={i}
-                    className="w-[2.5px] rounded-full bg-current"
-                    style={{ height: "100%", animation: `eq-bounce 900ms ease-in-out ${i * 150}ms infinite` }}
-                  />
-                ))}
-              </span>
-            ) : (
-              <Icon size={15} strokeWidth={2}><g><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3" /></g></Icon>
-            )}
-          </button>
-
-          {/* send — tactile square (round in the pill variant) */}
-          <button
-            type="button"
-            aria-label="发送"
-            disabled={!canSend}
-            onClick={send}
-            className={`flex size-7 shrink-0 items-center justify-center transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.94] ${
-              pill ? "rounded-full" : "rounded-[8px]"
-            } ${wide ? (hasContext ? "col-start-5" : "col-start-4") + " row-start-2" : (hasContext ? "col-start-6" : "col-start-5") + " row-start-1"}`}
-            style={{
-              background: canSend ? "var(--ink)" : "var(--line-strong)",
-              color: canSend ? "var(--surface)" : "var(--ink-2)",
-            }}
-          >
-            <Icon size={16} strokeWidth={2.4}><path d="M12 19V5M5 12l7-7 7 7" /></Icon>
-          </button>
-        </div>
-
-        {/* 输入条 chip 行（2026-09-18）：访问模式 / 工作模式。旧右端 context 文本 chip
-            已官方化为控制行内的 ContextMeter 圆环（见上方控制行） */}
-        {composerChips !== undefined ? (
-          <div className={`flex items-center gap-2 pt-0.5 ${pill ? "px-1" : "px-0.5"}`}>
-            {composerChips.permission !== undefined ? (
-              <button
-                type="button"
-                onClick={composerChips.permission.onClick}
-                className="flex h-7 shrink-0 items-center rounded-full px-2 text-[12px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink"
-              >
-                {composerChips.permission.label}
-              </button>
             ) : null}
-            {composerChips.workMode !== undefined ? (
-              <button
-                type="button"
-                onClick={composerChips.workMode.onClick}
-                className="flex h-7 shrink-0 items-center rounded-full bg-field px-2 text-[12px] font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink"
-              >
-                {composerChips.workMode.label}
-              </button>
-            ) : null}
+
+            {/* dictation（裁定 4：占位） */}
+            <button
+              type="button"
+              aria-label={listening ? "停止听写" : "开始听写"}
+              aria-pressed={listening}
+              onClick={() => setListening((current) => !current)}
+              className={`flex size-7 shrink-0 items-center justify-center transition-[background-color,color,transform] duration-150 active:scale-[0.94] ${
+                pill ? "rounded-full" : "rounded-[8px]"
+              } ${listening ? "bg-accent-tint text-accent-ink" : "text-ink-3 hover:bg-hover hover:text-ink"}`}
+            >
+              {listening ? (
+                <span className="flex h-3.5 items-center gap-[2.5px]">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="w-[2.5px] rounded-full bg-current"
+                      style={{ height: "100%", animation: `eq-bounce 900ms ease-in-out ${i * 150}ms infinite` }}
+                    />
+                  ))}
+                </span>
+              ) : (
+                <Icon size={15} strokeWidth={2}><g><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3" /></g></Icon>
+              )}
+            </button>
+
+            {/* send — tactile square (round in the pill variant) */}
+            <button
+              type="button"
+              aria-label="发送"
+              disabled={!canSend}
+              onClick={send}
+              className={`flex size-7 shrink-0 items-center justify-center transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.94] ${
+                pill ? "rounded-full" : "rounded-[8px]"
+              }`}
+              style={{
+                background: canSend ? "var(--ink)" : "var(--line-strong)",
+                color: canSend ? "var(--surface)" : "var(--ink-2)",
+              }}
+            >
+              <Icon size={16} strokeWidth={2.4}><path d="M12 19V5M5 12l7-7 7 7" /></Icon>
+            </button>
           </div>
-        ) : null}
+        </div>
       </div>
       </div>
     </div>

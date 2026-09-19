@@ -58,7 +58,6 @@ import { leadSessionIdOf, viewAgentTeam } from '../adapters/dsh-web/agent-teams.
 import PromptBar, { type PromptBarChips, type PromptBarMention } from '../vendor/stitch-chat/PromptBar.tsx'
 import { ComposerStats, TurnTailPills } from './TurnPills.tsx'
 import { SessionHeader, type SessionHeaderData } from './SessionHeader.tsx'
-import { TrajectoryView } from './TrajectoryView.tsx'
 import { SelectionAnnotation, AnnotationChips, composeWithAnnotations } from './SelectionAnnotation.tsx'
 import { InkTowerLoader } from './InkTowerLoader.tsx'
 import { ProducedFiles } from './ProducedFiles.tsx'
@@ -97,14 +96,6 @@ const ownerBase = {
 function turnOf(node: ChatNode): number | undefined {
   const location = node.location
   return location.kind === 'turn' || location.kind === 'step' ? location.turn.turn : undefined
-}
-
-/** 在消息流容器内按键找 Seat 节点（按属性遍历，免去 CSS.escape 的转义依赖）。 */
-function findFlowElement(container: HTMLElement, key: string): HTMLElement | null {
-  for (const element of container.querySelectorAll<HTMLElement>('[data-chat-flow-key]')) {
-    if (element.dataset.chatFlowKey === key) return element
-  }
-  return null
 }
 
 interface SeatProps {
@@ -295,53 +286,17 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
   }
 }
 
-/** 对话区顶部 tab（M5，2026-09-18）：对话=现有消息流；轨迹=事件时间线表格。 */
-type ConversationTab = 'chat' | 'trajectory'
-
-/** tab 条：文字 tab + 底边高亮（跟随 stitch，样式思路同 InspectorPanel/RightDock 的 tab）。 */
-function ConversationTabs({ active, onSelect }: {
-  active: ConversationTab
-  onSelect: (tab: ConversationTab) => void
-}) {
-  const tabs: { id: ConversationTab; label: string }[] = [
-    { id: 'chat', label: '对话' },
-    { id: 'trajectory', label: '轨迹' },
-  ]
-  return (
-    <div
-      data-conversation-tabs
-      className="flex h-10 shrink-0 select-none items-stretch border-b border-surface-container-highest bg-surface pr-7 pl-7"
-    >
-      {/* 官方 ui-conversation tabs：gap 36px、贴左、文字 tab + 底边高亮条 */}
-      <div className="flex items-stretch gap-9">
-        {tabs.map(item => {
-          const isActive = item.id === active
-          return (
-            <button
-              key={item.id}
-              type="button"
-              data-conversation-tab={item.id}
-              data-active={isActive || undefined}
-              onClick={() => onSelect(item.id)}
-              className={`flex cursor-pointer items-center border-b-2 border-t-2 border-t-transparent text-[13px] leading-4 font-medium transition-colors ${
-                isActive
-                  ? 'border-b-primary text-on-surface'
-                  : 'border-b-transparent text-outline hover:text-on-surface'
-              }`}
-            >
-              {item.label}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, onToggleTerminal, terminalOpen, headerActions, onOpenFile = ignoreFile }: {
+export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, onToggleTerminal, terminalOpen, headerActions, variant = 'full', onOpenFile = ignoreFile }: {
   onOpenFile?: (path: string) => void
   store: ChatSessionStore
   onSend?: (text: string) => void
+  /**
+   * 渲染形态（2026-09-19，3099 实测侧边面板）：'full' = 主会话完整 chrome；
+   * 'docked' = 右坞/侧聊面板形态——隐藏内容宽度手柄、对话/轨迹 tab、composer
+   * 整 seat（PromptBar/统计条/注释/决策抽屉），只留消息流本体（3099 侧边面板
+   * 即纯转录 + 面板自备的简洁输入区）。
+   */
+  variant?: 'full' | 'docked'
   /** 会话头数据（M4，2026-09-18）：App 从真实会话列表算出；mock/无数据时不传 → 不渲染头。 */
   sessionHeader?: SessionHeaderData
   /** 会话头层级/子代理导航：切换会话（App 的 openSession）。 */
@@ -373,7 +328,7 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   onExpandDock?: () => void
   onCollapseDock?: () => void
   /** 打开右坞指定 tab（顶行 terminal 等 + ⊕侧边 start 页）：透传给 SessionHeader。 */
-  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'side' | 'browser' | 'jobs' | 'start') => void
+  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'side' | 'trajectory' | 'browser' | 'jobs' | 'start') => void
   /** 会话操作（顶行 ⋯ 菜单：重命名/导出 Markdown/复制会话 ID）：透传给 SessionHeader。 */
   headerActions?: {
     rename?: (title: string) => void
@@ -546,72 +501,6 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
 
   const awaitingReply = state.awaitingReply
 
-  // 对话 / 轨迹 tab（M5）：本地状态；轨迹视图读整窗持久事件（随快照变更重算）。
-  const [tab, setTab] = useState<ConversationTab>('chat')
-  const eventEntries = useMemo(() => store.eventEntries(), [store, snapshot])
-  // 轨迹行点击跳转（M5）：待处理的目标事件 seq；切回对话 tab 后由下方 effect 完成定位。
-  const [jumpSeq, setJumpSeq] = useState<number | null>(null)
-  const jumpToEvent = useCallback((seq: number) => {
-    setJumpSeq(seq)
-    setTab('chat')
-  }, [])
-  useEffect(() => {
-    if (jumpSeq === null || tab !== 'chat') return
-    setJumpSeq(null)
-    const flowEl = flowRef.current
-    if (flowEl === null) return
-    stickRef.current = false // 跳转期间停用贴底跟随，避免新事件把视口拉回底部
-    // 「事件 seq ≤ 目标 seq 的最近可见节点」= 渲染顺序中 anchorSeq 不超过目标的最大者。
-    // 目标早于全部节点（如 permission/preset 之类无对应消息的种子事件）时落到首个节点，
-    // 这样轨迹首行也能滚到消息流最前并高亮，而不是莫名滚到底。
-    let targetKey: string | null = null
-    let targetTurn: number | null = null
-    let bestSeq = Number.NEGATIVE_INFINITY
-    let firstKey: string | null = null
-    let firstTurn: number | null = null
-    for (const key of snapshot.order) {
-      const node = snapshot.nodes.get(key)
-      if (node === undefined || node.visibility === 'hidden') continue
-      const chatNode = node as ChatNode
-      if (firstKey === null) {
-        firstKey = key
-        firstTurn = turnOf(chatNode) ?? null
-      }
-      if (node.anchorSeq <= jumpSeq && node.anchorSeq >= bestSeq) {
-        bestSeq = node.anchorSeq
-        targetKey = key
-        targetTurn = turnOf(chatNode) ?? null
-      }
-    }
-    if (targetKey === null) {
-      targetKey = firstKey
-      targetTurn = firstTurn
-    }
-    if (targetKey === null) {
-      // 没有任何可见节点：静默滚到消息流底部。
-      flowEl.scrollTop = flowEl.scrollHeight
-      return
-    }
-    const key = targetKey
-    const revealAndScroll = () => {
-      const element = findFlowElement(flowEl, key)
-      if (element === null) {
-        flowEl.scrollTop = flowEl.scrollHeight
-        return
-      }
-      element.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      element.classList.add(css.jumpHighlight)
-      window.setTimeout(() => element.classList.remove(css.jumpHighlight), 1200)
-    }
-    const element = findFlowElement(flowEl, key)
-    // 命中节点若被折叠的轮过程隐藏（hidden="until-found"）先展开所属轮，再等一帧滚动。
-    if (element !== null && element.hasAttribute('hidden') && targetTurn !== null) {
-      setOpenTurn(targetTurn, true)
-      window.requestAnimationFrame(() => window.requestAnimationFrame(revealAndScroll))
-      return
-    }
-    revealAndScroll()
-  }, [jumpSeq, tab, snapshot, setOpenTurn])
   // 划选注释（M8）：待发送的注释文本（发送后拼成引用块并清空）。
   const [annotations, setAnnotations] = useState<string[]>([])
 
@@ -658,23 +547,27 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   return (
     <div
       className="vendor-dsh-chat relative flex h-full flex-col bg-surface text-on-surface"
-      style={{ '--dsh-chat-content-width': `${contentWidth}px` } as React.CSSProperties}
+      style={{ '--dsh-chat-content-width': variant === 'docked' ? '100%' : `${contentWidth}px` } as React.CSSProperties}
     >
-      {/* 对话内容区宽度手柄（3099 实测形态：两侧 40px col-resize + 渐隐高亮线） */}
-      <div
-        className={css.widthHandle}
-        data-side="left"
-        data-conversation-width-handle="left"
-        onPointerDown={onWidthHandleDown('left')}
-        onPointerMove={onWidthHandleMove}
-      />
-      <div
-        className={css.widthHandle}
-        data-side="right"
-        data-conversation-width-handle="right"
-        onPointerDown={onWidthHandleDown('right')}
-        onPointerMove={onWidthHandleMove}
-      />
+      {variant === 'full' && (
+        <>
+          {/* 对话内容区宽度手柄（3099 实测形态：两侧 40px col-resize + 渐隐高亮线） */}
+          <div
+            className={css.widthHandle}
+            data-side="left"
+            data-conversation-width-handle="left"
+            onPointerDown={onWidthHandleDown('left')}
+            onPointerMove={onWidthHandleMove}
+          />
+          <div
+            className={css.widthHandle}
+            data-side="right"
+            data-conversation-width-handle="right"
+            onPointerDown={onWidthHandleDown('right')}
+            onPointerMove={onWidthHandleMove}
+          />
+        </>
+      )}
       {sessionHeader !== undefined && (
         <SessionHeader
           data={sessionHeader}
@@ -689,10 +582,7 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
           headerActions={headerActions}
         />
       )}
-      <ConversationTabs active={tab} onSelect={setTab} />
-      {tab === 'trajectory' ? (
-        <TrajectoryView entries={eventEntries} onJump={jumpToEvent} />
-      ) : (
+      {variant === 'full' && (
         <>
           <div
             ref={flowRef}
@@ -741,44 +631,49 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
               {awaitingReply && <InkTowerLoader />}
             </div>
           </div>
-          {/* 划选注释（M8）：监听消息流内划选，浮出「添加注释」按钮。 */}
-          <SelectionAnnotation
-            containerRef={flowRef}
-            onAdd={text => setAnnotations(prev => [...prev, text])}
-          />
-          <div className="shrink-0" data-composer-seat>
-            <div className="mx-auto w-full max-w-[var(--dsh-chat-content-width)] px-4 pb-4 pt-3">
-              {/* 注释胶囊行（M8）：输入条上方、PromptBar 之前（无注释不渲染）。 */}
-              <AnnotationChips
-                annotations={annotations}
-                onRemove={index => setAnnotations(prev => prev.filter((_, i) => i !== index))}
-              />
-              {/* 决策抽屉（2026-09-18 CEO 图卡接入）：有「待你拍板」成员时，在输入条上方
-                  浮出抽屉（数据来自 selection store 的 attention 项）；发送 → prompt 当前会话。 */}
-              <CeoDecisionDock sessionId={sessionId} sendDecision={sendDecision} t={ceoT} />
-              {/* 换肤点（2026-09-17 对话区 v2）：输入条换画廊 PromptBar（demo=false 嵌入；
-                  听写占位=裁定 4、扫光保留=裁定 2）。回退时还原本目录 Composer.tsx。 */}
-              <PromptBar
-                demo={false}
-                onSend={text => {
-                  // 划选注释（M8）：注释以引用块拼在用户文本前，发送后清空。
-                  const payload = composeWithAnnotations(text, annotations)
-                  setAnnotations([])
-                  if (onSend !== undefined) onSend(payload);
-                  else store.submit(payload);
-                }}
-                modelOptions={modelPicker?.options}
-                modelKey={modelPicker?.currentKey}
-                onModelChange={modelPicker?.onChange}
-                composerChips={composerChips}
-                mentionOptions={mentionOptions}
-                commandOptions={commandOptions}
-                draftInjection={draftInjection}
-              />
-              {/* 会话统计条（2026-09-17 对齐 web 端 StatsPills）：无统计数据的会话不渲染。 */}
-              <ComposerStats snapshot={snapshot} />
+          {/* 划选注释（M8）：监听消息流内划选，浮出「添加注释」按钮。docked 形态
+              无输入条，划选注释也随之关闭。 */}
+          {variant === 'full' && (
+            <SelectionAnnotation
+              containerRef={flowRef}
+              onAdd={text => setAnnotations(prev => [...prev, text])}
+            />
+          )}
+          {variant === 'full' && (
+            <div className="shrink-0" data-composer-seat>
+              <div className="mx-auto w-full max-w-[var(--dsh-chat-content-width)] px-4 pb-4 pt-3">
+                {/* 注释胶囊行（M8）：输入条上方、PromptBar 之前（无注释不渲染）。 */}
+                <AnnotationChips
+                  annotations={annotations}
+                  onRemove={index => setAnnotations(prev => prev.filter((_, i) => i !== index))}
+                />
+                {/* 决策抽屉（2026-09-18 CEO 图卡接入）：有「待你拍板」成员时，在输入条上方
+                    浮出抽屉（数据来自 selection store 的 attention 项）；发送 → prompt 当前会话。 */}
+                <CeoDecisionDock sessionId={sessionId} sendDecision={sendDecision} t={ceoT} />
+                {/* 换肤点（2026-09-17 对话区 v2）：输入条换画廊 PromptBar（demo=false 嵌入；
+                    听写占位=裁定 4、扫光保留=裁定 2）。回退时还原本目录 Composer.tsx。 */}
+                <PromptBar
+                  demo={false}
+                  onSend={text => {
+                    // 划选注释（M8）：注释以引用块拼在用户文本前，发送后清空。
+                    const payload = composeWithAnnotations(text, annotations)
+                    setAnnotations([])
+                    if (onSend !== undefined) onSend(payload);
+                    else store.submit(payload);
+                  }}
+                  modelOptions={modelPicker?.options}
+                  modelKey={modelPicker?.currentKey}
+                  onModelChange={modelPicker?.onChange}
+                  composerChips={composerChips}
+                  mentionOptions={mentionOptions}
+                  commandOptions={commandOptions}
+                  draftInjection={draftInjection}
+                />
+                {/* 会话统计条（2026-09-17 对齐 web 端 StatsPills）：无统计数据的会话不渲染。 */}
+                <ComposerStats snapshot={snapshot} />
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </div>

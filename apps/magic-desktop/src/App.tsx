@@ -11,12 +11,8 @@ const LazyTerminalView = lazy(
 import { RightDock } from "./inspector/RightDock";
 import { ChatFlow } from "./conversation/ChatFlow.tsx";
 import { ChatSessionStore } from "./conversation/chat-store.ts";
-// 上下文圆环（2026-09-18 官方化）：formatTokens 官方紧凑格式 + 明细行类型 + 实测三段色
-import {
-  CONTEXT_METER_TONES,
-  formatTokens,
-  type ContextMeterBreakdownItem,
-} from "./conversation/ContextMeter.tsx";
+import { buildComposerChips } from "./conversation/composer-facts.ts";
+import { AutomationPage } from "./automation/AutomationPage.tsx";
 import type { SessionHeaderData } from "./conversation/SessionHeader.tsx";
 import { buildSessionMarkdown } from "./conversation/session-export.ts";
 import { mockEvents } from "./conversation/mock-events.ts";
@@ -153,86 +149,12 @@ export function App() {
   };
   const composerChips = (() => {
     if (!backendMode || activeId.length === 0) return undefined;
-    const values = chatState.projections?.values ?? {};
-    // 访问模式（permission-presets 投影 values.permissions = {currentValue, options:[{value,name}]}）
-    const permissionRaw = values.permissions as
-      | { currentValue?: string; options?: { value?: string; name?: string }[] }
-      | undefined;
-    const permissionId =
-      typeof permissionRaw?.currentValue === "string" ? permissionRaw.currentValue : undefined;
-    const permissionLabel =
-      permissionId === undefined
-        ? undefined
-        : permissionRaw?.options?.find(option => option.value === permissionId)?.name ??
-          (permissionId === "read-only"
-            ? "只读"
-            : permissionId === "danger-full-access"
-              ? "完全访问"
-              : permissionId === "workspace-write"
-                ? "工作区内修改"
-                : undefined);
-    // 上下文用量（token-meter 投影 values.contextPressure = {contextWindow, pressureTokens, projectedTokens}）。
-    // 2026-09-18 官方化：detail 换官方「~36.1K / 262K」紧凑格式（used 优先 projectedTokens，
-    // 同官方 context-occupancy.ts:18）；明细从 values.contextBreakdown 读（官方
-    // ContextBreakdownProjection = {systemTokens, toolsTokens, messageTokens}）。
-    const pressureRaw = values.contextPressure as Record<string, unknown> | undefined;
-    const contextWindow = Number(pressureRaw?.contextWindow ?? 0);
-    const usedTokens = Number(pressureRaw?.projectedTokens ?? pressureRaw?.pressureTokens ?? 0);
-    const context =
-      contextWindow > 0
-        ? {
-            percent: Math.min(100, Math.round((usedTokens / contextWindow) * 100)),
-            detail: `~${formatTokens(usedTokens)} / ${formatTokens(contextWindow)}`,
-          }
-        : undefined;
-    // 上下文明细三段（系统提示词/工具定义/对话消息）。投影缺失或形状不符 → breakdown
-    // undefined，ContextMeter 弹窗只显示头部两段（条与图例不渲染）。
-    const breakdownRaw = values.contextBreakdown as
-      | { systemTokens?: unknown; toolsTokens?: unknown; messageTokens?: unknown }
-      | undefined;
-    const breakdown: ContextMeterBreakdownItem[] | undefined =
-      breakdownRaw === undefined || context === undefined
-        ? undefined
-        : [
-            {
-              label: "系统提示词",
-              value: `~${formatTokens(Number(breakdownRaw.systemTokens ?? 0))}`,
-              tokens: Number(breakdownRaw.systemTokens ?? 0),
-              tone: CONTEXT_METER_TONES.system,
-            },
-            {
-              label: "工具定义",
-              value: `~${formatTokens(Number(breakdownRaw.toolsTokens ?? 0))}`,
-              tokens: Number(breakdownRaw.toolsTokens ?? 0),
-              tone: CONTEXT_METER_TONES.tools,
-            },
-            {
-              label: "对话消息",
-              value: `~${formatTokens(Number(breakdownRaw.messageTokens ?? 0))}`,
-              tokens: Number(breakdownRaw.messageTokens ?? 0),
-              tone: CONTEXT_METER_TONES.messages,
-            },
-          ];
-    // 工作模式（magic-work-mode 事件流）
-    const workModeRaw = store.recentEventData("magic/work-mode") as { sessionMode?: string } | undefined;
-    const isCeo = workModeRaw?.sessionMode === "ceo";
-    return {
-      permission:
-        permissionLabel !== undefined
-          ? {
-              label: permissionLabel,
-              onClick: () =>
-                runCommand(
-                  permissionId === "read-only" ? "/permission workspace-write" : "/permission read-only",
-                ),
-            }
-          : undefined,
-      workMode: {
-        label: isCeo ? "CEO · 当前会话" : "Agent · 当前会话",
-        onClick: () => runCommand(isCeo ? "/mode agent" : "/mode ceo"),
-      },
-      context: context === undefined ? undefined : { ...context, breakdown },
-    };
+    // 访问模式/上下文/工作模式构建器（2026-09-19 抽出共享，主会话与侧边分身同源）。
+    return buildComposerChips({
+      values: chatState.projections?.values ?? {},
+      recentEventData: type => store.recentEventData(type),
+      onCommand: runCommand,
+    });
   })();
 
   // 输入条 @ 候选（真实技能）与 / 命令（commands/list）（2026-09-18）
@@ -301,7 +223,7 @@ export function App() {
   }, [backendMode, web.status, activeId]);
 
   // 视图路由（裁定 22）：chat=对话；skills=技能扩展（左栏不变）；settings=整页设置
-  const [view, setView] = useState<"chat" | "skills" | "settings">("chat");
+  const [view, setView] = useState<"chat" | "skills" | "automation" | "settings">("chat");
   // 会话归属（2026-09-17 用户裁定）：新建任务默认进最近任务区；工作区行 + 号建到工作区；
   // 拖拽改变归属。M1 为本地组织状态（runtime workspace attachment 后续接）。
   const [assigned, setAssigned] = useState<Record<string, string>>({});
@@ -558,7 +480,25 @@ export function App() {
     setFileRequest({path,sessionId:activeId,seq:++requestSeq.current});
   },[activeId]);
   useEffect(()=>{setDockFullscreen(false);setDockCollapsed(false);setDockTabRequest(null);setFileRequest(null)},[activeId]);
-  const dockBridge = { sessions:web.sessions, fork:web.fork, follow:web.follow, prompt:web.prompt, selectModel:web.selectModel, openSession };
+  const dockBridge = {
+    sessions: web.sessions,
+    fork: web.fork,
+    follow: web.follow,
+    prompt: web.prompt,
+    selectModel: web.selectModel,
+    openSession,
+    // 侧边分身 composer 数据面（2026-09-19）：与主会话同源，按子会话 id 参数化。
+    modelCatalog: modelCatalog.map(({ key, name, tag, provider }) => ({ key, name, tag, provider })),
+    sessionModelOf: (id: string) => web.sessions.find(row => row.sessionId === id)?.model,
+    runCommand: (id: string, line: string) => {
+      dshRpc("commands/execute", { agentId: id, line, submittedAttachments: [] }).catch(
+        (error: unknown) =>
+          window.alert(`命令执行失败：${error instanceof Error ? error.message : String(error)}`),
+      );
+    },
+    mentionOptions,
+    commandOptions,
+  };
   // L agent 契约（并行开发）：RightDock 按同名 props 消费——
   // collapsed/onToggleCollapsed/fullscreen/onToggleFullscreen/dockTabRequest。
   // 契约由另一 agent 在 RightDock.tsx 落地；此处先以 any 展开避免契约未合入时 tsc 失败。
@@ -682,13 +622,41 @@ export function App() {
   // 220px 面板（8px 骑缝手柄拖高、右上 × 收起、再点顶栏钮收起）。终端本体复用
   // 插件 TerminalView（xterm + pty，lazy chunk），UI-tab 固定 tabId=term:bottom
   // ——同一会话重开面板 reattach 同一 shell。
+  // 2026-09-19 对齐 3099 面板头实测（M8wPDa_bottomPanel：终端 tab + 「新建标签页」+）：
+  // 面板头 = 终端 tab chips（各带 ×，关闭即卸载该 TerminalView → close 帧释放 pty）
+  // + 加号新建 tab；非激活终端保持挂载仅 display:none（不触发 close 帧，shell 存活，
+  // 3099 同款），全部关闭 = 收起整个面板。对话区在面板打开时整体让位（paddingBottom
+  // = 面板高，composer 不被遮挡——3099 实测 composer 位于面板上方）。
   const [bottomTerminalOpen, setBottomTerminalOpen] = useState(false);
   const [terminalHeight, setTerminalHeight] = useState(220);
+  const [bottomTerminalTabs, setBottomTerminalTabs] = useState<string[]>(["term:bottom"]);
+  const [activeBottomTerminal, setActiveBottomTerminal] = useState("term:bottom");
+  const bottomTabsRef = useRef(bottomTerminalTabs);
+  bottomTabsRef.current = bottomTerminalTabs;
   // TerminalView 消费独立 store（prefs 字体 / tabOpen 生命周期判定），与右坞 store 无关。
   const [terminalStore] = useState(createSidebarStore);
   const terminalHeightRef = useRef(terminalHeight);
   terminalHeightRef.current = terminalHeight;
   const toggleBottomTerminal = useCallback(() => setBottomTerminalOpen(value => !value), []);
+  const addBottomTerminal = useCallback(() => {
+    const tabs = bottomTabsRef.current;
+    let n = tabs.length + 1;
+    let id = `term:bottom-${n}`;
+    while (tabs.includes(id)) id = `term:bottom-${++n}`;
+    setBottomTerminalTabs([...tabs, id]);
+    setActiveBottomTerminal(id);
+  }, []);
+  const closeBottomTerminal = useCallback((tabId: string) => {
+    const next = bottomTabsRef.current.filter(id => id !== tabId);
+    // 最后一个终端 tab 关闭 = 收起整个面板（3099 同款）。
+    if (next.length === 0) {
+      setBottomTerminalTabs(next);
+      setBottomTerminalOpen(false);
+      return;
+    }
+    setBottomTerminalTabs(next);
+    setActiveBottomTerminal(active => (active === tabId ? next[next.length - 1] ?? "" : active));
+  }, []);
   const onTerminalResizeDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -777,6 +745,7 @@ export function App() {
         onForkSession={forkSession}
         onExportSession={exportSession}
         onOpenSkills={() => setView("skills")}
+        onOpenAutomation={() => setView("automation")}
         onOpenSettings={() => setView("settings")}
         labels={backendMode ? labels : undefined}
         onRenameSession={
@@ -836,11 +805,33 @@ export function App() {
           style={{ left: sidebarCollapsed ? 52 : sidebarWidth - 4 }}
           onPointerDown={onSidebarHandleDown}
         />
-        <main className={dockFullscreen ? "hidden" : "flex-1 min-w-0 bg-surface"}>
+        {/* 底部终端面板打开时对话区整体让位（paddingBottom=面板高）：3099 实测
+            composer 位于面板上方，不被遮挡（connection 侧 bottomPanel 同为贴底
+            absolute、内容区压缩）。 */}
+        <main
+          className={dockFullscreen ? "hidden" : "flex-1 min-w-0 bg-surface"}
+          style={bottomTerminalOpen && !dockFullscreen ? { paddingBottom: terminalHeight } : undefined}
+        >
           {view === "skills" ? (
             <SkillsHub
               backendReady={backendMode && web.status === "ready"}
               sessionId={activeId.length > 0 ? activeId : web.sessions[0]?.sessionId ?? ""}
+            />
+          ) : view === "automation" ? (
+            <AutomationPage
+              onCreateInConversation={draft => {
+                setView("chat");
+                web
+                  .createSession()
+                  .then(id => {
+                    if (id.length === 0) return;
+                    openSession(id);
+                    pushDraft(draft);
+                  })
+                  .catch(error =>
+                    window.alert(`创建任务失败：${error instanceof Error ? error.message : String(error)}`),
+                  );
+              }}
             />
           ) : (
             <ChatFlow
@@ -858,7 +849,13 @@ export function App() {
               cwd={dockCwd}
               dockCollapsed={dockCollapsed}
               onExpandDock={() => setDockCollapsed(false)}
-              onCollapseDock={() => setDockCollapsed(true)}
+              onCollapseDock={() => {
+                setDockCollapsed(true);
+                // 收起即弃置挂起的 tab/file 请求（2026-09-19 黑屏修复）：重挂载时
+                // 过期请求会在 seat 未就绪时重开火（详见 DockShell 同名注释）。
+                setDockTabRequest(null);
+                setFileRequest(null);
+              }}
               onToggleTerminal={toggleBottomTerminal}
               terminalOpen={bottomTerminalOpen}
               onOpenDockTab={tab => {
@@ -934,11 +931,48 @@ export function App() {
               className="absolute -top-1 left-0 right-0 h-2 cursor-row-resize touch-none hover:bg-primary/20"
               onPointerDown={onTerminalResizeDown}
             />
-            <div className="flex h-8 shrink-0 items-center justify-between border-b border-surface-container-highest pr-1 pl-3">
-              <span className="flex items-center gap-1 text-[12px] text-outline">
-                <Icon name="terminal" className="text-[14px]" />
-                终端
-              </span>
+            <div className="flex h-8 shrink-0 items-center justify-between border-b border-surface-container-highest pr-1 pl-2">
+              {/* 终端 tab chips + 「新建标签页」加号（3099 面板头实测：M8wPDa_bottomPanel
+                  的 tab 行 + aria=新建标签页 + 右端折叠/关闭）；chips 无文档标题样式，
+                  仅激活态高亮 + hover 提亮。 */}
+              <div className="flex min-w-0 items-center gap-1 overflow-x-auto" data-bottom-terminal-tabs>
+                {bottomTerminalTabs.map((tabId, index) => (
+                  <span
+                    key={tabId}
+                    data-bottom-terminal-tab={tabId}
+                    className={`flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-t-[6px] px-2 text-[12px] leading-none transition-colors ${
+                      activeBottomTerminal === tabId
+                        ? "bg-surface-container-high text-on-surface"
+                        : "text-outline hover:bg-surface-container hover:text-on-surface"
+                    }`}
+                    onClick={() => setActiveBottomTerminal(tabId)}
+                  >
+                    <Icon name="terminal" className="text-[13px]" />
+                    {index === 0 ? "终端" : `终端 ${index + 1}`}
+                    <button
+                      type="button"
+                      title="关闭此终端"
+                      aria-label={`关闭终端 ${index + 1}`}
+                      onClick={event => {
+                        event.stopPropagation();
+                        closeBottomTerminal(tabId);
+                      }}
+                      className="ml-0.5 flex h-4 w-4 items-center justify-center rounded text-outline transition-colors hover:bg-hover hover:text-on-surface cursor-pointer"
+                    >
+                      <Icon name="close" className="text-[12px]" />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  title="新建标签页"
+                  aria-label="新建标签页"
+                  onClick={addBottomTerminal}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-outline transition-colors hover:bg-hover hover:text-on-surface cursor-pointer"
+                >
+                  <Icon name="add" className="text-[15px]" />
+                </button>
+              </div>
               <button
                 type="button"
                 title="折叠底部面板"
@@ -949,14 +983,26 @@ export function App() {
                 <Icon name="close" className="text-[14px]" />
               </button>
             </div>
-            <div className="min-h-0 flex-1">
-              <Suspense fallback={null}>
-                <LazyTerminalView
-                  scope={{ sessionId: activeId, cwd: dockCwd }}
-                  tabId="term:bottom"
-                  store={terminalStore}
-                />
-              </Suspense>
+            <div className="relative min-h-0 flex-1">
+              {/* 全部终端保持挂载（display:none 只是隐藏）：非激活终端不卸载就
+                  不会发 close 帧，shell 存活（3099 同款）；激活切换靠 ResizeObserver
+                  重新 fit（TerminalView openWhenSized 语义）。 */}
+              {bottomTerminalTabs.map(tabId => (
+                <div
+                  key={tabId}
+                  className="absolute inset-0"
+                  style={{ display: activeBottomTerminal === tabId ? undefined : "none" }}
+                  data-bottom-terminal-surface={tabId}
+                >
+                  <Suspense fallback={null}>
+                    <LazyTerminalView
+                      scope={{ sessionId: activeId, cwd: dockCwd }}
+                      tabId={tabId}
+                      store={terminalStore}
+                    />
+                  </Suspense>
+                </div>
+              ))}
             </div>
           </div>
         )}

@@ -37,3 +37,8 @@
 .browser {
   color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary, var(--dsw-alias-label-primary)));
 }
+
+/* Magic 补丁（2026-09-19）：调用轨迹 tab 的字形色（事件时间线，中性主墨）。 */
+.trajectory {
+  color: var(--dsw-alias-label-primary);
+}

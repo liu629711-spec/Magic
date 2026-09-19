@@ -107,13 +107,15 @@ type DropHandlers = {
  *    打开文件夹/搜索文件与设置组 M1 无后端，置灰占位）。
  * 回退时删掉 RowActions 中 pin、拖拽 handlers、SearchPalette 引用即可。
  */
-export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenSettings, assigned, onAssign, recentLimit = 20, sessionCwds, width = 260, collapsed = false, onToggleCollapsed }: {
+export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenAutomation, onOpenSettings, assigned, onAssign, recentLimit = 20, sessionCwds, width = 260, collapsed = false, onToggleCollapsed }: {
   activeSessionId: string
   onOpenSession: (id: string) => void
   onForkSession: (sourceId: string, forkId: string) => void
   onExportSession: (id: string) => void
   /** 首页导航「技能扩展」入口（裁定 22：进入技能扩展视图） */
   onOpenSkills?: () => void
+  /** 首页导航「定时任务」入口（2026-09-19：进入定时任务视图） */
+  onOpenAutomation?: () => void
   /** 底部用户卡「设置」入口（裁定 22：进入整页设置视图） */
   onOpenSettings?: () => void
   /** web 后端模式：会话归属映射（sessionId → workspaceId；无归属=只在最近任务区） */
@@ -713,6 +715,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
             }}
             onOpenSearch={() => setPaletteOpen(true)}
             onOpenSkills={onOpenSkills}
+            onOpenAutomation={onOpenAutomation}
           />
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto px-space-sm pb-space-sm flex flex-col gap-y-space-md">
@@ -1097,10 +1100,11 @@ function Header({ onCollapsed }: { onCollapsed?: () => void }) {
   );
 }
 
-function NavList({ onNewSession, onOpenSearch, onOpenSkills }: {
+function NavList({ onNewSession, onOpenSearch, onOpenSkills, onOpenAutomation }: {
   onNewSession: () => void;
   onOpenSearch: () => void;
   onOpenSkills?: () => void;
+  onOpenAutomation?: () => void;
 }) {
   return (
     <div className="space-y-px">
@@ -1140,6 +1144,8 @@ function NavList({ onNewSession, onOpenSearch, onOpenSkills }: {
             e.preventDefault();
             // 技能扩展（裁定 22）：进入技能扩展视图（左栏不变，主区替换）
             if (item.label === "技能扩展") onOpenSkills?.();
+            // 定时任务（2026-09-19）：进入定时任务视图
+            if (item.label === "定时任务") onOpenAutomation?.();
           }}
         >
           <span className="flex items-center gap-space-sm min-w-0">

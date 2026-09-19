@@ -11,7 +11,7 @@
 import { IconCodeOutline16, IconPanelLeftOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../../context-types.ts'
 import {
-  browserTabIcon, changesTabIcon, filesTabIcon, sidechatTabIcon, tasksTabIcon, terminalTabIcon,
+  browserTabIcon, changesTabIcon, filesTabIcon, sidechatTabIcon, tasksTabIcon, terminalTabIcon, trajectoryTabIcon,
 } from './tab-icons.tsx'
 import { allLeaves, isAgentTabId, type SidebarState } from '../state.ts'
 import { t } from '../locales.ts'
@@ -24,6 +24,7 @@ import { DiffTab } from '../DiffTab.tsx'
 import { SubagentView } from '../SubagentView.tsx'
 import { consumeSidechatSeed, SideChatView, sidechatThreadIdOf } from '../SideChatView.tsx'
 import { SideNoteView } from '../SideNoteView.tsx'
+import { TrajectoryTabView } from '../TrajectoryTabView.tsx'
 import { api } from '../api.ts'
 import { BrowserView } from '../BrowserView.tsx'
 import { TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN } from '../../prefs-shared.ts'
@@ -77,6 +78,19 @@ export interface BuiltinTabOptions {
       running(): boolean
     } | undefined
     parentRunning?: () => boolean
+    /**
+     * Magic（2026-09-19，用户裁定「侧边=会话内的分身」）：分身 composer 的数据面。
+     * 模型目录/当前模型/切模型/命令执行/@候选 // 命令——与主会话同源（bridge），
+     * 全部按子会话 id 参数化；缺项由 SideNoteView 诚实降级。
+     */
+    chat?: {
+      modelCatalog?: { key: string; name: string; tag?: string; provider: string }[]
+      sessionModelOf?: (sessionId: string) => { provider: string; model: string } | undefined
+      selectModel?: (sessionId: string, provider: string, model: string) => void
+      runCommand?: (sessionId: string, line: string) => void
+      mentionOptions?: { key: string; name: string; desc: string; glyph?: string; attach?: boolean }[]
+      commandOptions?: { key: string; name: string; desc: string }[]
+    }
   }
 }
 
@@ -301,8 +315,39 @@ export function builtinTabs(_ctx: Context, options: BuiltinTabOptions = {}): rea
           onFork={sessionId => options.sideNote?.onFork(sessionId) ?? Promise.reject(new Error('sideNote host face is not wired'))}
           bindingOf={id => options.sideNote?.bindingOf(id) ?? undefined}
           parentRunning={options.sideNote?.parentRunning?.() ?? false}
+          chat={options.sideNote?.chat}
         />
       ),
+    },
+    {
+      // Magic（2026-09-19）：调用轨迹 tab——会话头 ⋯ 菜单「查看调用轨迹」的承接
+      // 面。渲染当前任务的持久事件时间线（conversation/TrajectoryView），事件经
+      // sideNote.bindingOf 宿主面直读（dock 按会话整体 remount，scope.sessionId
+      // 即当前任务）。hidden：不出现在开始页 guide（用户裁定：调用轨迹不在开始
+      // 页展示，仅从菜单进入）；single：同 kind 单实例（重复打开=聚焦既有 tab）。
+      id: 'magic:trajectory',
+      title: () => t('trajectory'),
+      icon: trajectoryTabIcon,
+      order: 36,
+      hidden: true,
+      single: true,
+      createTab: () => ({
+        tab: {
+          id: `trajectory:${crypto.randomUUID()}`,
+          type: 'magic:trajectory',
+          title: t('trajectory'),
+        },
+      }),
+      component: ({ scope }) => {
+        const binding = options.sideNote?.bindingOf(scope.sessionId)
+        return (
+          <TrajectoryTabView
+            sessionId={scope.sessionId}
+            eventsOf={() => binding?.events() ?? []}
+            subscribe={fn => binding?.subscribe(fn) ?? (() => undefined)}
+          />
+        )
+      },
     },
     {
       id: 'terminal',

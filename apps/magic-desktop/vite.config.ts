@@ -23,6 +23,9 @@ const here = (relative: string): string => fileURLToPath(new URL(relative, impor
 // 目标可用 VITE_DSH_WEB_ORIGIN 覆盖（默认 3099 = Magic 插件全挂的调试实例）。
 // - /api      ：会话 RPC（session/list|create|prompt|rename|fork）+ remote.mux WS
 // - /sidebar  ：better-sidebar 插件宿主路由（右坞数据源，下一步接线）
+// - /open-in-app：host open-in-app 路由（GET /apps 探测、POST /open 启动、GET /icon/<id>
+//   图标——open-in-app/src/shared.ts:8-14；顶栏 workspace chip 打开文件资源管理器/
+//   Cursor/VS Code 用）
 // - /dsh-auth-connect：根路径 GET /?token= 一次性换 HttpOnly Cookie（browser-auth.ts:239-265），
 //   经代理转发 Set-Cookie 到本开发源，后续请求（含 WS upgrade）带 Cookie 即已认证。
 const target = process.env.VITE_DSH_WEB_ORIGIN ?? "http://127.0.0.1:3099";
@@ -49,6 +52,7 @@ export default defineConfig({
     proxy: {
       "/api": { target, changeOrigin: true, ws: true, configure: rewriteFenceHeaders },
       "/sidebar": { target, changeOrigin: true, ws: true, configure: rewriteFenceHeaders },
+      "/open-in-app": { target, changeOrigin: true, configure: rewriteFenceHeaders },
       "/dsh-auth-connect": {
         target,
         changeOrigin: true,
