@@ -4,6 +4,12 @@ Magic is a product layer on [DeepSeek Harness](https://github.com/deepseek-ai/de
 
 This `main` branch is a DSH plugin workspace. The previous Rust/Tauri desktop stack is archived on [`old-design`](https://github.com/liu629711-spec/Magic/tree/old-design).
 
+## 术语速查（Terms）
+
+- **DSH 网页版（Magic DSH 网页版）** = **3099 实例**：DSH web + Magic 插件全挂载后的运行形态（窗口标题「Magic 智能体」，运行态在 `.magic-dsh-live/`）。体验、需求、验收的唯一基准。
+- **官方裸端** = `reference-project/deepseek-harness` 源码对应的官方 UI。仅用于回答「机制是什么、在哪个包」，禁止作为体验或需求来源。
+- **参考项目** = `reference-project/` 其余仓库，仅供离线研究。
+
 ## Product
 
 Canonical product rules live in `docs/01-产品/PRD-01`, `PRD-02`, `PRD-04`, and `PRD-05`; the document map is in [`docs/README.md`](docs/README.md). Technical implementation constraints and the AgentCore capability map live in [`docs/02-实现`](docs/02-实现).
@@ -44,7 +50,7 @@ plugins/dsh-sidenote         vendored side chat + selection annotations (MIT; up
 patches/web.patch.yml        DSH web overlay (official agent-team layer + Magic plugins)
 docs/01-产品                 canonical PRDs
 docs/02-实现                 implementation constraints and AgentCore capability map
-tools/contract-smoke         contract smoke check (static, zero-dependency)
+scripts/contract-smoke         contract smoke check (static, zero-dependency)
 ```
 
 ## Run

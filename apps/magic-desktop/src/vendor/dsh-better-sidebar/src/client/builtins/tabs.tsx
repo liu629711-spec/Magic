@@ -25,6 +25,7 @@ import { SubagentView } from '../SubagentView.tsx'
 import { consumeSidechatSeed, SideChatView, sidechatThreadIdOf } from '../SideChatView.tsx'
 import { SideNoteView } from '../SideNoteView.tsx'
 import { TrajectoryTabView } from '../TrajectoryTabView.tsx'
+import { PlanTabView } from '../PlanTabView.tsx'
 import { api } from '../api.ts'
 import { BrowserView } from '../BrowserView.tsx'
 import { TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN } from '../../prefs-shared.ts'
@@ -342,6 +343,33 @@ export function builtinTabs(_ctx: Context, options: BuiltinTabOptions = {}): rea
         const binding = options.sideNote?.bindingOf(scope.sessionId)
         return (
           <TrajectoryTabView
+            sessionId={scope.sessionId}
+            eventsOf={() => binding?.events() ?? []}
+            subscribe={fn => binding?.subscribe(fn) ?? (() => undefined)}
+          />
+        )
+      },
+    },
+    {
+      // Magic 计划 tab（2026-09-20，PRD-02 §15.4）：当前任务最近一次 exit_plan_mode
+      // 计划全文。hidden + single：不进开始页 guide，重复打开=聚焦既有 tab。
+      id: 'magic:plan',
+      title: () => t('plan'),
+      icon: tasksTabIcon,
+      order: 37,
+      hidden: true,
+      single: true,
+      createTab: () => ({
+        tab: {
+          id: `plan:${crypto.randomUUID()}`,
+          type: 'magic:plan',
+          title: t('plan'),
+        },
+      }),
+      component: ({ scope }) => {
+        const binding = options.sideNote?.bindingOf(scope.sessionId)
+        return (
+          <PlanTabView
             sessionId={scope.sessionId}
             eventsOf={() => binding?.events() ?? []}
             subscribe={fn => binding?.subscribe(fn) ?? (() => undefined)}

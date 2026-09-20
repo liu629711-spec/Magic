@@ -18,9 +18,17 @@ import { buildSessionMarkdown } from "./conversation/session-export.ts";
 import { mockEvents } from "./conversation/mock-events.ts";
 import { useWebBackend, type RemoteSessionRow } from "./adapters/dsh-web/web-backend.ts";
 import { dshRpc } from "./adapters/dsh-web/rpc.ts";
+import { subscribeRemoteEvents } from "./adapters/dsh-web/remote-events.ts";
+import {
+  clearPendingPlanReview,
+  getPendingPlanReview,
+  setPendingPlanReview,
+} from "./conversation/plan-review-store.ts";
 import { SkillsHub } from "./skills/SkillsHub.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
+import { WindowControls } from "./components/WindowControls.tsx";
 import { readRecentLimit } from "./settings/local-prefs.ts";
+import { isModelDisabled, readDisabledModels, readDisabledProviders } from "./settings/model-prefs";
 import type { Workspace } from "./sidebar/mock-data";
 
 /**
@@ -89,72 +97,281 @@ export function App() {
     () => stores[activeId] ?? new ChatSessionStore(),
     [stores, activeId],
   );
-  // 模型目录（2026-09-17：对话区模型选择器接真实数据，不再用画廊 mock）
+  // 模型目录（2026-09-17：对话区模型选择器接真实数据，不再用画廊 mock）。
+  // efforts（2026-09-19 思考级别）：catalog 每模型自带 reasoning.efforts +
+  // defaultEffort（session-controller/src/catalog.ts:29-36）——自适应数据源。
+  // 2026-09-19 模型目录不刷新修复：目录此前只在页面加载时拉一次，设置页
+  // 新增/删除模型后选择器停留在旧列表（用户实测"加了 10 个只见 2 个"）。
+  // 抽成回调 + 监听设置页保存广播（magic:model-catalog-changed）即时重拉。
   const [modelCatalog, setModelCatalog] = useState<
-    { key: string; name: string; tag?: string; provider: string }[]
+    { key: string; name: string; tag?: string; provider: string; efforts?: { id: string; name: string }[]; defaultEffort?: string }[]
   >([]);
-  useEffect(() => {
+  const fetchModelCatalog = useCallback((): void => {
     if (!backendMode || web.status !== "ready") return;
-    dshRpc<{ groups?: { id: string; name: string; models?: { id: string; name: string }[] }[] }>(
-      "session/modelCatalog",
-      {},
-    )
+    dshRpc<{
+      groups?: {
+        id: string;
+        name: string;
+        models?: {
+          id: string;
+          name: string;
+          reasoning?: { efforts?: { id: string; name?: string }[]; defaultEffort?: string };
+        }[];
+      }[];
+    }>("session/modelCatalog", {})
       .then(value => {
-        const options: { key: string; name: string; tag?: string; provider: string }[] = [];
+        const options: { key: string; name: string; tag?: string; provider: string; efforts?: { id: string; name: string }[]; defaultEffort?: string }[] = [];
         for (const group of value.groups ?? []) {
           for (const model of group.models ?? []) {
-            options.push({ key: `${group.id}:${model.id}`, name: model.name, tag: group.name, provider: group.id });
+            const efforts = model.reasoning?.efforts?.map(effort => ({ id: effort.id, name: effort.name ?? effort.id }));
+            options.push({
+              key: `${group.id}:${model.id}`,
+              name: model.name,
+              tag: group.name,
+              provider: group.id,
+              ...(efforts !== undefined && efforts.length > 0 ? { efforts } : {}),
+              ...(model.reasoning?.defaultEffort !== undefined ? { defaultEffort: model.reasoning.defaultEffort } : {}),
+            });
           }
         }
         setModelCatalog(options);
       })
       .catch(() => setModelCatalog([]));
-  }, [web.status]);
+  }, [backendMode, web.status]);
+  useEffect(() => {
+    fetchModelCatalog();
+  }, [fetchModelCatalog]);
+  useEffect(() => {
+    const onChanged = (): void => fetchModelCatalog();
+    window.addEventListener("magic:model-catalog-changed", onChanged);
+    return () => window.removeEventListener("magic:model-catalog-changed", onChanged);
+  }, [fetchModelCatalog]);
 
+  // 计划审批桥（PRD-02 §15.4）：订阅 remote-events waterfall，只认领
+  // user-questions/request 里 intent=plan-review 的提问（计划审批）；
+  // 其余问题 next 放行（官方调试页/超时路径不受影响）。宿主 cancel 帧撤销本地卡。
+  useEffect(() => {
+    if (!backendMode || web.status !== "ready") return;
+    return subscribeRemoteEvents({
+      waterfall: async (_event, _agentId, eventId, request) => {
+        if (_event !== "user-questions/request") return undefined;
+        const questions = Array.isArray(request.questions) ? request.questions : [];
+        const question = questions.find(item => {
+          const intent = (item as { intent?: { kind?: unknown } })?.intent;
+          return intent?.kind === "plan-review";
+        }) as
+          | {
+              id?: unknown;
+              header?: unknown;
+              question?: unknown;
+              detail?: unknown;
+              options?: { label?: unknown }[];
+              intent?: { kind: "plan-review"; approve?: unknown };
+            }
+          | undefined;
+        if (question === undefined) return undefined;
+        const options = Array.isArray(question.options) ? question.options : [];
+        const labels = options.map(option => (typeof option?.label === "string" ? option.label : ""));
+        const approveLabel = typeof question.intent?.approve === "string"
+          ? question.intent.approve
+          : labels[0] ?? "批准";
+        const keepLabel = labels.find(label => label !== approveLabel) ?? "继续计划";
+        return await new Promise(resolve => {
+          setPendingPlanReview({
+            eventId,
+            questionId: typeof question.id === "string" ? question.id : "plan-review",
+            header: typeof question.header === "string" ? question.header : "计划审批",
+            question: typeof question.question === "string" ? question.question : "批准该计划并退出计划模式？",
+            detail: typeof question.detail === "string" ? question.detail : "",
+            approveLabel,
+            keepLabel,
+            resolve,
+            reject: () => undefined,
+          });
+        });
+      },
+      cancel: eventId => {
+        if (getPendingPlanReview()?.eventId === eventId) clearPendingPlanReview();
+      },
+    });
+  }, [backendMode, web.status]);
+
+  const [pendingModelKey, setPendingModelKey] = useState<string | undefined>(undefined);
+  const [pendingEffort, setPendingEffort] = useState<string | undefined>(undefined);
+  const [pendingPermission, setPendingPermission] = useState("workspace-write");
+  const [pendingCeo, setPendingCeo] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState(false);
   const activeSessionModel = web.sessions.find(row => row.sessionId === activeId)?.model;
   // 右坞作用域：只有真实 web 会话才有对应的宿主会话（mock 会话没有，右坞保持空态）。
   const dockSessionId = backendMode && web.status === "ready" && activeId.length > 0 ? activeId : "";
   const dockCwd = web.sessions.find(row => row.sessionId === activeId)?.cwd;
+  // 模型选择器按模型设置页的启用/停用偏好过滤（2026-09-19 用户裁定：
+  // 关掉的提供方/模型不再出现在对话区可选列表；客户端偏好，每次渲染重读）。
+  const disabledProviderPrefs = readDisabledProviders();
+  const disabledModelPrefs = readDisabledModels();
+  const visibleModelCatalog = modelCatalog.filter(
+    option =>
+      !isModelDisabled(
+        disabledProviderPrefs,
+        disabledModelPrefs,
+        option.provider,
+        option.key.slice(option.provider.length + 1),
+      ),
+  );
+  // 输入条三件套（2026-09-18 照 Magic 网页版）：订阅当前会话 store 拿投影与事件。
+  // 提前到 modelPicker 之前（2026-09-19 思考级别：effort 从投影 modelSelection 读）。
+  const chatState = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  // 当前模型选中态（modelSelection 投影 wire 视图 {lastUsed, next}，next = 待生效；
+  // 见 session-controller/src/model-selection-projection.ts:66-69——next/lastUsed
+  // 均 nullable，新会话初始为 null，必须与 undefined 一起排除）。
+  // 统一数据源（2026-09-19 修复）：模型钮/chip/换档全部以投影选中态优先，
+  // 会话行（session/list 快照）仅在投影未就绪时兜底——两者可能短暂不一致
+  // （selectModel pending 已落库、list 行未刷新），错位会把换档发给旧模型。
+  const modelSelectionRaw = chatState.projections?.values?.modelSelection as
+    | {
+        next?: { provider?: string; model?: string; reasoningEffort?: string } | null;
+        lastUsed?: { provider?: string; model?: string; reasoningEffort?: string } | null;
+      }
+    | undefined;
+  const currentModelSelection = modelSelectionRaw?.next ?? modelSelectionRaw?.lastUsed;
+  const activeSelection =
+    currentModelSelection != null &&
+    currentModelSelection.provider !== undefined &&
+    currentModelSelection.model !== undefined
+      ? { provider: currentModelSelection.provider, model: currentModelSelection.model }
+      : activeSessionModel ?? (() => {
+          const key = pendingModelKey;
+          const option = key === undefined ? visibleModelCatalog[0] : visibleModelCatalog.find(item => item.key === key);
+          return option === undefined ? undefined : { provider: option.provider, model: option.key.slice(option.provider.length + 1) };
+        })();
+  // 当前模型的目录条目（efforts 数据源）。
+  const activeModelEntry =
+    activeSelection !== undefined
+      ? modelCatalog.find(
+          option =>
+            option.provider === activeSelection.provider &&
+            option.key === `${activeSelection.provider}:${activeSelection.model}`,
+        )
+      : undefined;
+  // 当前思考级别：投影记录优先；未选过 → 模型默认档；连默认都没有 → 首档（仅展示）。
+  const currentEffort =
+    currentModelSelection?.reasoningEffort ??
+    (activeId.length === 0 ? pendingEffort : undefined) ??
+    activeModelEntry?.defaultEffort ??
+    activeModelEntry?.efforts?.[0]?.id;
   const modelPicker =
-    backendMode && modelCatalog.length > 0
+    backendMode && visibleModelCatalog.length > 0
       ? {
-          options: modelCatalog.map(({ key, name, tag }) => ({ key, name, tag })),
+          options: visibleModelCatalog.map(({ key, name, tag }) => ({ key, name, tag })),
           currentKey:
-            activeSessionModel !== undefined
-              ? `${activeSessionModel.provider}:${activeSessionModel.model}`
+            activeSelection !== undefined
+              ? `${activeSelection.provider}:${activeSelection.model}`
               : undefined,
           onChange: (key: string) => {
-            const option = modelCatalog.find(m => m.key === key);
-            if (option === undefined || activeId.length === 0) return;
+            const option = visibleModelCatalog.find(m => m.key === key);
+            if (option === undefined) return;
+            // 无会话落地态先记为下一次会话的选择；首次发送时再落到 runtime。
+            const carriedEffort =
+              currentEffort !== undefined && option.efforts?.some(effort => effort.id === currentEffort) === true
+                ? currentEffort
+                : option.defaultEffort;
+            if (activeId.length === 0) {
+              setPendingModelKey(key);
+              setPendingEffort(carriedEffort);
+              return;
+            }
             web
-              .selectModel(activeId, option.provider, key.slice(option.provider.length + 1))
+              .selectModel(
+                activeId,
+                option.provider,
+                key.slice(option.provider.length + 1),
+                carriedEffort,
+              )
               .catch(error =>
                 window.alert(`切换模型失败：${error instanceof Error ? error.message : String(error)}`),
+              );
+          },
+          // 思考级别（2026-09-19）：当前模型支持的档位 + 当前值 + 换档回调。
+          efforts: activeModelEntry?.efforts,
+          currentEffort,
+          onEffortChange: (effortId: string) => {
+            const selection = activeSelection;
+            if (selection === undefined) return;
+            if (activeId.length === 0) {
+              setPendingEffort(effortId);
+              return;
+            }
+            web
+              .selectModel(activeId, selection.provider, selection.model, effortId)
+              .catch(error =>
+                window.alert(`切换思考级别失败：${error instanceof Error ? error.message : String(error)}`),
               );
           },
         }
       : undefined;
 
-  // 输入条三件套（2026-09-18 照 Magic 网页版）：订阅当前会话 store 拿投影与事件
-  const chatState = useSyncExternalStore(store.subscribe, store.getSnapshot);
   // 命令执行（/permission、/mode 等）。wire 参数取自生成的 Remote 契约
   // `commands/lib/typert.remote-client.d.ts:11-16`：execute(agentId, line, submittedAttachments, signal?)，
   // 其中 agentId 是 Agent lookup 的 wire 字段（core/agent/src/index.ts:258-264 注册 wire:'agentId'）。
   const runCommand = (line: string) => {
-    if (activeId.length === 0) return;
+    if (activeId.length === 0) {
+      if (line.startsWith("/permission ")) setPendingPermission(line.slice("/permission ".length));
+      else if (line === "/mode ceo") setPendingCeo(true);
+      else if (line === "/mode agent") setPendingCeo(false);
+      else if (line === "/plan") setPendingPlan(true);
+      else if (line === "/plan off") setPendingPlan(false);
+      return;
+    }
     dshRpc("commands/execute", { agentId: activeId, line, submittedAttachments: [] }).catch(
       (error: unknown) =>
         window.alert(`命令执行失败：${error instanceof Error ? error.message : String(error)}`),
     );
   };
-  const composerChips = (() => {
-    if (!backendMode || activeId.length === 0) return undefined;
-    // 访问模式/上下文/工作模式构建器（2026-09-19 抽出共享，主会话与侧边分身同源）。
-    return buildComposerChips({
-      values: chatState.projections?.values ?? {},
-      recentEventData: type => store.recentEventData(type),
-      onCommand: runCommand,
+  // 带回执执行（2026-09-20 工作模式切换确认链）：把命令 result（kind/text）交回
+  // 调用方判定（如 /mode agent 的 handoff 确认门槛）；RPC 失败仍 alert。
+  const runCommandWithResult = async (line: string): Promise<{ kind: string; text: string }> => {
+    if (activeId.length === 0) {
+      runCommand(line);
+      return { kind: "ok", text: "" };
+    }
+    const value = await dshRpc<{ commandId?: string; result?: { kind?: string; text?: string } }>(
+      "commands/execute",
+      { agentId: activeId, line, submittedAttachments: [] },
+    ).catch((error: unknown) => {
+      window.alert(`命令执行失败：${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
     });
+    const result = value?.result;
+    return { kind: result?.kind ?? "error", text: result?.text ?? "" };
+  };
+  const composerChips = (() => {
+    if (!backendMode || web.status !== "ready") return undefined;
+    const values =
+      activeId.length > 0
+        ? (chatState.projections?.values ?? {})
+        : {
+            permissions: {
+              currentValue: pendingPermission,
+              options: [
+                { value: "read-only", name: "变更前确认" },
+                { value: "workspace-write", name: "自动编辑" },
+                { value: "danger-full-access", name: "完全访问" },
+              ],
+            },
+            plan: { active: pendingPlan, pending: false },
+          };
+    return buildComposerChips({
+      values,
+      recentEventData: type =>
+        activeId.length > 0
+          ? store.recentEventData(type)
+          : type === "magic/work-mode" && pendingCeo
+            ? { sessionMode: "ceo" }
+            : undefined,
+          onCommand: runCommand,
+          onCommandWithResult: runCommandWithResult,
+          cwd: dockCwd,
+        });
   })();
 
   // 输入条 @ 候选（真实技能）与 / 命令（commands/list）（2026-09-18）
@@ -408,6 +625,8 @@ export function App() {
           ? { id: parentRow.sessionId, title: parentRow.title }
           : undefined,
       children: children.map((row, index) => ({ id: row.sessionId, title: subagentTitle(row, index) })),
+      // 最近活动（图七顶栏文件夹悬浮卡「最近活动」）。
+      lastActivity: current.updatedAt,
     };
   }, [backendMode, web.status, web.sessions, activeId, presetNames]);
 
@@ -425,6 +644,42 @@ export function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, web.status, web.sessions]);
+
+  const applyPendingComposerSettings = async (sessionId: string): Promise<void> => {
+    const selectedKey = pendingModelKey ?? visibleModelCatalog[0]?.key;
+    const selected = selectedKey === undefined
+      ? undefined
+      : visibleModelCatalog.find(option => option.key === selectedKey);
+    if (selected !== undefined) {
+      await web.selectModel(
+        sessionId,
+        selected.provider,
+        selected.key.slice(selected.provider.length + 1),
+        pendingEffort ?? selected.defaultEffort,
+      );
+    }
+    if (pendingPermission !== "workspace-write") {
+      await dshRpc("commands/execute", {
+        agentId: sessionId,
+        line: `/permission ${pendingPermission}`,
+        submittedAttachments: [],
+      });
+    }
+    if (pendingCeo) {
+      await dshRpc("commands/execute", {
+        agentId: sessionId,
+        line: "/mode ceo",
+        submittedAttachments: [],
+      });
+    }
+    if (pendingPlan) {
+      await dshRpc("commands/execute", {
+        agentId: sessionId,
+        line: "/plan",
+        submittedAttachments: [],
+      });
+    }
+  };
 
   const handleSend = (text: string) => {
     if (!backendMode) {
@@ -447,7 +702,7 @@ export function App() {
       .then(id => {
         if (id.length === 0) return;
         openSession(id);
-        return web.prompt(id, text);
+        return applyPendingComposerSettings(id).then(() => web.prompt(id, text));
       })
       .catch(error =>
         window.alert(`发送失败：${error instanceof Error ? error.message : String(error)}`),
@@ -480,6 +735,18 @@ export function App() {
     setFileRequest({path,sessionId:activeId,seq:++requestSeq.current});
   },[activeId]);
   useEffect(()=>{setDockFullscreen(false);setDockCollapsed(false);setDockTabRequest(null);setFileRequest(null)},[activeId]);
+  // 右坞窄窗自动收起（2026-09-19，ZCode 同款体验裁定）：窗口宽度低于阈值时自动
+  // 收起，把宽度让给会话区+对话区；只是收起不是销毁——重开即恢复原 tab/宽度状态。
+  // 手动重开后不再强制收起，直到下一次宽度向下越过阈值。
+  const DOCK_AUTO_COLLAPSE_BELOW = 1180;
+  useEffect(() => {
+    const onResize = (): void => {
+      if (window.innerWidth < DOCK_AUTO_COLLAPSE_BELOW) setDockCollapsed(true);
+    };
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const dockBridge = {
     sessions: web.sessions,
     fork: web.fork,
@@ -488,7 +755,15 @@ export function App() {
     selectModel: web.selectModel,
     openSession,
     // 侧边分身 composer 数据面（2026-09-19）：与主会话同源，按子会话 id 参数化。
-    modelCatalog: modelCatalog.map(({ key, name, tag, provider }) => ({ key, name, tag, provider })),
+    // efforts/defaultEffort（2026-09-19 思考级别）：分身模型菜单/滑杆同源自适应。
+    modelCatalog: modelCatalog.map(({ key, name, tag, provider, efforts, defaultEffort }) => ({
+      key,
+      name,
+      tag,
+      provider,
+      ...(efforts !== undefined ? { efforts } : {}),
+      ...(defaultEffort !== undefined ? { defaultEffort } : {}),
+    })),
     sessionModelOf: (id: string) => web.sessions.find(row => row.sessionId === id)?.model,
     runCommand: (id: string, line: string) => {
       dshRpc("commands/execute", { agentId: id, line, submittedAttachments: [] }).catch(
@@ -682,6 +957,7 @@ export function App() {
   if (backendMode && web.status !== "ready") {
     return (
       <div className="h-screen overflow-hidden bg-surface text-on-surface flex items-center justify-center">
+        <WindowControls />
         <div className="w-[520px] rounded-xl bg-surface-container border border-surface-container-highest shadow-[0_16px_40px_-4px_rgba(0,0,0,0.7)] p-space-lg">
           <div className="text-[15px] font-semibold text-on-surface mb-2">连接 DSH Runtime</div>
           {web.status === "probing" ? (
@@ -722,20 +998,25 @@ export function App() {
     );
   }
 
-  // 视图路由（2026-09-17 用户裁定）：对话 / 技能扩展（左栏不变，主区替换）/
-// 设置（图二式整页，替换整个界面）。设置页从底部用户卡「设置」进入。
+  // 视图路由（2026-09-17 用户裁定）：对话 / 设置（图二式整页，替换整个界面）。
+  // 插件市场/定时任务保留左栏（2026-09-19 用户裁定：ZCode 形态=侧边栏在，右坞不开）。
+  // 设置页从底部用户卡「设置」进入。
   if (view === "settings") {
     return (
-      <SettingsPage
-        onBack={() => setView("chat")}
-        onOpenSkills={() => setView("skills")}
-        backendReady={backendMode && web.status === "ready"}
-      />
+      <>
+        <WindowControls />
+        <SettingsPage
+          onBack={() => setView("chat")}
+          onOpenSkills={() => setView("skills")}
+          backendReady={backendMode && web.status === "ready"}
+        />
+      </>
     );
   }
 
   return (
     <div className="h-screen overflow-hidden bg-surface text-on-surface font-headline-md text-headline-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+      <WindowControls />
       <SessionSidebar
         activeSessionId={activeId}
         width={sidebarWidth}
@@ -780,6 +1061,7 @@ export function App() {
         }
         remoteWorkspaces={remoteWorkspaces}
         remoteTaskSessions={remoteTaskSessions}
+        sessionStatuses={backendMode ? web.sessionStatuses : undefined}
         showMockSections={!backendMode}
         assigned={backendMode ? assigned : undefined}
         onAssign={
@@ -810,7 +1092,11 @@ export function App() {
             absolute、内容区压缩）。 */}
         <main
           className={dockFullscreen ? "hidden" : "flex-1 min-w-0 bg-surface"}
-          style={bottomTerminalOpen && !dockFullscreen ? { paddingBottom: terminalHeight } : undefined}
+          style={
+            bottomTerminalOpen && view === "chat" && !dockFullscreen
+              ? { paddingBottom: terminalHeight }
+              : undefined
+          }
         >
           {view === "skills" ? (
             <SkillsHub
@@ -838,6 +1124,13 @@ export function App() {
               key={activeId}
               store={store}
               onSend={handleSend}
+              running={backendMode && activeId.length > 0 && web.sessionStatuses[activeId] === "running"}
+              onStop={() => {
+                if (!backendMode || activeId.length === 0) return;
+                web.cancel(activeId).catch(error =>
+                  window.alert(`停止任务失败：${error instanceof Error ? error.message : String(error)}`),
+                );
+              }}
               onOpenFile={openFile}
               modelPicker={modelPicker}
               composerChips={composerChips}
@@ -887,8 +1180,9 @@ export function App() {
             />
           )}
         </main>
-        {/* 右坞拖拽手柄（8px 骑缝在坞左缘；阻力 + 越过上限收起，恢复入口=顶栏右坞开关） */}
-        {!dockCollapsed && !dockFullscreen && (
+        {/* 右坞拖拽手柄（8px 骑缝在坞左缘；阻力 + 越过上限收起，恢复入口=顶栏右坞开关）；
+            仅对话视图（2026-09-19 用户裁定：插件市场/定时任务不开右坞，ZCode 形态） */}
+        {!dockCollapsed && !dockFullscreen && view === "chat" && (
           <div
             data-layout-handle="dock"
             className="fixed top-0 h-full w-2 z-[45] -ml-1 cursor-col-resize touch-none select-none hover:bg-primary/20"
@@ -911,11 +1205,12 @@ export function App() {
           teamOpenToken={teamOpenToken}
           sendIntervention={sendIntervention}
           {...dockChrome}
+          {...(view === "chat" ? {} : { collapsed: true })}
         />
         {/* 底部终端面板（3099 实测形态）：对话区底部整条弹出，8px 骑缝拖高 + 右上 × 收起；
             水平范围=左栏右缘 → 右坞左缘（3099 实测：面板只盖对话区，right 在右坞打开时
             停在坞左缘 `style.right`，坞收起/全屏时为 0），贴视口底。 */}
-        {bottomTerminalOpen && backendMode && web.status === "ready" && (
+        {bottomTerminalOpen && view === "chat" && backendMode && web.status === "ready" && (
           <div
             data-bottom-terminal
             className="absolute z-40 flex flex-col bg-surface border-t border-surface-container-highest"

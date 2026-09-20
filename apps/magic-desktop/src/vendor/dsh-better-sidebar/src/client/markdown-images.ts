@@ -84,8 +84,22 @@ export function resolveLocalMediaDest(
   if (trimmed === '' || trimmed.startsWith('#')) return dest
   if (isRemoteUrl(trimmed)) return dest
   const slash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
-  const directory = slash === -1 ? '/' : filePath.slice(0, slash + 1)
-  const candidate = isAbsolutePath(trimmed) ? trimmed : directory + trimmed
+  const hasDir = slash !== -1
+  const directory = hasDir ? filePath.slice(0, slash + 1) : ''
+  // 2026-09-20 修复（README 图片全破图）：仓库根解析。优先级 = 会话 cwd >
+  // filePath 的目录 > 空（保持旧行为）。两类目的地按仓库根解析：
+  // ① `/x` 根相对（GitHub README 语义：仓库根 = 会话 cwd）；② path 本身是
+  // 相对路径（dock 编辑器传 'README.md'，无目录信息——此前 directory 兜成
+  // '/'，'apps/...' 被拼成 '/apps/...'，服务端接盘根 D:\apps 必 404）。
+  const repoRoot = (scope.cwd !== undefined && scope.cwd !== ''
+    ? scope.cwd
+    : hasDir ? filePath.slice(0, slash).replace(/[\\/]+$/, '') : '').replace(/[\\/]+$/, '')
+  const rootRelative = !hasDir || /^[\\/]/.test(trimmed)
+  const candidate = rootRelative
+    ? `${repoRoot}\\${trimmed.replace(/^[\\/]+/, '')}`
+    : isAbsolutePath(trimmed)
+      ? trimmed
+      : directory + trimmed
   // Mirrors api.ts fileUrl/mediaUrl for the /sidebar/file media route, made
   // absolute so the shared MarkdownText http(s) allowlist accepts it.
   const params = new URLSearchParams({ sessionId: scope.sessionId, path: normalizeLocalPath(candidate) })

@@ -357,6 +357,8 @@ export const zh = {
   sideChatUntitled: '侧边',
   // Magic（2026-09-19）：调用轨迹 tab（⋯ 菜单「查看调用轨迹」的承接面）。
   trajectory: '调用轨迹',
+  // Magic（2026-09-20）：计划 tab（PRD-02 §15.4）。
+  plan: '计划',
   sideChatEmpty: '暂无侧边对话',
   sideChatEmptyDesc: '每个侧边对话是标签栏里的独立 Tab，继承当前会话的上下文运行，不会进入主会话',
   sideChatCreating: '正在创建侧边对话…',
@@ -803,6 +805,8 @@ export const en: Record<keyof typeof zh, string> = {
   sideChatUntitled: 'Side',
   // Magic (2026-09-19): the call-trace dock tab (opened from the ⋯ menu).
   trajectory: 'Call trace',
+  // Magic (2026-09-20): the plan dock tab (PRD-02 §15.4).
+  plan: 'Plan',
   sideChatEmpty: 'No side conversations',
   sideChatEmptyDesc: 'Every side conversation is its own tab in the tab strip — it inherits the current session\'s context and never enters the main conversation',
   sideChatCreating: 'Creating side conversation…',

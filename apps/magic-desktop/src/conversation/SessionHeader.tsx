@@ -11,7 +11,7 @@
 // 「⊕侧边」（打开右坞 sidenote fork 式侧聊 tab）+ 右坞收起时的打开入口（与右坞 tab 行
 // 收起钮同款右面板图标）。能力未接的置灰并 title 诚实标注。数据由 App 从 web.sessions
 // 计算后经 ChatFlow 传入。
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   IconAgentPresetOutline16,
   IconChevronDownOutline14,
@@ -25,6 +25,7 @@ import {
   type AgentTeamView,
 } from '../adapters/dsh-web/agent-teams'
 import { AgentTeamPanel } from './AgentTeamPanel.tsx'
+import { api } from '../vendor/dsh-better-sidebar/src/client/api'
 
 /** 会话头数据（App 侧从真实会话列表算出）。 */
 export interface SessionHeaderData {
@@ -35,6 +36,8 @@ export interface SessionHeaderData {
   parent?: { id: string; title: string }
   /** 子代理/子会话（其他会话的 parentSessionId === 当前会话 id）。 */
   children: { id: string; title: string }[]
+  /** 会话最近活动时间（图七悬浮卡「最近活动」；来自会话列表 updatedAt）。 */
+  lastActivity?: number
   /** 会话工作目录（workspace chip 展示/复制；缺省不渲染 chip）。 */
   cwd?: string
   /** 会话预设显示名（官方 AgentPresetLabel 语义：投影 agentPreset → agentPresets/list 名称；缺省不渲染）。 */
@@ -254,6 +257,72 @@ function WorkspaceChip({ cwd }: { cwd: string }) {
   )
 }
 
+/** 元素内容是否横向溢出（标题收缩自适应：溢出才渐隐，未溢出不出现空隙）。 */
+function useOverflowing(): [RefObject<HTMLSpanElement>, boolean] {
+  const ref = useRef<HTMLSpanElement | null>(null)
+  const [overflowing, setOverflowing] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (el === null) return
+    const check = () => setOverflowing(el.scrollWidth > el.clientWidth + 1)
+    check()
+    const observer = new ResizeObserver(check)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  return [ref, overflowing]
+}
+
+/** 相对时间（图七「最近活动 4 分钟前」）。 */
+function relativeTime(time: number | undefined): string | undefined {
+  if (time === undefined || !Number.isFinite(time) || time <= 0) return undefined
+  const delta = Math.max(0, Date.now() - time)
+  const minute = 60_000
+  if (delta < minute) return '刚刚'
+  if (delta < 60 * minute) return `${String(Math.floor(delta / minute))} 分钟前`
+  if (delta < 24 * 60 * minute) return `${String(Math.floor(delta / (60 * minute)))} 小时前`
+  return `${String(Math.floor(delta / (24 * 60 * minute)))} 天前`
+}
+
+/** 文件夹悬浮卡（图七）：工作区名/路径/最近活动/分支。分支在展开时实时查询。 */
+function WorkspaceCard({ sessionId, cwd, lastActivity }: { sessionId: string; cwd: string; lastActivity?: number }) {
+  const [branch, setBranch] = useState<string | null>(null)
+  useEffect(() => {
+    let stale = false
+    api
+      .gitBranch({ sessionId, cwd })
+      .then(result => { if (!stale) setBranch(result.current.length > 0 ? result.current : null) })
+      .catch(() => { if (!stale) setBranch(null) })
+    return () => { stale = true }
+  }, [sessionId, cwd])
+  const name = cwd.split(/[\\/]/u).filter(part => part.length > 0).pop() ?? cwd
+  const activity = relativeTime(lastActivity)
+  return (
+    <div
+      data-workspace-card
+      className="absolute left-0 top-[30px] z-[60] w-[280px] rounded-xl border-[0.5px] border-surface-container-highest bg-surface-container-lowest p-3.5 shadow-overlay"
+    >
+      <div className="flex items-center gap-2.5">
+        <span className="material-symbols-outlined text-[18px] text-on-surface-variant" aria-hidden>folder</span>
+        <span className="text-[14px] leading-5 font-medium text-on-surface">{name}</span>
+      </div>
+      <div className="mt-1.5 pl-[28px] text-[12px] leading-[18px] text-outline break-all">{cwd}</div>
+      {activity !== undefined ? (
+        <div className="mt-2.5 flex items-center gap-2.5">
+          <span className="material-symbols-outlined text-[16px] text-outline" aria-hidden>schedule</span>
+          <span className="text-[12.5px] leading-5 text-on-surface-variant">最近活动 {activity}</span>
+        </div>
+      ) : null}
+      {branch === null ? null : (
+        <div className="mt-2 flex items-center gap-2.5 border-t-[0.5px] border-surface-container-highest pt-2.5">
+          <span className="material-symbols-outlined text-[16px] text-outline" aria-hidden>account_tree</span>
+          <span className="font-mono text-[12.5px] leading-5 text-on-surface-variant">{branch}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpandDock, onOpenDockTab, onToggleTerminal, terminalOpen, headerActions }: {
   data: SessionHeaderData
   /** 切换会话（App 的 openSession）。 */
@@ -296,6 +365,20 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
   const leadSessionId = leadSessionIdOf(data.id, parent?.id)
   // chip 用的 cwd：ChatFlow 透传优先，回落 data.cwd。
   const effectiveCwd = cwd ?? data.cwd
+  // 文件夹悬浮卡（图六/图七，2026-09-19）：悬浮/点击工作区图标查看工作区信息。
+  const [wsCardOpen, setWsCardOpen] = useState(false)
+  const wsCardTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const openWsCard = () => {
+    clearTimeout(wsCardTimer.current)
+    wsCardTimer.current = setTimeout(() => setWsCardOpen(true), 180)
+  }
+  const closeWsCard = () => {
+    clearTimeout(wsCardTimer.current)
+    wsCardTimer.current = setTimeout(() => setWsCardOpen(false), 120)
+  }
+  // 标题收缩自适应（用户裁定：会话名与「N 个子代理」之间不应有大空白）——
+  // 标题收缩到内容宽度，溢出时才渐隐裁切。
+  const [titleRef, titleOverflow] = useOverflowing()
 
   // 请求代际号：会话切换或连续刷新时丢弃过期响应。
   const loadSeqRef = useRef(0)
@@ -329,17 +412,18 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
 
   // 点击头外部收起所有浮层（子代理列表 / Agent Team 面板 / ⋯、folder 菜单）。
   useEffect(() => {
-    if (!childrenOpen && !teamOpen && menu === null) return
+    if (!childrenOpen && !teamOpen && menu === null && !wsCardOpen) return
     const onDown = (event: MouseEvent) => {
       if (rootRef.current !== null && !rootRef.current.contains(event.target as Node)) {
         setChildrenOpen(false)
         setTeamOpen(false)
         setMenu(null)
+        setWsCardOpen(false)
       }
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
-  }, [childrenOpen, teamOpen, menu])
+  }, [childrenOpen, teamOpen, menu, wsCardOpen])
 
   // 两个浮层互斥：打开一个即收起另一个。
   const toggleChildren = () => {
@@ -371,12 +455,37 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
     <div
       ref={rootRef}
       data-session-header
-      className="min-h-[40px] shrink-0 select-none bg-surface pl-5 pr-7 pt-2.5"
+      className={
+        // 右坞收起时顶栏直抵窗口右缘，给固定窗口控制条（3×44px）留出避让，
+        // 防止终端/侧边按钮被盖住（2026-09-19 用户裁定修复）。
+        `min-h-[40px] shrink-0 select-none bg-surface pl-5 pt-2.5 ${
+          dockCollapsed === true ? "pr-[140px]" : "pr-7"
+        }`
+      }
     >
       <div className="flex w-full min-w-0 items-center gap-2.5">
         {/* 左：面包屑 / 标题 + 子代理 count trigger + 预设标签 + Agent Team（官方 titleCluster） */}
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex min-w-0 items-center gap-1">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <div className="relative flex min-w-0 flex-1 items-center gap-1">
+            <div
+              className="relative shrink-0"
+              onMouseEnter={openWsCard}
+              onMouseLeave={closeWsCard}
+            >
+              <button
+                type="button"
+                data-workspace-folder
+                title="工作区信息"
+                aria-expanded={wsCardOpen}
+                onClick={() => setWsCardOpen(value => !value)}
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-hover hover:text-on-surface"
+              >
+                <span className="material-symbols-outlined text-[18px]" aria-hidden>folder</span>
+              </button>
+              {wsCardOpen && effectiveCwd !== undefined && effectiveCwd.length > 0 ? (
+                <WorkspaceCard sessionId={data.id} cwd={effectiveCwd} lastActivity={data.lastActivity} />
+              ) : null}
+            </div>
             {renaming ? (
               <input
                 data-session-rename-input
@@ -397,7 +506,7 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
                   data-session-parent={parent.id}
                   title={parent.title}
                   onClick={() => onOpenSession?.(parent.id)}
-                  className="max-w-[220px] truncate rounded-[12px] px-2 py-1 text-[14px] leading-5 text-outline transition-colors hover:bg-hover hover:text-on-surface cursor-pointer"
+                  className="min-w-0 shrink overflow-hidden whitespace-nowrap rounded-[12px] px-2 py-1 text-[14px] leading-5 text-outline transition-colors [mask-image:linear-gradient(to_right,black_calc(100%-18px),transparent)] hover:bg-hover hover:text-on-surface cursor-pointer"
                 >
                   {parent.title}
                 </button>
@@ -406,7 +515,8 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
                 <span
                   data-session-title
                   title={data.title}
-                  className="max-w-[320px] min-w-[72px] cursor-default truncate text-[14px] leading-5 font-medium text-on-surface"
+                  className={`min-w-[96px] shrink cursor-default overflow-hidden whitespace-nowrap text-[14px] leading-5 font-medium text-on-surface ${titleOverflow ? '[mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)]' : ''}`}
+                  ref={titleRef}
                 >
                   {data.title}
                 </span>
@@ -415,7 +525,8 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
               <span
                 data-session-title
                 title={data.title}
-                className="max-w-[420px] min-w-[72px] cursor-default truncate text-[14px] leading-5 font-medium text-on-surface"
+                className={`min-w-[96px] shrink cursor-default overflow-hidden whitespace-nowrap text-[14px] leading-5 font-medium text-on-surface ${titleOverflow ? '[mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)]' : ''}`}
+                  ref={titleRef}
               >
                 {data.title}
               </span>
@@ -473,7 +584,7 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
             <span
               data-session-preset
               title="会话预设"
-              className="flex h-[22px] max-w-[180px] shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap rounded-md bg-surface-container pr-0.5 text-[12px] leading-[22px] text-on-surface-variant"
+              className="flex h-[22px] min-w-0 max-w-[180px] shrink items-center gap-1 overflow-hidden whitespace-nowrap rounded-md bg-surface-container pr-0.5 text-[12px] leading-[22px] text-on-surface-variant"
             >
               <IconAgentPresetOutline16 size={14} className="shrink-0 opacity-70" />
               <span className="truncate">{data.preset}</span>
@@ -483,17 +594,17 @@ export function SessionHeader({ data, onOpenSession, cwd, dockCollapsed, onExpan
           {/* Agent Team（官方 TeamAction trigger：人形图标 + 文案 + count 徽标，
               无边框透明钮 hover 底；面板=名册/任务板，真实数据源 agent-team Remote 通道）。
               拉取失败不置灰，仅把 title 标为「团队数据不可用」，错误在面板内展示并可重试。 */}
-          <div className="relative shrink-0">
+          <div className="relative min-w-0 shrink">
             <button
               type="button"
               data-agent-team
               aria-expanded={teamOpen}
               title={teamError !== null ? '团队数据不可用' : 'Agent Team'}
               onClick={toggleTeam}
-              className="flex min-h-[28px] items-center gap-[5px] rounded-md px-[7px] py-[3px] text-[12px] leading-[18px] text-on-surface-variant transition-colors hover:bg-hover cursor-pointer"
+              className="flex min-h-[28px] min-w-0 items-center gap-[5px] overflow-hidden rounded-md px-[7px] py-[3px] text-[12px] leading-[18px] text-on-surface-variant transition-colors hover:bg-hover cursor-pointer"
             >
               <IconUserOutline16 size={14} className="shrink-0" />
-              <span>Agent Team</span>
+              <span className="truncate">Agent Team</span>
               {team !== null && (
                 <span
                   data-agent-team-count

@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatSessionStore, SessionProjectionBaseline } from "../../conversation/chat-store";
 import type { AssistantLiveChunkEvent } from "../../vendor/dsh-chat/index.ts";
+import type { SessionStatus } from "../../sidebar/mock-data";
 import { dshAuthExchange, dshProbeAuth, dshRpc, tokenFromInput } from "./rpc";
 import { RemoteMux } from "./mux";
 
@@ -101,30 +102,126 @@ interface AssistantAttemptFold {
   nextIndex: number;
 }
 
+function statusFromTerminalKind(kind: unknown): SessionStatus | undefined {
+  if (kind === "completed") return "completed";
+  if (kind === "aborted" || kind === "interrupted" || kind === "error" || kind === "blocked" || kind === "max-tokens") {
+    return "interrupted";
+  }
+  return undefined;
+}
+
+function statusFromEvent(event: unknown): SessionStatus | undefined {
+  if (event === null || typeof event !== "object") return undefined;
+  const record = event as { type?: unknown; data?: { reason?: { kind?: unknown } } };
+  if (record.type === "turn/end") return statusFromTerminalKind(record.data?.reason?.kind);
+  if (record.type === "turn-error") return "interrupted";
+  return undefined;
+}
+
+function statusFromEvents(events: readonly unknown[], running: boolean): SessionStatus | undefined {
+  if (running) return "running";
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const status = statusFromEvent(events[index]);
+    if (status !== undefined) return status;
+  }
+  return undefined;
+}
+
+function mergeSessionStatuses(
+  previous: Record<string, SessionStatus>,
+  items: readonly RemoteSessionRow[],
+): Record<string, SessionStatus> {
+  const next = { ...previous };
+  for (const row of items) {
+    if (row.running) next[row.sessionId] = "running";
+    else if (next[row.sessionId] === undefined) next[row.sessionId] = "idle";
+  }
+  return next;
+}
+
+async function probeSessionStatus(
+  mux: RemoteMux,
+  row: RemoteSessionRow,
+): Promise<SessionStatus | undefined> {
+  return await new Promise(resolve => {
+    let closed = false;
+    let close: (() => void) | undefined;
+    const finish = (value: SessionStatus | undefined): void => {
+      if (closed) return;
+      closed = true;
+      close?.();
+      resolve(value);
+    };
+    close = mux.open(
+      "session/follow",
+      {
+        args: {
+          request: {
+            address:
+              row.origin === "subagent" && row.parentSessionId !== undefined
+                ? { kind: "subagent", parentSessionId: row.parentSessionId, childSessionId: row.sessionId, mode: "continuable" }
+                : { kind: "session", sessionId: row.sessionId },
+            maxMessages: 50,
+          },
+        },
+      },
+      {
+        onItem: value => {
+          const frame = value as { type?: string; records?: Array<{ event?: unknown }> };
+          if (frame.type !== "snapshot") return;
+          const events = (frame.records ?? []).map(record => record.event).filter(event => event !== undefined);
+          finish(statusFromEvents(events, row.running));
+        },
+        onError: () => finish(undefined),
+        onEnd: () => finish(undefined),
+      },
+    );
+    window.setTimeout(() => finish(undefined), 5000);
+  });
+}
+
 export type WebBackendStatus = "disabled" | "probing" | "need-auth" | "ready" | "error";
 
 export function useWebBackend(enabled: boolean): {
   status: WebBackendStatus;
   errorMessage: string;
   sessions: RemoteSessionRow[];
+  sessionStatuses: Record<string, SessionStatus>;
   connect: (tokenInput: string) => Promise<void>;
   refresh: () => Promise<void>;
   createSession: () => Promise<string>;
   follow: (sessionId: string, store: ChatSessionStore, parentSessionId?: string) => () => void;
   prompt: (sessionId: string, text: string) => Promise<void>;
+  cancel: (sessionId: string) => Promise<void>;
   fork: (sessionId: string) => Promise<string>;
   rename: (sessionId: string, title: string) => Promise<string>;
-  selectModel: (sessionId: string, provider: string, model: string) => Promise<void>;
+  selectModel: (sessionId: string, provider: string, model: string, reasoningEffort?: string) => Promise<void>;
 } {
   const [status, setStatus] = useState<WebBackendStatus>(enabled ? "probing" : "disabled");
   const [errorMessage, setErrorMessage] = useState("");
   const [sessions, setSessions] = useState<RemoteSessionRow[]>([]);
+  const [sessionStatuses, setSessionStatuses] = useState<Record<string, SessionStatus>>({});
   const muxRef = useRef<RemoteMux | undefined>(undefined);
 
   const mux = useCallback((): RemoteMux => {
     if (muxRef.current === undefined) muxRef.current = new RemoteMux();
     return muxRef.current;
   }, []);
+
+  const hydrateSessionStatuses = useCallback(async (items: readonly RemoteSessionRow[]): Promise<void> => {
+    const candidates = items.filter(row => !row.running);
+    const results = await Promise.all(
+      candidates.map(async row => [row.sessionId, await probeSessionStatus(mux(), row)] as const),
+    );
+      setSessionStatuses(previous => {
+        const next = { ...previous };
+        for (const [sessionId, value] of results) {
+          // 初始快照可能落后于刚发送的请求；不要用旧终态覆盖当前运行态。
+          if (value !== undefined && previous[sessionId] !== "running") next[sessionId] = value;
+        }
+        return next;
+      });
+  }, [mux]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -140,7 +237,9 @@ export function useWebBackend(enabled: boolean): {
         const items = await listSessions();
         if (cancelled) return;
         setSessions(items);
+        setSessionStatuses(previous => mergeSessionStatuses(previous, items));
         setStatus("ready");
+        void hydrateSessionStatuses(items);
       } catch (error) {
         if (cancelled) return;
         setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -151,7 +250,7 @@ export function useWebBackend(enabled: boolean): {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]);
+  }, [enabled, hydrateSessionStatuses]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -159,17 +258,23 @@ export function useWebBackend(enabled: boolean): {
   }, [enabled]);
 
   const refresh = useCallback(async (): Promise<void> => {
-    setSessions(await listSessions());
-  }, []);
+    const items = await listSessions();
+    setSessions(items);
+    setSessionStatuses(previous => mergeSessionStatuses(previous, items));
+    void hydrateSessionStatuses(items);
+  }, [hydrateSessionStatuses]);
 
   const connect = useCallback(
     async (tokenInput: string): Promise<void> => {
       const token = tokenFromInput(tokenInput);
       await dshAuthExchange(token);
-      setSessions(await listSessions());
+      const items = await listSessions();
+      setSessions(items);
+      setSessionStatuses(previous => mergeSessionStatuses(previous, items));
       setStatus("ready");
+      void hydrateSessionStatuses(items);
     },
-    [],
+    [hydrateSessionStatuses],
   );
 
   const createSession = useCallback(async (): Promise<string> => {
@@ -289,6 +394,17 @@ export function useWebBackend(enabled: boolean): {
                 .map((record) => record.event)
                 .filter((event) => event !== undefined);
               store.seedWindow(events as never[], normalizeProjections(frame.projections));
+              const snapshotRunning = frame.assistantStream?.activeAttempt !== undefined;
+              const snapshotStatus = statusFromEvents(events, snapshotRunning);
+              // 快照里最后一条已是 turn/end：这是权威收尾（含取消后的 aborted），
+              // 必须更新状态并清等待态——旧终态恰是这里要拿到的结果。
+              if (snapshotStatus !== undefined && snapshotStatus !== "running") {
+                setSessionStatuses(previous => ({ ...previous, [sessionId]: snapshotStatus }));
+                store.clearTransients();
+                store.settleReply();
+              } else if (snapshotRunning) {
+                setSessionStatuses(previous => ({ ...previous, [sessionId]: "running" }));
+              }
               // 重置瞬态基线（对齐上游 ClientAssistantStream.replace，assistant-stream.ts:52-95）。
               durableCursor = -1;
               for (const event of events) durableCursor = Math.max(durableCursor, durableSeq(event));
@@ -314,10 +430,17 @@ export function useWebBackend(enabled: boolean): {
             }
             // 增量帧：wire 形状为 {type:'event', event}（SessionEventEntry，contract/events.ts）
             if (frame?.event !== undefined) {
-              store.appendEvent(frame.event as never);
-              durableCursor = Math.max(durableCursor, durableSeq(frame.event));
+              const event = frame.event as never;
+              store.appendEvent(event);
+              durableCursor = Math.max(durableCursor, durableSeq(event));
               transientGap = 0;
               const kind = (frame.event as { type?: string }).type;
+              const terminalStatus = statusFromEvent(frame.event);
+              if (terminalStatus !== undefined) {
+                setSessionStatuses(previous => ({ ...previous, [sessionId]: terminalStatus }));
+              } else if (kind === "turn/start") {
+                setSessionStatuses(previous => ({ ...previous, [sessionId]: "running" }));
+              }
               if (kind === "turn/end" || kind === "turn-error") {
                 store.clearTransients();
                 attempt = undefined;
@@ -337,16 +460,28 @@ export function useWebBackend(enabled: boolean): {
   );
 
   const prompt = useCallback(async (sessionId: string, text: string): Promise<void> => {
-    // prompt(request)（index.ts:347）
-    await dshRpc("session/prompt", {
-      request: {
-        requestId: crypto.randomUUID(),
-        sessionId,
-        mode: "queue",
-        content: [{ type: "text", text }],
-        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      },
-    });
+    // 先标记运行中，再发 RPC：session/list 的 running 只在后端 agent 状态刷新后才会变，
+    // 否则左栏在真实执行期间仍停留在 idle，看不到书写笔动画。
+    setSessionStatuses(previous => ({ ...previous, [sessionId]: "running" }));
+    try {
+      await dshRpc("session/prompt", {
+        request: {
+          requestId: crypto.randomUUID(),
+          sessionId,
+          mode: "queue",
+          content: [{ type: "text", text }],
+          clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+      });
+    } catch (error) {
+      setSessionStatuses(previous => ({ ...previous, [sessionId]: "interrupted" }));
+      throw error;
+    }
+  }, []);
+
+  const cancel = useCallback(async (sessionId: string): Promise<void> => {
+    await dshRpc("session/cancel", { request: { sessionId } });
+    setSessionStatuses(previous => ({ ...previous, [sessionId]: "interrupted" }));
   }, []);
 
   const fork = useCallback(
@@ -374,16 +509,25 @@ export function useWebBackend(enabled: boolean): {
     [refresh],
   );
 
-  // 会话模型选择（2026-09-17）：selectModel(request: SessionSelectModelRequest)
+  // 会话模型选择（2026-09-17）：selectModel(request: SessionSelectModelRequest)。
+  // reasoningEffort（2026-09-19 思考级别）：契约见 session-controller/src/commands.ts:133-143，
+  // 经 resolveCallConfig 校验后随模型选择落库（modelSelection 投影可回读）。
   const selectModel = useCallback(
-    async (sessionId: string, provider: string, model: string): Promise<void> => {
-      await dshRpc("session/selectModel", { request: { sessionId, provider, model } });
+    async (sessionId: string, provider: string, model: string, reasoningEffort?: string): Promise<void> => {
+      await dshRpc("session/selectModel", {
+        request: {
+          sessionId,
+          provider,
+          model,
+          ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+        },
+      });
       await refresh();
     },
     [refresh],
   );
 
-  return { status, errorMessage, sessions, connect, refresh, createSession, follow, prompt, fork, rename, selectModel };
+  return { status, errorMessage, sessions, sessionStatuses, connect, refresh, createSession, follow, prompt, cancel, fork, rename, selectModel };
 }
 
 async function listSessions(): Promise<RemoteSessionRow[]> {

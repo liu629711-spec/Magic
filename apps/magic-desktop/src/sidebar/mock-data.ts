@@ -5,11 +5,12 @@ export const product = {
   version: "v1.4.2",
 };
 
-// 导航入口（2026-09-16 用户裁定：去掉「项目」入口行，项目通过会话树分组呈现；技能扩展不显示计数）
+// 导航入口（2026-09-16 用户裁定：去掉「项目」入口行，项目通过会话树分组呈现；插件市场不显示计数）
 export const navItems = [
   // 定时任务：图标暂用 Material Symbols timer 占位；用户提供秒表图后换 assets/timer.png
   { icon: "timer", label: "定时任务" },
-  { icon: "extension", label: "技能扩展" },
+  // 插件市场（2026-09-19 用户裁定改名，原「技能扩展」；ZCode 同名）
+  { icon: "extension", label: "插件市场" },
 ] as const;
 
 export type Workspace = {

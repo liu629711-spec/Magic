@@ -72,6 +72,47 @@ export class ChatSessionStore {
   /** 追加一条持久事件（SDK 接线后由 session.event 流驱动）。 */
   appendEvent(event: SessionEvent): void {
     this.entries.push({ type: 'event', event })
+    // 投影本地补丁（2026-09-19 权限切换不生效修复）：上游 follow 流只在开头
+    // snapshot 帧携带 projections（session-controller/src/history.ts:192-202），
+    // /permission 产生的 permission/preset 事件帧不带投影，UI 永不刷新。
+    // 事件即投影 apply 的权威增量，这里等价地就地前滚 currentValue。
+    // 2026-09-20 扩展：plan/mode（官方 plan-mode）同样只进事件流，同法前滚。
+    if (this.state.projections !== null) {
+      const type = String(event.type)
+      if (type === "permission/preset") {
+        const preset = (event.data as { preset?: unknown } | undefined)?.preset
+        if (typeof preset === "string") {
+          const values = this.state.projections.values
+          const permissions = values.permissions as
+            | { currentValue?: string; options?: { value?: string; name?: string }[] }
+            | undefined
+          if (permissions !== undefined && permissions.currentValue !== preset) {
+            this.state = {
+              ...this.state,
+              projections: {
+                ...this.state.projections,
+                values: { ...values, permissions: { ...permissions, currentValue: preset } },
+              },
+            }
+          }
+        }
+      } else if (type === "plan/mode") {
+        const active = (event.data as { active?: unknown } | undefined)?.active
+        if (typeof active === "boolean") {
+          const values = this.state.projections.values
+          const plan = (values.plan as { active?: boolean; pending?: boolean } | undefined) ?? { active: false, pending: false }
+          if (plan.active !== active || plan.pending) {
+            this.state = {
+              ...this.state,
+              projections: {
+                ...this.state.projections,
+                values: { ...values, plan: { active, pending: false } },
+              },
+            }
+          }
+        }
+      }
+    }
     this.publish()
   }
 

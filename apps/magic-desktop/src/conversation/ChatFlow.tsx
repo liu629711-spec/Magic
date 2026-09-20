@@ -43,6 +43,11 @@ import { makeRenderToolview } from './tool-views.tsx'
 // TurnProcessSummary（codex 式「已处理 2m27s · 已探索 2 项」）。回退时还原
 // MagicTurnProcessHeader（对齐画廊 ToolChips 的计数头）或 vendored TurnProcessNodeView。
 import { MagicTurnProcessSummary, type MagicTurnProcessSummaryProps } from './MagicTurnProcessSummary.tsx'
+// 会话导航 minimap（2026-09-19 用户需求，ZCode 同款）：对话区左缘竖排短线，
+// 悬停预览该条内容、点击跳转（见 ChatMinimap.tsx 头注释）。
+import { ChatMinimap, type ChatMinimapEntry } from './ChatMinimap.tsx'
+// 计划审批卡（PRD-02 §15.4）：exit_plan_mode 计划的批准/继续计划交互面。
+import { PlanReviewCard } from './PlanReviewCard.tsx'
 // CEO 委派图卡（2026-09-18）：对话流里渲染 CEO 把任务派给成员的画布（节点/连线/状态徽标）。
 import { CeoTeamGraph } from '../vendor/ceo/client/CeoTeamGraph.ts'
 import type { CeoTeamGraphTaskBoard } from '../vendor/ceo/client/CeoTeamGraph.ts'
@@ -58,6 +63,7 @@ import { leadSessionIdOf, viewAgentTeam } from '../adapters/dsh-web/agent-teams.
 import PromptBar, { type PromptBarChips, type PromptBarMention } from '../vendor/stitch-chat/PromptBar.tsx'
 import { ComposerStats, TurnTailPills } from './TurnPills.tsx'
 import { SessionHeader, type SessionHeaderData } from './SessionHeader.tsx'
+import { GitCapsule, type CapsuleTodo } from './GitCapsule.tsx'
 import { SelectionAnnotation, AnnotationChips, composeWithAnnotations } from './SelectionAnnotation.tsx'
 import { InkTowerLoader } from './InkTowerLoader.tsx'
 import { ProducedFiles } from './ProducedFiles.tsx'
@@ -96,6 +102,67 @@ const ownerBase = {
 function turnOf(node: ChatNode): number | undefined {
   const location = node.location
   return location.kind === 'turn' || location.kind === 'step' ? location.turn.turn : undefined
+}
+
+/** minimap 条目预览：user/steering 取 content 文本块，assistant-step 取 blocks 文本块。 */
+function minimapPreviewOf(node: ChatNode): string {
+  const data = node.data as { content?: unknown; blocks?: unknown }
+  const blocks = Array.isArray(data.content) ? data.content : Array.isArray(data.blocks) ? data.blocks : []
+  const parts: string[] = []
+  for (const block of blocks) {
+    if (block === null || typeof block !== 'object') continue
+    const record = block as Record<string, unknown>
+    // ContentBlock 用 type:'text'，AssistantBlock 用 kind:'text'，一并接受。
+    if (record.type !== 'text' && record.kind !== 'text') continue
+    const text = record.text
+    if (typeof text === 'string' && text.trim() !== '') parts.push(text.trim())
+  }
+  const flat = parts.join(' ').replace(/\s+/g, ' ').trim()
+  // 老数据残留（2026-09-20）：responses 路由时代的思考文本可能以孤立 `</think>`
+  // 开头混在 text part 里（正文归一化只救消息区），导航预览同样剥掉，避免
+  // 「Magic：</think>计划…」这类标题。
+  const clean = flat.replace(/<\/?think>/g, '').replace(/\s+/g, ' ').trim()
+  const chars = Array.from(clean)
+  return chars.length > 160 ? `${chars.slice(0, 160).join('')}…` : clean
+}
+
+/**
+ * minimap 条目（2026-09-19）：可见块级粒度——用户/插话消息各一条；assistant-step
+ * 同轮合并为一条（保留最大 step = 最终回答的位置与文本）。工具卡/过程/轮尾不进
+ * 导航（过程默认折叠，粒度对齐 ZCode 的消息块导航）。
+ */
+function buildMinimapEntries(snapshot: ChatSnapshot): ChatMinimapEntry[] {
+  const entries: ChatMinimapEntry[] = []
+  const answerIndexByTurn = new Map<number, number>()
+  for (const key of snapshot.order) {
+    const node = snapshot.nodes.get(key)
+    if (node === undefined || node.visibility === 'hidden') continue
+    const chatNode = node as ChatNode
+    const turn = turnOf(chatNode)
+    if (chatNode.kind === 'user' || chatNode.kind === 'steering') {
+      entries.push({ key, turn, role: 'user', preview: minimapPreviewOf(chatNode) })
+      continue
+    }
+    if (chatNode.kind === 'assistant-step') {
+      const step = Number((chatNode.data as { step?: unknown }).step ?? 0)
+      const turnIndex = turn ?? -1
+      const existing = answerIndexByTurn.get(turnIndex)
+      if (existing !== undefined && entries[existing] !== undefined) {
+        if (step >= (entries[existing].step ?? -1)) {
+          entries[existing] = {
+            ...entries[existing],
+            key,
+            step,
+            preview: minimapPreviewOf(chatNode) || entries[existing].preview,
+          }
+        }
+        continue
+      }
+      answerIndexByTurn.set(turnIndex, entries.length)
+      entries.push({ key, turn, role: 'assistant', preview: minimapPreviewOf(chatNode), step })
+    }
+  }
+  return entries
 }
 
 interface SeatProps {
@@ -286,10 +353,14 @@ function renderNode(node: ChatNode, ctx: RenderContext) {
   }
 }
 
-export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, onToggleTerminal, terminalOpen, headerActions, variant = 'full', onOpenFile = ignoreFile }: {
+export function ChatFlow({ store, onSend, running, onStop, modelPicker, composerChips, mentionOptions, commandOptions, draftInjection, sessionHeader, onOpenSession, sessionId, onOpenCeoWorkspace, promptToSession, cwd, dockCollapsed, onExpandDock, onCollapseDock, onOpenDockTab, onToggleTerminal, terminalOpen, headerActions, variant = 'full', onOpenFile = ignoreFile }: {
   onOpenFile?: (path: string) => void
   store: ChatSessionStore
   onSend?: (text: string) => void
+  /** 当前会话正在运行：输入区发送按钮切换为停止按钮。 */
+  running?: boolean
+  /** 取消当前会话正在执行的 turn。 */
+  onStop?: () => void
   /**
    * 渲染形态（2026-09-19，3099 实测侧边面板）：'full' = 主会话完整 chrome；
    * 'docked' = 右坞/侧聊面板形态——隐藏内容宽度手柄、对话/轨迹 tab、composer
@@ -307,11 +378,16 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   onOpenCeoWorkspace?: () => void
   /** 向当前会话发一条消息（决策抽屉/成员干预）。失败时抛错，由调用方转成错误文案。 */
   promptToSession?: (text: string) => Promise<void>
-  /** 模型选择器（真实 runtime：session/modelCatalog + selectModel；缺省=画廊 mock） */
+  /** 模型选择器（真实 runtime：session/modelCatalog + selectModel；缺省=画廊 mock）。
+   *  efforts/currentEffort/onEffortChange（2026-09-19 思考级别）：当前模型档位自适应。 */
   modelPicker?: {
     options: { key: string; name: string; tag?: string }[]
     currentKey?: string
     onChange: (key: string) => void
+    /** 当前模型支持的思考档位（catalog reasoning.efforts）；缺省=模型不支持，不渲染控件。 */
+    efforts?: { id: string; name: string }[]
+    currentEffort?: string
+    onEffortChange?: (effortId: string) => void
   }
   /** 输入条三件套（2026-09-18）：访问模式 / 工作模式 / 上下文用量 */
   composerChips?: PromptBarChips
@@ -328,7 +404,7 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
   onExpandDock?: () => void
   onCollapseDock?: () => void
   /** 打开右坞指定 tab（顶行 terminal 等 + ⊕侧边 start 页）：透传给 SessionHeader。 */
-  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'side' | 'trajectory' | 'browser' | 'jobs' | 'start') => void
+  onOpenDockTab?: (tab: 'terminal' | 'files' | 'changes' | 'team' | 'sidechat' | 'side' | 'trajectory' | 'plan' | 'browser' | 'jobs' | 'start') => void
   /** 会话操作（顶行 ⋯ 菜单：重命名/导出 Markdown/复制会话 ID）：透传给 SessionHeader。 */
   headerActions?: {
     rename?: (title: string) => void
@@ -544,6 +620,77 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
     handle.style.setProperty('--dsh-width-handle-y', `${event.clientY - rect.top}px`)
   }
 
+  // 胶囊「进程」数据：会话最近一次 todo/write 的待办（图四）。
+  const capsuleTodos = useMemo<CapsuleTodo[]>((() => {
+    const entries = store.eventEntries()
+    for (let i = entries.length - 1; i >= 0; i -= 1) {
+      const event = entries[i]
+      if (event.type !== 'todo/write') continue
+      const todos = (event.data as Record<string, unknown>).todos
+      if (!Array.isArray(todos)) break
+      return todos
+        .map((item: unknown) => {
+          const record = (item ?? {}) as Record<string, unknown>
+          const status = typeof record.status === 'string' ? record.status : 'pending'
+          return {
+            text: typeof record.content === 'string' ? record.content : '',
+            done: status === 'completed',
+            active: status === 'in_progress',
+          }
+        })
+        .filter(item => item.text.length > 0)
+    }
+    return []
+  }), [store, state])
+
+  // 胶囊「计划」段数据（PRD-02 §15.4）：计划模式计划（exit_plan_mode）+ CEO 派工计划
+  // （ceo/plan 事件），倒扫事件流各取最近一条。
+  const capsulePlans = useMemo(() => {
+    const entries = store.eventEntries()
+    let planMode: import('./GitCapsule.tsx').CapsulePlanEntry | undefined
+    let ceo: import('./GitCapsule.tsx').CapsulePlanEntry | undefined
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const event = entries[index]
+      if (event.type === 'tool/call' && planMode === undefined) {
+        const data = event.data as { name?: unknown; arguments?: unknown; callId?: unknown }
+        if (data?.name === 'exit_plan_mode') {
+          try {
+            const args = JSON.parse(String(data.arguments ?? '{}')) as { plan?: unknown }
+            if (typeof args.plan === 'string' && args.plan.trim() !== '') {
+              const heading = /^#{1,6}\s+(.+?)\s*$/m.exec(args.plan)?.[1] ?? '计划'
+              planMode = { key: `plan:${String(data.callId ?? index)}`, title: heading.trim(), kind: 'plan' }
+            }
+          } catch {
+            // arguments 非法 JSON：跳过
+          }
+        }
+      }
+      // ceo/plan 是 Magic 插件自定义事件（不在 vendor 事件联合里，同 recentEventData
+      // 的做法按字符串比较）。
+      if (String(event.type) === 'ceo/plan' && ceo === undefined) {
+        const data = event.data as { summary?: unknown; planId?: unknown }
+        const summary = typeof data?.summary === 'string' ? data.summary.trim() : ''
+        if (summary !== '') {
+          ceo = { key: `ceo:${String(data?.planId ?? index)}`, title: summary.slice(0, 40), kind: 'ceo' }
+        }
+      }
+      if (planMode !== undefined && ceo !== undefined) break
+    }
+    const list: import('./GitCapsule.tsx').CapsulePlanEntry[] = []
+    if (planMode !== undefined) list.push(planMode)
+    if (ceo !== undefined) list.push(ceo)
+    return list
+  }, [store, state])
+
+  // 胶囊「终端」行：会话首事件时间（运行时长起点，图二）。
+  const sessionStartAt = useMemo<number | undefined>(() => {
+    const first = store.eventEntries()[0]?.time
+    return typeof first === 'number' && Number.isFinite(first) ? first : undefined
+  }, [store, state])
+
+  // 会话导航条目（2026-09-19）：快照可见块 → 用户消息 + 每轮最终回答。
+  const minimapEntries = useMemo(() => buildMinimapEntries(snapshot), [snapshot])
+
   return (
     <div
       className="vendor-dsh-chat relative flex h-full flex-col bg-surface text-on-surface"
@@ -559,6 +706,8 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
             onPointerDown={onWidthHandleDown('left')}
             onPointerMove={onWidthHandleMove}
           />
+          {/* 会话导航 minimap（ZCode 同款，2026-09-19）：左缘短线导航，悬停预览/点击跳转 */}
+          <ChatMinimap entries={minimapEntries} containerRef={flowRef} />
           <div
             className={css.widthHandle}
             data-side="right"
@@ -567,6 +716,20 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
             onPointerMove={onWidthHandleMove}
           />
         </>
+      )}
+      {/* 会话区悬浮胶囊（图一）：Git 工具面板入口（更改/分支/提交/进程） */}
+      {variant === 'full' && onOpenDockTab !== undefined && sessionId !== undefined && (
+        <div className="pointer-events-none absolute right-6 top-[54px] z-[58]">
+          <GitCapsule
+            sessionId={sessionId}
+            cwd={cwd}
+            todos={capsuleTodos}
+            sessionStartAt={sessionStartAt}
+            planEntries={capsulePlans}
+            onOpenChanges={() => onOpenDockTab('changes')}
+            onOpenPlan={() => onOpenDockTab('plan')}
+          />
+        </div>
       )}
       {sessionHeader !== undefined && (
         <SessionHeader
@@ -647,6 +810,9 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
                   annotations={annotations}
                   onRemove={index => setAnnotations(prev => prev.filter((_, i) => i !== index))}
                 />
+                {/* 计划审批卡（PRD-02 §15.4）：exit_plan_mode 提交计划后在此批准/
+                    继续计划（数据 = user-questions waterfall 桥的 plan-review 提问）。 */}
+                <PlanReviewCard />
                 {/* 决策抽屉（2026-09-18 CEO 图卡接入）：有「待你拍板」成员时，在输入条上方
                     浮出抽屉（数据来自 selection store 的 attention 项）；发送 → prompt 当前会话。 */}
                 <CeoDecisionDock sessionId={sessionId} sendDecision={sendDecision} t={ceoT} />
@@ -661,9 +827,14 @@ export function ChatFlow({ store, onSend, modelPicker, composerChips, mentionOpt
                     if (onSend !== undefined) onSend(payload);
                     else store.submit(payload);
                   }}
+                  running={running}
+                  onStop={onStop}
                   modelOptions={modelPicker?.options}
                   modelKey={modelPicker?.currentKey}
                   onModelChange={modelPicker?.onChange}
+                  effortOptions={modelPicker?.efforts}
+                  effortKey={modelPicker?.currentEffort}
+                  onEffortChange={modelPicker?.onEffortChange}
                   composerChips={composerChips}
                   mentionOptions={mentionOptions}
                   commandOptions={commandOptions}

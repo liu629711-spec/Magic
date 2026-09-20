@@ -33,7 +33,8 @@ export function AutomationPage({ onCreateInConversation }: {
 
   return (
     <div className="h-full overflow-y-auto bg-surface">
-      <div className="mx-auto max-w-[1080px] px-7 py-6">
+      <div className="mx-auto max-w-[1080px] px-7 pt-[52px] pb-6">
+        {/* pt-[52px]：右上角窗口控制行（WindowControls）占住第一行，头部内容避让 */}
         {/* 头部：标题 + 副标题 + 右侧动作（图二） */}
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">

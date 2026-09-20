@@ -174,6 +174,7 @@ interface TraceRow {
   role: TraceRole
   turn: number
   summary: string
+  event: SessionEvent
 }
 
 /** 泳道甘特的条形宽度（按摘要长度近似；参考图条宽不一）。 */
@@ -191,6 +192,9 @@ export function TrajectoryView({ entries }: {
 }) {
   const [mode, setMode] = useState<TraceMode>('duration')
   const [query, setQuery] = useState('')
+  // 详情抽屉（2026-09-19 用户裁定：3099 上 Magic 插件每条轨迹可点开弹窗；
+  // Magic 形态 = 顶栏（时长/轮次/调用）下方抽屉弹出，覆盖明细区）
+  const [detail, setDetail] = useState<TraceRow | null>(null)
 
   const rows = useMemo<TraceRow[]>(() => {
     const out: TraceRow[] = []
@@ -214,6 +218,7 @@ export function TrajectoryView({ entries }: {
         role,
         turn,
         summary: summarizeEvent(event),
+        event,
       })
     }
     return out
@@ -309,8 +314,10 @@ export function TrajectoryView({ entries }: {
         </div>
       </div>
 
-      {/* 泳道甘特（时长模式；图三：输入/模型/工具三行 + 轮边界竖线） */}
-      {mode === 'duration' && gantt !== null && (
+      {/* 顶栏下方内容区（甘特 + 明细；详情抽屉绝对定位覆盖其上） */}
+      <div className="relative min-h-0 flex-1 flex flex-col">
+        {/* 泳道甘特（时长模式；图三：输入/模型/工具三行 + 轮边界竖线） */}
+        {mode === 'duration' && gantt !== null && (
         <div className="relative shrink-0 border-b border-surface-container-highest px-4 pb-2 pt-3" data-trajectory-gantt>
           {gantt.turnLines.map(line => (
             <span
@@ -340,7 +347,7 @@ export function TrajectoryView({ entries }: {
         </div>
       )}
 
-      {/* 轮分组明细（图三：左列第 N 轮 + 角色徽章 + 单行摘要） */}
+      {/* 轮分组明细（图三：左列第 N 轮 + 角色徽章 + 单行摘要；行点击开详情抽屉） */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {visibleGroups.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[12.5px] text-outline">
@@ -350,11 +357,15 @@ export function TrajectoryView({ entries }: {
           visibleGroups.map(group => (
             <div key={group.turn}>
               {group.rows.map((row, index) => (
-                <div
+                <button
                   key={row.key}
+                  type="button"
                   data-trajectory-row={row.seq}
-                  className="flex min-h-[34px] items-center gap-3 border-b border-surface-container-high/30 px-4 py-1 transition-colors hover:bg-surface-container-low/40"
-                  title={`${formatTime(row.time)} · ${row.type}`}
+                  onClick={() => setDetail(row)}
+                  title={`${formatTime(row.time)} · ${row.type} · 点击查看详情`}
+                  className={`flex w-full cursor-pointer text-left min-h-[34px] items-center gap-3 border-b border-surface-container-high/30 px-4 py-1 transition-colors hover:bg-surface-container-low/40 ${
+                    detail?.key === row.key ? 'bg-surface-container-low/60' : ''
+                  }`}
                 >
                   <span className="w-12 shrink-0 text-[10.5px] leading-none text-outline/80 tabular-nums">
                     {index === 0 ? `第 ${group.turn} 轮` : ''}
@@ -368,14 +379,104 @@ export function TrajectoryView({ entries }: {
                   <span className="shrink-0 text-[10.5px] text-outline/60 tabular-nums">
                     {formatTime(row.time)}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           ))
         )}
       </div>
+
+        {/* 详情抽屉（用户裁定：tab 下方抽出，覆盖甘特+明细区；× 收起） */}
+        {detail !== null && (
+          <div
+            data-trajectory-drawer
+            className="absolute inset-0 z-20 flex min-h-0 flex-col border-b border-surface-container-highest bg-surface shadow-[0_12px_28px_rgba(0,0,0,0.45)]"
+            style={{ animation: 'fade-up .16s ease-out' }}
+          >
+            <div className="flex shrink-0 items-center gap-2 border-b border-surface-container-highest px-4 py-2">
+              <span className={`flex h-[18px] w-[40px] shrink-0 items-center justify-center rounded text-[10.5px] font-medium ${ROLE_COLOR[detail.role].chip}`}>
+                {ROLE_LABEL[detail.role]}
+              </span>
+              <span className="min-w-0 truncate font-mono text-[11.5px] text-on-surface">{detail.type}</span>
+              <span className="shrink-0 text-[10.5px] text-outline/70 tabular-nums">
+                第 {detail.turn} 轮 · {formatTime(detail.time)} · #{detail.seq}
+              </span>
+              <span className="flex-1" />
+              <button
+                type="button"
+                data-trajectory-drawer-close
+                onClick={() => setDetail(null)}
+                title="关闭详情"
+                className="flex size-6 cursor-pointer items-center justify-center rounded-md text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface"
+              >
+                <IconGlyph name="close" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {detailSections(detail.event).length === 0 ? (
+                <div className="text-[12px] text-outline">该事件没有可展示的详情数据。</div>
+              ) : (
+                detailSections(detail.event).map(section => (
+                  <section key={section.label} className="mb-3">
+                    <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-outline/70">
+                      {section.label}
+                    </div>
+                    <pre
+                      className={`whitespace-pre-wrap break-words rounded-lg border border-surface-container-high/50 bg-surface-container-lowest px-3 py-2 text-on-surface-variant ${
+                        section.mono ? 'font-mono text-[11px] leading-relaxed' : 'text-[12.5px] leading-relaxed'
+                      }`}
+                    >
+                      {section.text}
+                    </pre>
+                  </section>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
+}
+
+/** 抽屉详情分节：消息/思考全文、工具名/入参/结果/错误、原始事件数据。 */
+function detailSections(event: SessionEvent): { label: string; text: string; mono: boolean }[] {
+  const type = String(event.type)
+  const data = event.data as unknown as Record<string, unknown>
+  const out: { label: string; text: string; mono: boolean }[] = []
+  const pretty = (raw: unknown): string => {
+    if (raw === undefined || raw === null) return ''
+    try {
+      const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
+      const json = JSON.stringify(parsed, null, 2)
+      return json === '{}' || json === '[]' ? '' : json
+    } catch {
+      return typeof raw === 'string' ? raw : String(raw)
+    }
+  }
+  const message = data.message as Record<string, unknown> | undefined
+  if (type === 'assistant/message' || type === 'user/message' || type === 'system/message') {
+    const text = partText(data.content, 'text') || partText(message?.content, 'text')
+    if (text.length > 0) out.push({ label: '消息', text, mono: false })
+    const reasoning = partText(message?.content ?? data.content, 'reasoning')
+    if (reasoning.length > 0) out.push({ label: '思考', text: reasoning, mono: false })
+  }
+  if (type === 'tool/call') {
+    if (typeof data.name === 'string' && data.name.length > 0) {
+      out.push({ label: '工具', text: data.name, mono: false })
+    }
+    const args = pretty(data.arguments)
+    if (args.length > 0) out.push({ label: '入参', text: args, mono: true })
+  }
+  if (type === 'tool/result') {
+    const text = partText(message?.content, 'text')
+    if (text.length > 0) out.push({ label: '结果', text, mono: false })
+    const error = pretty(data.error)
+    if (error.length > 0) out.push({ label: '错误', text: error, mono: true })
+  }
+  const payload = pretty(data)
+  if (payload.length > 0) out.push({ label: '事件数据', text: payload, mono: true })
+  return out
 }
 
 /** 内联图标（material 字形；避免为每个模式引 Icon 组件的路径依赖）。 */

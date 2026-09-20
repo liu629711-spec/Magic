@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { CSSProperties as ReactCSSProperties, DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { Icon } from "./Icon";
 import { Folder3DIcon } from "./Folder3DIcon";
 import { SearchPalette, type PaletteSession } from "./SearchPalette";
@@ -18,6 +18,46 @@ const row =
   "group relative flex items-center justify-between h-8 px-2 rounded-xl text-on-surface-variant transition-[background-color,color,transform] duration-150 active:scale-[0.98] truncate cursor-pointer w-full";
 
 const rowLabel = "text-[14px] font-medium truncate";
+/** 会话名行内展示（图一/图八体验，2026-09-19 用户裁定）：静态右缘渐隐裁切，
+ *  悬浮且溢出时横向循环滚动展示全名（title-marquee）。 */
+const sessionRowLabel = "text-[14px] font-medium";
+const titleMask =
+  "[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]";
+
+function RowTitle({ title }: { title: string }) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [overflow, setOverflow] = useState(false);
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const check = () => setOverflow(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [title]);
+  const shift =
+    ref.current === null ? 0 : -(ref.current.scrollWidth - ref.current.clientWidth);
+  const style =
+    overflow && hover
+      ? ({
+          "--marquee-shift": `${String(shift)}px`,
+          animation: "title-marquee 7s ease-in-out infinite",
+        } as ReactCSSProperties)
+      : undefined;
+  return (
+    <span
+      ref={ref}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className={`${sessionRowLabel} block max-w-full overflow-hidden whitespace-nowrap ${overflow ? titleMask : ""}`}
+      style={style}
+    >
+      {title}
+    </span>
+  );
+}
 
 const actionBtn =
   "w-6 h-6 rounded-md flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-low transition-[opacity,background-color,color] cursor-pointer";
@@ -107,7 +147,7 @@ type DropHandlers = {
  *    打开文件夹/搜索文件与设置组 M1 无后端，置灰占位）。
  * 回退时删掉 RowActions 中 pin、拖拽 handlers、SearchPalette 引用即可。
  */
-export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, showMockSections = true, onOpenSkills, onOpenAutomation, onOpenSettings, assigned, onAssign, recentLimit = 20, sessionCwds, width = 260, collapsed = false, onToggleCollapsed }: {
+export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, onExportSession, labels, onRenameSession, onCreateSession, remoteWorkspaces, remoteTaskSessions, sessionStatuses, showMockSections = true, onOpenSkills, onOpenAutomation, onOpenSettings, assigned, onAssign, recentLimit = 20, sessionCwds, width = 260, collapsed = false, onToggleCollapsed }: {
   activeSessionId: string
   onOpenSession: (id: string) => void
   onForkSession: (sourceId: string, forkId: string) => void
@@ -135,6 +175,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   remoteWorkspaces?: Workspace[]
   /** web 后端模式：任务区数据源 = 全部会话按最近时间倒序（App 下发；新建任务即排第一） */
   remoteTaskSessions?: string[]
+  /** web/mock 统一会话状态：所有分区共用 running/interrupted/completed 图标。 */
+  sessionStatuses?: Record<string, SessionStatus>
   /** mock 数据分区显隐；web 后端模式传 false（置顶区转真实置顶、任务区转最近会话） */
   showMockSections?: boolean
   /** 最近任务区最多渲染条数（设置页可调；缺省 20） */
@@ -280,8 +322,30 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
   /** 显示名：web 端标题投影 > 重命名覆盖 > 基准名。store/种子键始终用基准名（base）。 */
   const titleOf = (key: string, base: string) => labels?.[key] ?? renamed[key] ?? base;
 
-  const statusOf = (task: PinTask | undefined): SessionStatus | "ack" =>
-    acknowledged[task?.id ?? ""] ? "ack" : task?.status ?? "idle";
+  const statusOf = (key: string, task: PinTask | undefined): SessionStatus | "ack" => {
+    const status = sessionStatuses?.[key] ?? task?.status ?? "idle";
+    // 重新运行必须打断旧的“已读完成/中断”状态，运行中的书写动画优先显示。
+    return status === "running" ? "running" : acknowledged[key] ? "ack" : status;
+  };
+  useEffect(() => {
+    const runningKeys = new Set(
+      Object.entries(sessionStatuses ?? {})
+        .filter(([, status]) => status === "running")
+        .map(([key]) => key),
+    );
+    if (runningKeys.size === 0) return;
+    setAcknowledged(previous => {
+      const next = { ...previous };
+      let changed = false;
+      for (const key of runningKeys) {
+        if (next[key] === true) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [sessionStatuses]);
   const acknowledge = (id: string) =>
     setAcknowledged((s) => ({ ...s, [id]: true }));
 
@@ -733,7 +797,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                 headerClass={sectionHeaderClass("pinned")}
               >
             {displayedPinned.map((item, i) => {
-              const status = statusOf(item.task);
+              const status = statusOf(item.key, item.task);
               const title = titleOf(item.key, item.base);
               // beforeKey 语义按 pinned 键（key）匹配；mock 任务 key≠base，不能取 base
               const nextKey = displayedPinned[i + 1]?.key ?? null;
@@ -745,8 +809,8 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                   aria-current={item.task?.current ? "page" : undefined}
                   onClick={(e) => {
                     e.preventDefault();
-                    if (item.task !== undefined && (status === "completed" || status === "interrupted")) {
-                      acknowledge(item.task.id);
+                    if (status === "completed" || status === "interrupted") {
+                      acknowledge(item.key);
                     }
                     // v2 联动：置顶任务行也切换对话区（id 即标题，无 mock 时为空白会话）
                     openRow(item.key, item.base);
@@ -763,15 +827,9 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                   }`}
                 >
                   {dropIndicator(item.key)}
-                  <span className="flex items-center gap-space-sm min-w-0">
-                    {status === "running" ? (
-                      <RunningPen />
-                    ) : status === "interrupted" ? (
-                      <StoppedPen />
-                    ) : status === "completed" ? (
-                      <CompletedCheck />
-                    ) : null}
-                    <span className={rowLabel}>{title}</span>
+                  <span className="flex flex-1 items-center gap-space-sm min-w-0">
+                    <SessionStatusIcon status={status} />
+                    <RowTitle title={title} />
                   </span>
                   <RowActions
                     label={title}
@@ -852,6 +910,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                     <ScrollArea className={scrollable ? "max-h-40" : ""}>
                       {displayed.map((s, i) => {
                           const title = titleOf(s, s);
+                          const status = statusOf(s, undefined);
                           const nextKey = displayed[i + 1] ?? null;
                           return (
                             <a
@@ -860,6 +919,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                               draggable
                               onClick={(e) => {
                                 e.preventDefault();
+                                if (status === "completed" || status === "interrupted") acknowledge(s);
                                 openRow(s, s);
                               }}
                               onContextMenu={(e) => onRowContextMenu(e, s, s, "ws", ws.id)}
@@ -868,17 +928,18 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                               onDragOver={(e) => onRowDragOver(e, s)}
                               onDrop={(e) => onRowDrop(e, { section: "ws", wsId: ws.id, key: s, nextKey })}
                               className={`${row} pl-8 ${
-                                s === activeSessionId
+                                s === activeSessionId || status === "running"
                                   ? "bg-surface-container-low text-on-surface"
                                   : "hover:bg-surface-container-low hover:text-on-surface"
                               }`}
                             >
                               {dropIndicator(s)}
-                              <span className="flex items-center gap-1.5 min-w-0">
+                              <span className="flex flex-1 items-center gap-1.5 min-w-0">
+                                <SessionStatusIcon status={status} />
                                 {unread[s] === true ? (
                                   <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                                 ) : null}
-                                <span className={`${rowLabel} min-w-0`}>{title}</span>
+                                <RowTitle title={title} />
                               </span>
                               <RowActions
                                 label={title}
@@ -918,6 +979,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
               >
             {shownTasks.map((key, i) => {
               const title = titleOf(key, key);
+              const status = statusOf(key, undefined);
               const nextKey = shownTasks[i + 1] ?? null;
               return (
                 <a
@@ -926,6 +988,7 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                   draggable
                   onClick={(e) => {
                     e.preventDefault();
+                    if (status === "completed" || status === "interrupted") acknowledge(key);
                     openRow(key, key);
                   }}
                   onContextMenu={(e) => onRowContextMenu(e, key, key, "task")}
@@ -934,17 +997,18 @@ export function SessionSidebar({ activeSessionId, onOpenSession, onForkSession, 
                   onDragOver={(e) => onRowDragOver(e, key)}
                   onDrop={(e) => onRowDrop(e, { section: "task", key, nextKey })}
                   className={`${row} ${
-                    key === activeSessionId
+                    key === activeSessionId || status === "running"
                       ? "bg-surface-container-low text-on-surface"
                       : "hover:bg-surface-container-low hover:text-on-surface"
                   }`}
                 >
                   {showMockSections ? dropIndicator(key) : null}
-                  <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="flex flex-1 items-center gap-1.5 min-w-0">
+                    <SessionStatusIcon status={status} />
                     {unread[key] === true ? (
                       <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                     ) : null}
-                    <span className={rowLabel}>{title}</span>
+                    <RowTitle title={title} />
                   </span>
                   <RowActions
                     label={title}
@@ -1142,8 +1206,8 @@ function NavList({ onNewSession, onOpenSearch, onOpenSkills, onOpenAutomation }:
           href="#"
           onClick={(e) => {
             e.preventDefault();
-            // 技能扩展（裁定 22）：进入技能扩展视图（左栏不变，主区替换）
-            if (item.label === "技能扩展") onOpenSkills?.();
+            // 插件市场（2026-09-19 改名，裁定 22）：进入插件市场视图（左栏不变）
+            if (item.label === "插件市场") onOpenSkills?.();
             // 定时任务（2026-09-19）：进入定时任务视图
             if (item.label === "定时任务") onOpenAutomation?.();
           }}
@@ -1256,6 +1320,13 @@ function CompletedCheck() {
       <Icon name="check" className="text-tertiary text-[12px] font-bold" />
     </span>
   );
+}
+
+function SessionStatusIcon({ status }: { status: SessionStatus | "ack" | undefined }) {
+  if (status === "running") return <RunningPen />;
+  if (status === "interrupted") return <StoppedPen />;
+  if (status === "completed") return <CompletedCheck />;
+  return null;
 }
 
 /** 可折叠分组标题：展开时纯文字（悬浮显示操作按钮），收起时带「›」箭头。
@@ -1391,7 +1462,15 @@ function ScrollArea({ className, grow, children }: {
   const C = 2 * Math.PI * R;
   return (
     <div className={`relative min-h-0 flex flex-col ${grow === true ? "flex-1" : ""}`}>
-      <div ref={scrollerRef} className={`flex-1 min-h-0 overflow-y-auto space-y-px ${className ?? ""}`}>
+      <div
+        ref={scrollerRef}
+        className={`flex-1 min-h-0 overflow-y-auto space-y-px ${
+          grow === true
+            ? // 底部渐隐（图二反馈，2026-09-19）：被视口裁切的半行柔和收尾，不生硬露出
+              "[mask-image:linear-gradient(to_bottom,black_calc(100%-16px),transparent)]"
+            : ""
+        } ${className ?? ""}`}
+      >
         {children}
       </div>
       <div
@@ -1513,7 +1592,7 @@ function RowActions({ label, pinned, onTogglePin, onOpen }: {
   onOpen: (rect: DOMRect) => void;
 }) {
   return (
-    <span className="flex items-center gap-0.5 shrink-0">
+    <span className="absolute right-1.5 flex items-center gap-0.5">
       <button
         type="button"
         title={pinned ? "取消置顶聊天" : "置顶聊天"}

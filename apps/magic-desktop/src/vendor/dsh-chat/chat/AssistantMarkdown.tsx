@@ -35,7 +35,50 @@ export interface AssistantMarkdownProps {
   t: ChatViewSlotProps['t']
 }
 
-/** Reasoning 块作为 Think 变体摘要行（figma 39:28304）。 */
+/**
+ * 剥离文本块里内联的 `<think>…</think>` 段（部分模型/中转把思考以字面标签混在
+ * 正文里，官方折叠层只认 kind:'reasoning' 块）：think 段转为独立 reasoning 块
+ * （Think 折叠行呈现），残留的孤立 `</think>` 字面量清除——否则思考全文以
+ * 不可见形态占位（消息区大片空白）且闭合标签原样泄漏到正文。
+ * 未闭合的 `<think>`（流式进行中）视为思考持续到文本尾。
+ */
+function normalizeThinkBlocks(blocks: readonly AssistantBlock[]): readonly AssistantBlock[] {
+  const hasThink = blocks.some(
+    block => block.kind === 'text' && (block.text.includes('<think>') || block.text.includes('</think>')),
+  )
+  if (!hasThink) return blocks
+  const out: AssistantBlock[] = []
+  for (const block of blocks) {
+    if (block.kind !== 'text') {
+      out.push(block)
+      continue
+    }
+    const text = block.text
+    let cursor = 0
+    while (cursor < text.length) {
+      const open = text.indexOf('<think>', cursor)
+      if (open === -1) break
+      const head = text.slice(cursor, open)
+      if (head.replace(/<\/think>/g, '').trim() !== '') {
+        out.push({ kind: 'text', text: head.replace(/<\/think>/g, '') })
+      }
+      const close = text.indexOf('</think>', open + 7)
+      if (close === -1) {
+        const body = text.slice(open + 7)
+        if (body.trim() !== '') out.push({ kind: 'reasoning', text: body.trim() })
+        cursor = text.length
+      } else {
+        const body = text.slice(open + 7, close)
+        if (body.trim() !== '') out.push({ kind: 'reasoning', text: body.trim() })
+        cursor = close + 8
+      }
+    }
+    const tail = text.slice(cursor).replace(/<\/think>/g, '')
+    if (tail.trim() !== '') out.push({ kind: 'text', text: tail })
+  }
+  return out
+}
+
 export const AssistantMarkdown = memo(function AssistantMarkdown({
   blocks, streaming, interrupted, renderMessageImages,
   reasoningHidden = false, revealProcess, mentions, t,
@@ -50,17 +93,20 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
     const { protocol, origin } = window.location
     return { resolve: value => localPathMediaUrl(protocol, origin, value) }
   }, [])
-  const last = blocks.length - 1
+  // <think> 内联段剥离（见 normalizeThinkBlocks）：blocks 引用随折叠快照重建，
+  // memo 保持幂等输入不重算。
+  const displayBlocks = useMemo(() => normalizeThinkBlocks(blocks), [blocks])
+  const last = displayBlocks.length - 1
   // Tool-call heads render as tool rows in the chat view's grouping pass, so
   // a node that is only those heads (or empty) would paint an empty root
   // between tool groups — skip the shell unless something visible remains.
   const hasVisible = streaming
     || interrupted === true
-    || blocks.some(block => block.kind !== 'tool-call')
+    || displayBlocks.some(block => block.kind !== 'tool-call')
   if (!hasVisible) return null
   const rendered: ReactNode[] = []
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i]
+  for (let i = 0; i < displayBlocks.length; i++) {
+    const block = displayBlocks[i]
     if (block === undefined) continue
     switch (block.kind) {
       case 'text':
@@ -94,8 +140,8 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         // the gallery under a shifted key.
         const start = i
         const group = [block]
-        while (i + 1 < blocks.length) {
-          const next = blocks[i + 1]
+        while (i + 1 < displayBlocks.length) {
+          const next = displayBlocks[i + 1]
           if (next === undefined || next.kind !== 'image') break
           group.push(next)
           i += 1

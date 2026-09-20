@@ -47,6 +47,10 @@
  * 不用 display:none，保留 until-found 的 beforematch 展开能力。 */
 .flow [data-chat-flow] > [hidden='until-found'] {
   content-visibility: hidden;
+  /* 盒收口（2026-09-20）：content-visibility 只隐藏内容、盒子保留——每行剩
+   * flowItem 的 2px 上下 padding，48 行过程成员 ≈ 200px 纯空白。归零后彻底
+   * 收起，beforematch 展开能力不变（属性仍在）。 */
+  padding-block: 0;
 }
 
 /* 对话内容区宽度手柄（2026-09-18，3099 实测对齐）：贴内容列两侧 24px 的

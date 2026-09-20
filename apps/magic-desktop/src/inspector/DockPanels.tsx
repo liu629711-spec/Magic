@@ -12,10 +12,19 @@ export interface DockSessionBridge {
   fork: (id: string) => Promise<string>
   follow: (id: string, store: ChatSessionStore, parentId?: string) => () => void
   prompt: (id: string, text: string) => Promise<void>
-  selectModel: (id: string, provider: string, model: string) => Promise<void>
+  /** reasoningEffort（2026-09-19 思考级别）：随模型选择下发，缺省交回 provider 默认。 */
+  selectModel: (id: string, provider: string, model: string, reasoningEffort?: string) => Promise<void>
   openSession: (id: string) => void
-  /** 模型目录（App 级 session/modelCatalog；侧边分身 composer 的模型列表）。 */
-  modelCatalog?: { key: string; name: string; tag?: string; provider: string }[]
+  /** 模型目录（App 级 session/modelCatalog；侧边分身 composer 的模型列表）。
+   *  efforts/defaultEffort（2026-09-19）：思考级别滑杆的自适应数据源。 */
+  modelCatalog?: {
+    key: string
+    name: string
+    tag?: string
+    provider: string
+    efforts?: { id: string; name: string }[]
+    defaultEffort?: string
+  }[]
   /** 任务当前模型（RemoteSessionRow.model）。 */
   sessionModelOf?: (id: string) => { provider: string; model: string } | undefined
   /** 命令执行（/permission、/mode 等；commands/execute，agentId=会话 id）。 */

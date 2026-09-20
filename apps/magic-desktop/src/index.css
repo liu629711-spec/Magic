@@ -44,6 +44,13 @@
 }
 /* pop-in 同因补定义（2026-09-18）：PromptBar 各浮层/ContextMeter 弹窗以 inline style
  * 引用 pop-in，缺全局 keyframes 时动画静默失效（见上方注释说明）。 */
+@keyframes title-marquee {
+  /* 会话名悬浮横滚（图八，2026-09-19）：0→15% 停头，15%→60% 匀速左移
+     --marquee-shift（=溢出宽度，行内 style 注入），60%→100% 停尾回位循环。 */
+  0%, 15% { transform: translateX(0); }
+  60%, 85% { transform: translateX(var(--marquee-shift, 0px)); }
+  100% { transform: translateX(0); }
+}
 @keyframes pop-in {
   0% { opacity: 0; transform: scale(0.96) translateY(2px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }
@@ -235,4 +242,21 @@
 @keyframes eq-bounce {
   0%, 100% { transform: scaleY(0.4); }
   50% { transform: scaleY(1); }
+}
+/* 右坞 tab 行右侧为窗口控制条（— □ ×，固定 z-80）让位（2026-09-19 用户裁定：
+   窗口控制与右坞 tab 行同排相辅相成，非两层）。仅作用于已打开的右轨面板内的
+   dockkit tab 行；浮动窗格不受影响。 */
+[data-sidebar-right-open] [data-dockkit-strip] {
+  padding-right: 148px;
+}
+
+/* fileMention 行内码芯片（MarkdownText，2026-09-20）：官方样式假设链接图标 svg
+   以 inline 基线骑行（.linkIcon 只有 vertical-align/margin），且 .fileMention 按钮
+   不设 display；Tailwind preflight 的 svg{display:block} 在 Magic 里让图标独占一行、
+   文字掉到第二行（芯片内折成两行）。按钮改单行 flex 布局，内部不再折行——
+   行尾放不下时芯片整体换行，与 3099 基准一致。 */
+.vendor-dsh-chat button[class*="fileMention"] {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }

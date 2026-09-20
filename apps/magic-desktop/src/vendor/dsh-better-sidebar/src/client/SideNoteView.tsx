@@ -56,9 +56,17 @@ export function SideNoteView(props: {
   /** 分身 composer 数据面（BuiltinTabOptions.sideNote.chat）：模型/命令/@候选，
       与主会话同源、按子会话 id 参数化——缺项诚实降级。 */
   chat?: {
-    modelCatalog?: { key: string; name: string; tag?: string; provider: string }[]
+    modelCatalog?: {
+      key: string
+      name: string
+      tag?: string
+      provider: string
+      /** 该模型支持的思考档位（catalog reasoning.efforts，2026-09-19 思考级别）。 */
+      efforts?: { id: string; name: string }[]
+      defaultEffort?: string
+    }[]
     sessionModelOf?: (sessionId: string) => { provider: string; model: string } | undefined
-    selectModel?: (sessionId: string, provider: string, model: string) => void
+    selectModel?: (sessionId: string, provider: string, model: string, reasoningEffort?: string) => void
     runCommand?: (sessionId: string, line: string) => void
     mentionOptions?: { key: string; name: string; desc: string; glyph?: string; attach?: boolean }[]
     commandOptions?: { key: string; name: string; desc: string }[]
@@ -153,6 +161,28 @@ export function SideNoteView(props: {
   // 同一套 PromptBar（模型/上下文圆环/访问模式/工作模式），数据按子会话 id 取。
   // childState 订阅让投影（permissions/contextPressure 等）随 follow 灌窗刷新。
   const childState = useSyncExternalStore(childStore.subscribe, childStore.getSnapshot)
+  // 分身思考级别（2026-09-19 自适应）：当前模型条目（efforts 数据源）+ 投影记录的
+  // effort（modelSelection wire 视图 {lastUsed, next}），回退模型默认档。
+  const childSelection = (() => {
+    const raw = childState.projections?.values?.modelSelection as
+      | {
+          next?: { provider?: string; model?: string; reasoningEffort?: string } | null
+          lastUsed?: { provider?: string; model?: string; reasoningEffort?: string } | null
+        }
+      | undefined
+    // wire 视图 next/lastUsed 均 nullable（model-selection-projection.ts:20-21），
+    // 新子会话初始为 null——null ?? undefined 不会兜底，必须一并排除。
+    const chosen = raw?.next ?? raw?.lastUsed
+    return chosen != null ? chosen : undefined
+  })()
+  const childModelKey =
+    childSelection?.provider !== undefined && childSelection?.model !== undefined
+      ? `${childSelection.provider}:${childSelection.model}`
+      : undefined
+  const childModelEntry =
+    childModelKey !== undefined ? chat?.modelCatalog?.find(option => option.key === childModelKey) : undefined
+  const childEffort =
+    childSelection?.reasoningEffort ?? childModelEntry?.defaultEffort ?? childModelEntry?.efforts?.[0]?.id
   const modelPicker = chat?.modelCatalog !== undefined && chat.modelCatalog.length > 0 && childId !== undefined
     ? {
         options: chat.modelCatalog,
@@ -163,7 +193,21 @@ export function SideNoteView(props: {
         onChange: (key: string) => {
           const option = chat.modelCatalog?.find(m => m.key === key)
           if (option === undefined) return
-          chat.selectModel?.(childId, option.provider, key.slice(option.provider.length + 1))
+          // 自适应（同主会话）：换模型时 effort 不兼容则落新模型默认档。
+          const carriedEffort =
+            childEffort !== undefined && option.efforts?.some(effort => effort.id === childEffort) === true
+              ? childEffort
+              : option.defaultEffort
+          const model = chat.sessionModelOf?.(childId)
+          if (model === undefined) return
+          chat.selectModel?.(childId, model.provider, key.slice(model.provider.length + 1), carriedEffort)
+        },
+        efforts: childModelEntry?.efforts,
+        currentEffort: childEffort,
+        onEffortChange: (effortId: string) => {
+          const model = chat.sessionModelOf?.(childId)
+          if (model === undefined) return
+          chat.selectModel?.(childId, model.provider, model.model, effortId)
         },
       }
     : undefined
@@ -173,8 +217,9 @@ export function SideNoteView(props: {
         values: childState.projections?.values ?? {},
         recentEventData: type => childStore.recentEventData(type),
         onCommand: line => chat?.runCommand?.(childId ?? '', line),
+        cwd: scope.cwd,
       }),
-    [childState, childStore, chat, childId],
+    [childState, childStore, chat, childId, scope.cwd],
   )
 
   /** 整段回流（sidenote reflow）：把子会话最终结论注入主会话输入框草稿。 */

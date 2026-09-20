@@ -8,7 +8,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { dshRpc } from "../adapters/dsh-web/rpc";
-import { ProviderEditorCard, CustomProviderCard } from "./models-editor";
+import { ToggleSwitch } from "../components/ToggleSwitch";
+import { ProviderIcon } from "../components/ProviderIcon";
+import { ProviderDetailPanel, CustomProviderCard } from "./models-editor";
+import { readDisabledProviders, writeDisabledProviders } from "./model-prefs";
 import {
   credentialsDescribe,
   credentialsUnset,
@@ -19,7 +22,6 @@ import {
   llmListConfigurableProviders,
   llmListProviders,
   protocolChoices,
-  providerUsable,
   settingsDescribe,
   settingsMutate,
   type CredentialInfo,
@@ -65,26 +67,38 @@ function targetOf(row: ProviderRow): EditorTarget {
   };
 }
 
-/** 全局无任何可用 provider 时：无键且整段级路由直接展开为初始配置卡（ModelsSection.tsx:141-145）。 */
-function needsSetup(row: ProviderRow, anyUsable: boolean): boolean {
-  if (anyUsable) return false;
-  if (row.entry.settingsPath.length > 0) return false;
-  return row.credential?.configured !== true;
-}
-
 function providerTargetLabel(target: { provider: string; displayName: string }): string {
   return target.provider === target.displayName ? target.provider : `${target.displayName} (${target.provider})`;
 }
+
+// 「添加供应商」精选目录（2026-09-19 用户裁定，按 ZCode 图二组织）。
+// entry.provider = DSH 目录真实适配器 id；点击时若该 id 已配置则直达其配置，
+// 否则进入未配置编辑卡；custom = 创建自定义供应商卡。
+const GALLERY_ENTRIES: { label: string; provider: string }[] = [
+  { label: "创建自定义供应商", provider: "custom" },
+  { label: "Z.ai Coding Plan", provider: "zai-coding-cn" },
+  { label: "Z.ai API", provider: "zai" },
+  { label: "Kimi", provider: "kimi-coding" },
+  { label: "MiniMax", provider: "minimax" },
+  { label: "DeepSeek", provider: "deepseek" },
+  { label: "阿里云百炼（中国）", provider: "qwen-token-plan-cn" },
+  { label: "阿里云百炼（国际）", provider: "qwen-token-plan" },
+  { label: "Xiaomi MiMo", provider: "xiaomi" },
+  { label: "OpenAI", provider: "openai" },
+  { label: "Anthropic", provider: "anthropic" },
+  { label: "xAI", provider: "xai" },
+  { label: "OpenRouter", provider: "openrouter" },
+  { label: "OpenCode Go (Chat)", provider: "opencode-go" },
+];
 
 // ── 视觉常量 ──
 const clsRowCard =
   "flex flex-col gap-3 rounded-2xl border-[0.5px] border-surface-container-high px-3.5 py-3";
 const clsRowButton =
   "box-border inline-flex h-7 items-center justify-center rounded-[14px] px-2.5 text-[12px] leading-[18px] transition-colors focus-visible:shadow-[0_0_0_2px_var(--color-outline)] disabled:opacity-40 disabled:cursor-default";
-const clsEditButton = `${clsRowButton} border-[0.5px] border-surface-container-high text-on-surface hover:bg-surface-container-high`;
 const clsDangerButton = `${clsRowButton} text-error hover:bg-error/10`;
-const clsAddButton =
-  "box-border inline-flex h-11 min-w-[180px] flex-1 flex-wrap items-center justify-center gap-1.5 rounded-2xl border-[0.5px] border-dashed border-surface-container-high text-[14px] leading-[22px] text-on-surface transition-colors hover:bg-surface-container-high focus-visible:shadow-[0_0_0_2px_var(--color-outline)] disabled:opacity-40 disabled:cursor-default";
+
+
 
 /** 删除确认浮层（官方 Modal 语义的轻量实现）。 */
 function ConfirmDialog({ target, busy, failure, onCancel, onConfirm }: {
@@ -202,11 +216,13 @@ export function ModelsSection(): ReactNode {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [state, setState] = useState<LoadedState | undefined>(undefined);
-  // 每类卡各自的开关状态，互不挤占（官方 ModelsSection.tsx:207-214）。
-  const [editing, setEditing] = useState<EditorTarget | undefined>(undefined);
-  const [adding, setAdding] = useState(false);
+  // 主从布局（2026-09-19，ZCode 图一形态）：左列提供方清单，右栏详情编辑卡。
+  // 启用/停用开关为客户端偏好（localStorage），runtime 暂无提供方停用通道。
+  const [selected, setSelected] = useState<string | undefined>(undefined);
   const [declaring, setDeclaring] = useState(false);
-  const [dismissedSetup, setDismissedSetup] = useState<ReadonlySet<string>>(() => new Set());
+  const [gallery, setGallery] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [disabledProviders, setDisabledProviders] = useState<ReadonlySet<string>>(readDisabledProviders);
   const [savedProvider, setSavedProvider] = useState<string | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<EditorTarget | undefined>(undefined);
   const [deleting, setDeleting] = useState(false);
@@ -280,12 +296,14 @@ export function ModelsSection(): ReactNode {
     void reload().catch(() => undefined);
   };
 
-  const closeEditor = (changed: boolean, target: EditorTarget): void => {
-    setEditing(undefined);
-    setAdding(false);
-    setDeclaring(false);
-    if (changed) announceSaved(target);
-  };
+  // 选中回退：选中行被删除（不在 rows）时选第一个已接入行（自定义或已配置内置）；
+  // 未配置的目录项被选中时（添加流程）必须保留，不能被重置。
+  useEffect(() => {
+    if (state === undefined) return;
+    if (state.rows.some(row => row.entry.provider === selected)) return;
+    const visible = state.rows.filter(row => row.entry.declared === true || row.configured);
+    setSelected(visible[0]?.entry.provider);
+  }, [state, selected]);
 
   const confirmDelete = (): void => {
     if (deleteTarget === undefined || deleting) return;
@@ -336,22 +354,56 @@ export function ModelsSection(): ReactNode {
   }
 
   const { rows, namespaces, writable } = state;
-  const configured = rows.filter(row => row.configured);
   const configurable = rows.filter(row => namespaces.has(row.entry.settingsNs));
   const addable = configurable.filter(row => !row.configured);
-  const anyUsable = rows.some(row => providerUsable(row));
-  const addTarget = adding ? editing : undefined;
-  const addNamespace = addTarget === undefined ? undefined : namespaces.get(addTarget.settingsNs);
   const protocols = protocolChoices(namespaces.get("llm-pi-ai"));
   const piAiRevision = namespaces.get("llm-pi-ai")?.revision ?? 0;
+  const selectedRow = rows.find(row => row.entry.provider === selected);
+  const selectedTarget = selectedRow === undefined ? undefined : targetOf(selectedRow);
+  const selectedNamespace = selectedRow === undefined || selectedTarget === undefined
+    ? undefined
+    : namespaces.get(selectedTarget.settingsNs);
+  // 左列只显示已接入的：自定义提供方 + 已完成配置的内置（DeepSeek 配置后落此组）。
+  const builtInRows = rows.filter(row => row.entry.declared !== true && row.configured);
+  const declaredRows = rows.filter(row => row.entry.declared === true);
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="m-0 text-[16px] leading-6 font-medium text-on-surface">模型</h2>
-      <p className="m-0 text-[14px] leading-[22px] text-on-surface-variant">
-        填入各提供方的 API 密钥即可使用其模型。会话中切换模型在输入栏的模型选择器进行；
-        各代理的默认模型是其自身配置，不在此页设置。
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="m-0 text-[22px] leading-7 font-semibold tracking-tight text-on-surface">模型设置</h2>
+          <p className="mt-1 text-[12.5px] leading-5 text-outline">
+            管理自定义模型供应商，配置后可在聊天时选择使用。会话中切换模型在输入栏的模型选择器进行；
+            各代理的默认模型是其自身配置，不在此页设置。
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            title="重新加载提供方清单"
+            aria-label="刷新提供方清单"
+            onClick={() => { void reload().catch(() => undefined); }}
+            className="flex size-8 cursor-pointer items-center justify-center rounded-lg border border-line text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+          >
+            <span className="material-symbols-outlined text-[16px]">sync</span>
+          </button>
+          <button
+            type="button"
+            data-model-add-provider=""
+            disabled={!writable}
+            onClick={() => {
+              setSavedProvider(undefined);
+              setNotice("");
+              setDeclaring(false);
+              setGallery(true);
+            }}
+            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-[12.5px] font-medium text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-40"
+          >
+            <span aria-hidden className="text-[16px] leading-none">+</span>
+            添加供应商
+          </button>
+        </div>
+      </div>
       {!writable ? <p className="m-0 text-[12px] leading-[18px] text-orange">当前部署的设置文档为只读。</p> : null}
       {state.credentialError !== null ? (
         <p className="m-0 text-[12px] leading-[18px] text-orange">凭证状态读取失败：{state.credentialError}</p>
@@ -361,90 +413,218 @@ export function ModelsSection(): ReactNode {
           {`已保存 ${savedProvider}。`}
         </p>
       )}
-      <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
-        {configured.map(row => {
-          const target = targetOf(row);
-          const namespace = namespaces.get(target.settingsNs);
-          if (namespace === undefined) return null;
-          const open = !adding && !declaring && editing?.provider === row.entry.provider;
-          const credentialConfigured = row.credential?.configured === true;
-          const credentialMissing = !credentialConfigured
-            && row.apiKeyEnv !== undefined
-            && row.credential?.configured === false;
-          if (needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
-            // 首跑姿态：该 provider 还没有键——初始配置卡就是它在页上的存在形式。
-            return (
-              <li key={row.entry.provider} className="flex flex-col gap-3 rounded-xl bg-surface-container-low px-4 py-3.5">
-                <div className="text-[14px] leading-[22px] font-medium text-on-surface">{row.entry.displayName}</div>
-                <ProviderEditorCard
-                  provider={target.provider}
-                  displayName={target.displayName}
-                  namespace={namespace}
-                  settingsPath={target.settingsPath}
-                  {...(target.declared === true ? { declared: true } : {})}
-                  readOnly={!writable}
-                  hideTitle
-                  onClose={changed => {
-                    setDismissedSetup(previous => new Set([...previous, target.provider]));
-                    if (changed) announceSaved(target);
-                  }}
-                />
-              </li>
-            );
-          }
-          return (
-            <li key={row.entry.provider} className={clsRowCard}>
+      {notice.length === 0 ? null : (
+        <p role="status" aria-live="polite" className="m-0 text-[12px] leading-[18px] text-outline">{notice}</p>
+      )}
+
+      {/* 主从布局（ZCode 图一）：左列提供方清单（状态点），右栏详情编辑卡 */}
+      <div className="mt-1 grid min-h-[440px] grid-cols-1 overflow-hidden rounded-2xl border-[0.5px] border-surface-container-high md:grid-cols-[250px_1fr]">
+        <aside className="flex flex-col border-surface-container-high py-2 md:border-r">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {([
+              { label: "内置提供方", items: builtInRows },
+              { label: "自定义提供方", items: declaredRows },
+            ]).map(group => group.items.length === 0 ? null : (
+              <div key={group.label}>
+                <div className="px-3 pb-1 pt-2 text-[11px] leading-4 text-outline">{group.label}</div>
+                {group.items.map(row => {
+                  const credentialConfigured = row.credential?.configured === true;
+                  const credentialMissing = !credentialConfigured
+                    && row.apiKeyEnv !== undefined
+                    && row.credential?.configured === false;
+                  return (
+                    <button
+                      key={row.entry.provider}
+                      type="button"
+                      data-model-provider={row.entry.provider}
+                      onClick={() => {
+                        setDeclaring(false);
+                        setGallery(false);
+                        setSavedProvider(undefined);
+                        setNotice("");
+                        setSelected(row.entry.provider);
+                      }}
+                      className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition-colors ${
+                        selected === row.entry.provider && !declaring
+                          ? "bg-surface-container-high"
+                          : "hover:bg-surface-container-low"
+                      }`}
+                    >
+                      <span className="flex size-5 shrink-0 items-center justify-center">
+                        <ProviderIcon provider={row.entry.provider} size={16} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-on-surface">{row.entry.displayName}</span>
+                      <span
+                        className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+                          credentialConfigured ? "bg-tertiary" : credentialMissing ? "bg-error" : "bg-orange"
+                        }`}
+                        role="img"
+                        aria-label={credentialConfigured ? "已配置" : credentialMissing ? "API 密钥缺失" : "未配置"}
+                        title={credentialConfigured ? "API 密钥已配置" : credentialMissing ? "API 密钥缺失" : "未配置"}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className="min-h-0 overflow-y-auto p-5">
+          {declaring ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="返回提供方清单"
+                  title="返回"
+                  onClick={() => setDeclaring(false)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+                >
+                  <span className="material-symbols-outlined text-[17px]">arrow_back</span>
+                </button>
+                <span className="text-[16px] leading-6 font-semibold text-on-surface">添加自定义提供方</span>
+              </div>
+              <CustomProviderCard
+                taken={rows.map(row => row.entry.provider)}
+                revision={piAiRevision}
+                protocols={protocols}
+                readOnly={!writable}
+                onClose={changed => {
+                  setDeclaring(false);
+                  if (changed) void reload().catch(() => undefined);
+                }}
+              />
+            </div>
+          ) : gallery ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="返回提供方清单"
+                  title="返回"
+                  onClick={() => setGallery(false)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+                >
+                  <span className="material-symbols-outlined text-[17px]">arrow_back</span>
+                </button>
+                <span className="text-[16px] leading-6 font-semibold text-on-surface">添加供应商</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {GALLERY_ENTRIES.flatMap(entry => {
+                  const cards: { entry: { label: string; provider: string }; kind: "custom" | "configured" | "addable" }[] = [];
+                  if (entry.provider === "custom") {
+                    cards.push({ entry, kind: "custom" });
+                  } else {
+                    const existing = rows.find(row => row.entry.provider === entry.provider);
+                    if (existing !== undefined && existing.configured) {
+                      cards.push({ entry, kind: "configured" });
+                    }
+                    if (addable.some(row => row.entry.provider === entry.provider)) {
+                      cards.push({ entry, kind: "addable" });
+                    }
+                    // 既未配置也不在目录里（DSH 无该适配器）时诚实跳过
+                  }
+                  return cards.map(card => (
+                    <button
+                      key={card.entry.provider + card.kind}
+                      type="button"
+                      data-model-gallery={card.entry.provider}
+                      disabled={card.kind === "custom" && (protocols.length === 0 || !writable)}
+                      onClick={() => {
+                        setGallery(false);
+                        setSavedProvider(undefined);
+                        setNotice("");
+                        if (card.kind === "custom") {
+                          setDeclaring(true);
+                          return;
+                        }
+                        setSelected(card.entry.provider);
+                      }}
+                      className="flex cursor-pointer items-center gap-3 rounded-xl border-[0.5px] border-surface-container-highest bg-surface-container-low px-4 py-3.5 text-left transition-colors hover:bg-surface-container-low/60 disabled:cursor-default disabled:opacity-40"
+                    >
+                      {card.kind === "custom" ? (
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-container-high text-[18px] text-on-surface-variant">
+                          +
+                        </span>
+                      ) : (
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-container-high">
+                          <ProviderIcon provider={card.entry.provider} size={20} />
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-[14px] leading-5 font-medium text-on-surface">
+                        {card.entry.label}
+                      </span>
+                      {card.kind !== "configured" ? null : (
+                        <span
+                          className="inline-block h-2 w-2 shrink-0 rounded-full bg-tertiary"
+                          role="img"
+                          aria-label="已接入"
+                          title="已接入，点击查看配置"
+                        />
+                      )}
+                      <span className="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+                    </button>
+                  ));
+                })}
+              </div>
+            </div>
+          ) : selectedRow === undefined || selectedTarget === undefined ? (
+            <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-2 text-center text-[12.5px] leading-relaxed text-outline">
+              <span>还没有接入任何提供方。</span>
+              <span>点击右上角「添加供应商」配置 DeepSeek，或创建自定义供应商。</span>
+            </div>
+          ) : selectedNamespace === undefined ? (
+            <div className="text-[12.5px] leading-relaxed text-outline">
+              提供方「{selectedRow.entry.displayName}」在当前部署不可配置。
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2.5">
-                <span className="inline-flex min-w-0 items-center gap-1.5">
-                  <span className="text-[14px] leading-[22px] font-medium text-on-surface">{row.entry.displayName}</span>
-                  {row.entry.declared === true ? (
-                    <span className="shrink-0 rounded border-[0.5px] border-surface-container-high px-1.5 py-px text-[11px] leading-4 text-on-surface-variant">
-                      自定义
-                    </span>
-                  ) : null}
-                  {credentialConfigured ? (
-                    <span
-                      className="inline-block h-2 w-2 shrink-0 rounded-full bg-tertiary"
-                      role="img"
-                      aria-label="API 密钥已配置"
-                      title="API 密钥已配置"
-                    />
-                  ) : credentialMissing ? (
-                    <span
-                      className="inline-block h-2 w-2 shrink-0 rounded-full bg-error"
-                      role="img"
-                      aria-label="API 密钥缺失"
-                      title="API 密钥缺失"
-                    />
-                  ) : null}
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-container-high">
+                  <ProviderIcon provider={selectedRow.entry.provider} size={20} />
                 </span>
-                {row.entry.error === undefined ? null : (
-                  <span className="min-w-0 truncate text-[12px] leading-[18px] text-error">{row.entry.error}</span>
+                <span className="text-[16px] leading-6 font-semibold text-on-surface">{selectedRow.entry.displayName}</span>
+                {selectedRow.entry.declared === true ? (
+                  <span className="shrink-0 rounded border-[0.5px] border-surface-container-high px-1.5 py-px text-[11px] leading-4 text-on-surface-variant">
+                    自定义
+                  </span>
+                ) : null}
+                {selectedRow.entry.error === undefined ? null : (
+                  <span className="min-w-0 truncate text-[12px] leading-[18px] text-error">{selectedRow.entry.error}</span>
                 )}
-                <span className="ml-auto inline-flex items-center gap-1">
-                  <button
-                    type="button"
-                    className={clsEditButton}
-                    aria-label={`编辑 ${providerTargetLabel(target)}`}
-                    onClick={() => {
-                      setSavedProvider(undefined);
-                      setDeclaring(false);
-                      setAdding(false);
-                      setEditing(open ? undefined : target);
+                <span className="ml-auto flex items-center gap-2">
+                  <ToggleSwitch
+                    checked={!disabledProviders.has(selectedRow.entry.provider)}
+                    title={
+                      disabledProviders.has(selectedRow.entry.provider)
+                        ? `已停用「${selectedRow.entry.displayName}」（客户端偏好；runtime 暂无停用通道）`
+                        : `启用中「${selectedRow.entry.displayName}」（客户端偏好；runtime 暂无停用通道）`
+                    }
+                    onChange={next => {
+                      const key = selectedRow.entry.provider;
+                      setDisabledProviders(previous => {
+                        const nextSet = new Set(previous);
+                        if (next) nextSet.delete(key);
+                        else nextSet.add(key);
+                        writeDisabledProviders(nextSet);
+                        return nextSet;
+                      });
+                      setNotice(next
+                        ? ""
+                        : `「${selectedRow.entry.displayName}」已在界面停用（客户端偏好；runtime 暂无提供方停用通道）。`);
                     }}
-                  >
-                    编辑
-                  </button>
-                  {row.removable ? (
+                  />
+                  {selectedRow.removable ? (
                     <button
                       type="button"
                       className={clsDangerButton}
-                      aria-label={`删除 ${providerTargetLabel(target)}`}
+                      aria-label={`删除 ${providerTargetLabel(selectedTarget)}`}
                       disabled={!writable}
                       onClick={() => {
                         setSavedProvider(undefined);
                         setDeleteFailure(undefined);
-                        setDeleteTarget(target);
+                        setDeleteTarget(selectedTarget);
                       }}
                     >
                       删除
@@ -452,105 +632,19 @@ export function ModelsSection(): ReactNode {
                   ) : null}
                 </span>
               </div>
-              {open ? (
-                <ProviderEditorCard
-                  provider={target.provider}
-                  displayName={target.displayName}
-                  namespace={namespace}
-                  settingsPath={target.settingsPath}
-                  {...(target.declared === true ? { declared: true } : {})}
-                  readOnly={!writable}
-                  onClose={changed => closeEditor(changed, target)}
-                />
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-      <div className="flex flex-col gap-3">
-        {addTarget !== undefined && addNamespace !== undefined ? (
-          <div className="flex flex-col gap-3.5 rounded-xl bg-surface-container-low px-4 py-3.5">
-            <div className="flex flex-col gap-1.5">
-              <span className="inline-flex items-center gap-2.5 text-[12px] leading-[18px] font-medium text-on-surface-variant">
-                提供方
-              </span>
-              <select
-                className="h-8 max-w-[240px] cursor-pointer rounded-lg border-[0.5px] border-surface-container-highest bg-surface-container px-2.5 text-[14px] leading-[22px] text-on-surface outline-none transition-colors focus:border-primary"
-                value={addTarget.provider}
-                aria-label="提供方"
-                onChange={event => {
-                  const row = addable.find(candidate => candidate.entry.provider === event.target.value);
-                  if (row === undefined) return;
-                  setEditing(targetOf(row));
-                }}
-              >
-                {addable.map(row => (
-                  <option key={row.entry.provider} value={row.entry.provider}>{row.entry.displayName}</option>
-                ))}
-              </select>
+              <ProviderDetailPanel
+                key={selectedTarget.provider}
+                provider={selectedTarget.provider}
+                displayName={selectedTarget.displayName}
+                namespace={selectedNamespace}
+                settingsPath={selectedTarget.settingsPath}
+                {...(selectedTarget.declared === true ? { declared: true } : {})}
+                readOnly={!writable}
+                onSaved={() => announceSaved(selectedTarget)}
+              />
             </div>
-            <ProviderEditorCard
-              key={addTarget.provider}
-              provider={addTarget.provider}
-              displayName={addTarget.displayName}
-              namespace={addNamespace}
-              settingsPath={addTarget.settingsPath}
-              {...(addTarget.declared === true ? { declared: true } : {})}
-              hideTitle
-              readOnly={!writable}
-              onClose={changed => closeEditor(changed, addTarget)}
-            />
-          </div>
-        ) : declaring ? (
-          <CustomProviderCard
-            taken={rows.map(row => row.entry.provider)}
-            revision={piAiRevision}
-            protocols={protocols}
-            readOnly={!writable}
-            onClose={changed => {
-              setDeclaring(false);
-              if (changed) void reload().catch(() => undefined);
-            }}
-          />
-        ) : (
-          <div className="flex flex-wrap gap-2.5">
-            {configurable.length > 0 ? (
-              <button
-                type="button"
-                className={clsAddButton}
-                disabled={addable.length === 0 || !writable}
-                title={addable.length === 0 ? "目录内提供方均已配置" : undefined}
-                onClick={() => {
-                  const first = addable[0];
-                  if (first === undefined) return;
-                  setSavedProvider(undefined);
-                  setDeclaring(false);
-                  setAdding(true);
-                  setEditing(targetOf(first));
-                }}
-              >
-                <span aria-hidden className="text-[16px] leading-none">+</span>
-                添加提供方
-              </button>
-            ) : null}
-            {namespaces.has("llm-pi-ai") ? (
-              <button
-                type="button"
-                className={clsAddButton}
-                disabled={protocols.length === 0 || !writable}
-                onClick={() => {
-                  setSavedProvider(undefined);
-                  setAdding(false);
-                  setEditing(undefined);
-                  setDeclaring(true);
-                }}
-              >
-                <span aria-hidden className="text-[16px] leading-none">+</span>
-                添加自定义提供方
-              </button>
-            ) : null}
-          </div>
-        )}
+          )}
+        </section>
       </div>
       {deleteTarget === undefined ? null : (
         <ConfirmDialog

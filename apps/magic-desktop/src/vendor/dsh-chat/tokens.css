@@ -50,6 +50,63 @@ body {
   /* ── primitives 的可重绑定字号缝（终端卡在行内渲染时的默认值）── */
   --dsl-terminal-line-height: 18px;
   --dsl-terminal-output-max-height: 224px;
+
+  /* ── 2026-09-20 补全（MarkdownText/工具卡在 dock 预览与消息区引用、此前
+   *    未定义的 53 个令牌）：缺失时 h1-h4 字体回落 13px 常规而 32px 外边距照加
+   *    （表现为"纯文本标题 + 大片空白"）、表格/行内码/滚动条/按钮态全部失真。
+   *    取值沿用本文件与 better-sidebar 桥的 stitch 暗色映射。── */
+  --dsw-font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --dsw-font-s-13: 400 13px/18px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-xxxs-11-font-size: 11px;
+  --dsw-font-xxxs-11-line-height: 14px;
+  --dsw-font-markdown-base: 400 14px/22px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-base-strong: 600 14px/22px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-h1: 600 20px/28px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-h2: 600 17px/24px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-h3: 600 15px/22px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-h4: 600 14px/20px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-table: 400 13px/18px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-table-head: 600 12px/16px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-code-font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --dsw-font-markdown-code-block: 400 12px/18px 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --dsw-alias-accent: #4d8eff; /* stitch primary-container（链接/强调） */
+  --dsw-alias-accent-ink: #0f1114; /* 强调底上的文字 */
+  --dsw-alias-accent-soft: rgba(77, 142, 255, 0.16);
+  --dsw-alias-link: #adc6ff; /* stitch primary（正文链接） */
+  --dsw-alias-danger: #ffb4ab; /* stitch error */
+  --dsw-alias-state-success: #4edea3; /* stitch tertiary */
+  --dsw-alias-state-success-tertiary: rgba(78, 222, 163, 0.16);
+  --dsw-alias-interactive-bg-hover-danger: rgba(255, 180, 171, 0.14);
+  --dsw-alias-button-primary-fill: #4d8eff;
+  --dsw-alias-button-primary-hover: #5d99ff;
+  --dsw-alias-button-contrast-fill: #e3e2e6;
+  --dsw-alias-button-info-fill: #4d8eff;
+  --dsw-alias-button-info-label: #0f1114;
+  --dsw-alias-button-tool-bar-fill: #292a2d; /* stitch surface-container-high */
+  --dsw-alias-button-tool-bar-hover: #343538; /* stitch surface-container-highest */
+  --dsw-alias-button-ghost-active-fill: #343538;
+  --dsw-alias-button-ghost-active-border: rgba(255, 255, 255, 0.2);
+  --dsw-alias-label-primary-foreground: #0f1114; /* 主色底上的文字 */
+  --dsw-alias-label-primary-inverted: #0f1114;
+  --dsw-alias-label-dimmed: #8c909f;
+  --dsw-alias-border-l4: rgba(255, 255, 255, 0.22);
+  --dsw-alias-border-l2-darkmode-thin: rgba(255, 255, 255, 0.12);
+  --dsw-alias-hairline: rgba(255, 255, 255, 0.1);
+  --dsw-alias-bg-layer-3: #26272b; /* layer-2 与 hover 之间 */
+  --dsw-alias-bg-module-platform: #1b1b1f;
+  --dsw-alias-tooltip-bg: #2c2c2e;
+  --dsw-specific-menu: #1f1f23; /* stitch surface-container */
+  --dsw-elevation-prominent: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --dsw-alias-scrollbar-bg-l2: rgba(255, 255, 255, 0.14);
+  --dsw-alias-scrollbar-hover-l2: rgba(255, 255, 255, 0.24);
+  --dsw-alias-scrollbar-hover-l1: rgba(255, 255, 255, 0.18);
+  --dsw-alias-markdown-inline-code: #2c2c2e; /* neutral-bluish-850（行内码底） */
+  --dsw-alias-markdown-tag: rgba(77, 142, 255, 0.16); /* 标签 chip 底 */
+  --dsw-alias-markdown-code-block-banner: #232326; /* 代码块标题条 */
+  --dsw-static-neutral-00: rgb(255, 255, 255);
+  --dsw-static-neutral-200: rgb(207, 211, 214);
+  --dsw-static-neutral-700: rgb(90, 95, 105);
 }
 
 /* 挂载点作用域：vendor 组件挂在 .vendor-dsh-chat 内即可整体换肤；
@@ -72,4 +129,57 @@ body {
   --dsw-font-sm-13: 400 13px/18px Inter, 'Segoe UI', system-ui, sans-serif;
   --dsl-terminal-line-height: 18px;
   --dsl-terminal-output-max-height: 224px;
+  /* 2026-09-20 补全（同 ：root 块，换肤覆写留口）。 */
+  --dsw-font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --dsw-font-s-13: 400 13px/18px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-xxxs-11-font-size: 11px;
+  --dsw-font-xxxs-11-line-height: 14px;
+  --dsw-font-markdown-base: 400 14px/22px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-base-strong: 600 14px/22px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-h1: 600 20px/28px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-h2: 600 17px/24px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-h3: 600 15px/22px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-h4: 600 14px/20px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-table: 400 13px/18px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-table-head: 600 12px/16px Inter, 'Segoe UI', system-ui, sans-serif;
+  --dsw-font-markdown-code-font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --dsw-font-markdown-code-block: 400 12px/18px 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  --dsw-alias-accent: #4d8eff;
+  --dsw-alias-accent-ink: #0f1114;
+  --dsw-alias-accent-soft: rgba(77, 142, 255, 0.16);
+  --dsw-alias-link: #adc6ff;
+  --dsw-alias-danger: #ffb4ab;
+  --dsw-alias-state-success: #4edea3;
+  --dsw-alias-state-success-tertiary: rgba(78, 222, 163, 0.16);
+  --dsw-alias-interactive-bg-hover-danger: rgba(255, 180, 171, 0.14);
+  --dsw-alias-button-primary-fill: #4d8eff;
+  --dsw-alias-button-primary-hover: #5d99ff;
+  --dsw-alias-button-contrast-fill: #e3e2e6;
+  --dsw-alias-button-info-fill: #4d8eff;
+  --dsw-alias-button-info-label: #0f1114;
+  --dsw-alias-button-tool-bar-fill: #292a2d;
+  --dsw-alias-button-tool-bar-hover: #343538;
+  --dsw-alias-button-ghost-active-fill: #343538;
+  --dsw-alias-button-ghost-active-border: rgba(255, 255, 255, 0.2);
+  --dsw-alias-label-primary-foreground: #0f1114;
+  --dsw-alias-label-primary-inverted: #0f1114;
+  --dsw-alias-label-dimmed: #8c909f;
+  --dsw-alias-border-l4: rgba(255, 255, 255, 0.22);
+  --dsw-alias-border-l2-darkmode-thin: rgba(255, 255, 255, 0.12);
+  --dsw-alias-hairline: rgba(255, 255, 255, 0.1);
+  --dsw-alias-bg-layer-3: #26272b;
+  --dsw-alias-bg-module-platform: #1b1b1f;
+  --dsw-alias-tooltip-bg: #2c2c2e;
+  --dsw-specific-menu: #1f1f23;
+  --dsw-elevation-prominent: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --dsw-alias-scrollbar-bg-l2: rgba(255, 255, 255, 0.14);
+  --dsw-alias-scrollbar-hover-l2: rgba(255, 255, 255, 0.24);
+  --dsw-alias-scrollbar-hover-l1: rgba(255, 255, 255, 0.18);
+  --dsw-alias-markdown-inline-code: #2c2c2e;
+  --dsw-alias-markdown-tag: rgba(77, 142, 255, 0.16);
+  --dsw-alias-markdown-code-block-banner: #232326;
+  --dsw-static-neutral-00: rgb(255, 255, 255);
+  --dsw-static-neutral-200: rgb(207, 211, 214);
+  --dsw-static-neutral-700: rgb(90, 95, 105);
 }

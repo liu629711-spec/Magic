@@ -66,8 +66,28 @@ function postProcessSanitized(root: Element, media: MarkdownHtmlMedia): void {
   }
   for (const element of root.querySelectorAll('img, video, audio, source')) {
     const src = element.getAttribute('src')
-    if (src === null) continue
-    element.setAttribute('src', resolveLocalMediaDest(src, media.scope, media.path, media.origin))
+    if (src !== null) {
+      element.setAttribute('src', resolveLocalMediaDest(src, media.scope, media.path, media.origin))
+    }
+    // 2026-09-20 修复：<picture><source srcset> 的响应式图片此前不重写——
+    // 未重写的 source 与被重写的 img 竞争，浏览器选中 404 的 source 后不再
+    // 回退 img，表现为 logo/截图全破图。
+    const srcset = element.getAttribute('srcset')
+    if (srcset !== null) {
+      const rewritten = srcset
+        .split(',')
+        .map(candidate => {
+          const trimmedCandidate = candidate.trim()
+          if (trimmedCandidate === '') return ''
+          const split = trimmedCandidate.search(/\s/)
+          const url = split === -1 ? trimmedCandidate : trimmedCandidate.slice(0, split)
+          const descriptor = split === -1 ? '' : trimmedCandidate.slice(split)
+          return `${resolveLocalMediaDest(url, media.scope, media.path, media.origin)}${descriptor}`
+        })
+        .filter(part => part !== '')
+        .join(', ')
+      element.setAttribute('srcset', rewritten)
+    }
   }
 }
 

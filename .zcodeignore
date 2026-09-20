@@ -1,0 +1,84 @@
+# Third-party source mirrors used only for local research
+/reference/
+/reference-project/
+
+# Temporary local workspace and packaged snapshots
+/新建文件夹/
+/*.7z
+/docs/*.zip
+
+# Local agent / editor scratch
+.workbuddy/
+.zcode/
+_tmp_*
+tmp-*
+**/tmp-*.mjs
+**/tmp-*.html
+**/tmp-*.ps1
+
+# Generated profile install tree
+profiles/**/node_modules/
+profiles/**/node_modules.lock
+
+# Local secrets and generated clutter
+.env
+.env.*
+!.env.example
+!.env.*.example
+.tmp-*/
+.tmp-magic-real.db*
+.magic-dsh/
+.magic-dsh-live/
+.magic-dsh-validation/
+.codegraph/
+.cursor/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.out.log
+*.err.log
+# 历史/临时 apps 目录；自有客户端仓库路径需纳入版本管理
+apps/*
+!apps/magic-desktop/
+!apps/magic-desktop/**
+spikes/
+target-*/
+.DS_Store
+Thumbs.db
+node_modules/
+dist/
+build/
+coverage/
+target/
+__pycache__/
+*.pyc
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+.svn/
+bower_components/
+jspm_packages/
+site-packages/
+venv/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）

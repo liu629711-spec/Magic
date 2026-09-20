@@ -49,6 +49,8 @@ const DOCK_TAB_KIND: Record<string, string> = {
   // 调用轨迹（2026-09-19）：⋯ 菜单「查看调用轨迹」的承接 tab（descriptor
   // hidden——不进开始页 guide）。
   trajectory: 'magic:trajectory',
+  // 计划 tab（2026-09-20，PRD-02 §15.4）：胶囊计划段/计划卡的承接 tab。
+  plan: 'magic:plan',
   // 'team'（CeoWorkspace）：官方无对应 tab，warn 后忽略。
 }
 
@@ -148,8 +150,8 @@ export function DockShell({
       chat: {
         modelCatalog: latest.current.bridge.modelCatalog,
         sessionModelOf: (id: string) => latest.current.bridge.sessionModelOf?.(id),
-        selectModel: (id: string, provider: string, model: string) => {
-          void latest.current.bridge.selectModel(id, provider, model).catch(() => undefined)
+        selectModel: (id: string, provider: string, model: string, reasoningEffort?: string) => {
+          void latest.current.bridge.selectModel(id, provider, model, reasoningEffort).catch(() => undefined)
         },
         runCommand: (id: string, line: string) => latest.current.bridge.runCommand?.(id, line),
         mentionOptions: latest.current.bridge.mentionOptions,

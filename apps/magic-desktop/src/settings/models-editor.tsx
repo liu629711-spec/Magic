@@ -7,6 +7,8 @@
 // 色彩映射 Magic 暗色 stitch token（主色=primary、危险=error、次级=on-surface-variant/outline、模块底=surface-container-low）。
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { ToggleSwitch } from "../components/ToggleSwitch";
+import { readDisabledModels, writeDisabledModels } from "./model-prefs";
 import {
   apiKeyFailure,
   credentialsDescribe,
@@ -511,6 +513,9 @@ export function ProviderEditorCard(props: ProviderEditorProps): ReactNode {
         setExpectedRevision(written.revision);
         setDraft(next);
         changed = true;
+        // 提供方设置落库即广播（2026-09-19 模型目录不刷新修复）：App 监听后
+        // 重拉 session/modelCatalog，对话区选择器即时反映新增/删除的模型。
+        window.dispatchEvent(new Event("magic:model-catalog-changed"));
       } catch (cause: unknown) {
         const message = cause instanceof Error ? cause.message : String(cause);
         return {
@@ -887,6 +892,672 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           {busy ? "创建中…" : "创建提供方"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── 2026-09-19 设计稿重排（ZCode 图一/图五/图六）：详情面板 + 添加模型弹窗 ──
+
+/** 协议 id → 设计稿展示名（图四）。 */
+export function protocolLabel(id: string): string {
+  const map: Record<string, string> = {
+    "anthropic-messages": "Anthropic Messages (/v1/messages)",
+    "openai-completions": "Chat Completions (/chat/completions)",
+    "openai-responses": "Responses (/responses)",
+  };
+  return map[id] ?? id;
+}
+
+/* 模型高级标注（图六：输入类型/模型能力/推理等级/推理参数映射）。
+ * 官方 settings schema 只认 id/name/contextWindow/maxTokens，其余字段走客户端
+ * localStorage（按 provider:model 键），诚实标注不混入 runtime profile。 */
+interface ModelAdvanced {
+  inputTypes: string[];
+  capabilities: string[];
+  reasoningLevels: string;
+  reasoningMapping: string;
+}
+
+const ADV_KEY = "magic.models.modelAnnotations";
+
+function readAdvanced(provider: string, id: string): ModelAdvanced {
+  try {
+    const raw = window.localStorage.getItem(ADV_KEY);
+    const all = raw === null ? {} : (JSON.parse(raw) as Record<string, Partial<ModelAdvanced>>);
+    const entry = all[`${provider}:${id}`] ?? {};
+    return {
+      inputTypes: entry.inputTypes ?? ["文本"],
+      capabilities: entry.capabilities ?? [],
+      reasoningLevels: entry.reasoningLevels ?? "",
+      reasoningMapping: entry.reasoningMapping ?? "",
+    };
+  } catch {
+    return { inputTypes: ["文本"], capabilities: [], reasoningLevels: "", reasoningMapping: "" };
+  }
+}
+
+function writeAdvanced(provider: string, id: string, adv: ModelAdvanced): void {
+  try {
+    const raw = window.localStorage.getItem(ADV_KEY);
+    const all = raw === null ? {} : (JSON.parse(raw) as Record<string, unknown>);
+    all[`${provider}:${id}`] = adv;
+    window.localStorage.setItem(ADV_KEY, JSON.stringify(all));
+  } catch {
+    // 存不进仅影响下次会话初始态
+  }
+}
+
+
+/** 添加/编辑模型弹窗（图五/图六）：智能配置开 = 只填模型 ID；关 = 手动容量 + 高级标注。 */
+export function ModelEditModal(props: {
+  provider: string;
+  initial: ModelDraft | undefined;
+  onCancel: () => void;
+  onSave: (model: ModelDraft) => void;
+}): ReactNode {
+  const hasCapacity = props.initial?.["contextWindow"] !== undefined
+    || props.initial?.["maxTokens"] !== undefined;
+  const [smart, setSmart] = useState(props.initial === undefined && !hasCapacity);
+  const initialId = typeof props.initial?.["id"] === "string" ? (props.initial["id"] as string) : "";
+  const [idText, setIdText] = useState(initialId);
+  const [ctxText, setCtxText] = useState(
+    typeof props.initial?.["contextWindow"] === "number" ? formatCapacity(props.initial["contextWindow"] as number) : "",
+  );
+  const [maxText, setMaxText] = useState(
+    typeof props.initial?.["maxTokens"] === "number" ? formatCapacity(props.initial["maxTokens"] as number) : "",
+  );
+  const [advOpen, setAdvOpen] = useState(false);
+  const [adv, setAdv] = useState<ModelAdvanced>(() => readAdvanced(props.provider, initialId));
+  const [failure, setFailure] = useState<string | undefined>(undefined);
+
+  const submit = (): void => {
+    const id = idText.trim();
+    if (id.length === 0) {
+      setFailure("模型 ID 不能为空。");
+      return;
+    }
+    const contextWindow = parseCapacity(ctxText);
+    if (Number.isNaN(contextWindow)) {
+      setFailure(MODEL_FAILURE_TEXT.modelContextInvalid);
+      return;
+    }
+    const maxTokens = parseCapacity(maxText);
+    if (Number.isNaN(maxTokens)) {
+      setFailure(MODEL_FAILURE_TEXT.modelMaxTokensInvalid);
+      return;
+    }
+    writeAdvanced(props.provider, id, adv);
+    props.onSave({
+      ...(props.initial !== undefined && typeof props.initial["name"] === "string"
+        ? { name: props.initial["name"] as string }
+        : {}),
+      id,
+      ...(smart || contextWindow === undefined ? {} : { contextWindow }),
+      ...(smart || maxTokens === undefined ? {} : { maxTokens }),
+    });
+  };
+
+  const reset = (): void => {
+    setIdText(initialId);
+    setCtxText(
+      typeof props.initial?.["contextWindow"] === "number" ? formatCapacity(props.initial["contextWindow"] as number) : "",
+    );
+    setMaxText(
+      typeof props.initial?.["maxTokens"] === "number" ? formatCapacity(props.initial["maxTokens"] as number) : "",
+    );
+    setAdv(readAdvanced(props.provider, initialId));
+    setFailure(undefined);
+  };
+
+  const capacityField = (field: "contextWindow" | "maxTokens"): ReactNode => {
+    const isCtx = field === "contextWindow";
+    const value = isCtx ? ctxText : maxText;
+    const setter = isCtx ? setCtxText : setMaxText;
+    return (
+      <div className="flex flex-col gap-1.5">
+        <span className={clsFieldLabel}>
+          {isCtx ? "上下文窗口" : "最大输出 Token"}
+          <span title={isCtx ? "如 256K、1M" : "如 32K"} className="cursor-help text-[12px] text-outline">?</span>
+        </span>
+        <input
+          className={clsInput}
+          type="text"
+          inputMode="numeric"
+          value={value}
+          placeholder={isCtx ? "256K" : "32K"}
+          aria-label={isCtx ? "上下文窗口" : "最大输出 Token"}
+          onChange={event => setter(event.target.value)}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={() => props.onCancel()}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={props.initial === undefined ? "添加模型" : "编辑模型"}
+        className="flex max-h-[86vh] w-[min(600px,100%)] flex-col overflow-hidden rounded-2xl bg-surface-container-low shadow-overlay"
+        onClick={event => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 pt-4">
+          <span className="text-[15px] font-medium text-on-surface">
+            {props.initial === undefined ? "添加模型" : "编辑模型"}
+          </span>
+          <button type="button" className={clsIconButton} aria-label="关闭" onClick={props.onCancel}>
+            <span className="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-2">
+          <div className="flex items-center gap-2 py-3">
+            <span className={clsFieldLabel}>智能配置</span>
+            <span
+              title="当前版本：开启后只需填写模型 ID，容量由提供方默认值接管；关闭后可手动填写容量与高级标注。"
+              className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-outline text-[10px] leading-none text-outline"
+            >?</span>
+            <ToggleSwitch checked={smart} onChange={setSmart} />
+          </div>
+          {smart ? (
+            <p className={clsHint}>开启智能配置时只需填写模型 ID；容量与高级标注按提供方默认处理。</p>
+          ) : null}
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <span className={clsFieldLabel}>模型 ID</span>
+              <input
+                className={clsInput}
+                type="text"
+                value={idText}
+                placeholder="模型 ID"
+                aria-label="模型 ID"
+                onChange={event => setIdText(event.target.value)}
+              />
+            </div>
+            {!smart ? (
+              <>
+                {capacityField("contextWindow")}
+                {capacityField("maxTokens")}
+                <div>
+                  <button
+                    type="button"
+                    className="-ml-1 flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-md p-0.5 text-[12px] leading-[18px] font-medium text-on-surface-variant hover:text-on-surface"
+                    aria-expanded={advOpen}
+                    onClick={() => setAdvOpen(value => !value)}
+                  >
+                    <span
+                      aria-hidden
+                      className={`inline-block h-[5px] w-[5px] border-b-[1.5px] border-r-[1.5px] border-current transition-transform duration-100 ${advOpen ? "rotate-45 translate-y-px" : "rotate-[-45deg] -translate-y-px"}`}
+                    />
+                    高级配置
+                  </button>
+                  {advOpen ? (
+                    <div className="flex flex-col gap-3 pt-3">
+                      <p className={clsHint}>高级标注保存在本客户端（官方 settings 暂不存储这些字段）。</p>
+                      <div className="flex flex-col gap-1.5">
+                        <span className={clsFieldLabel}>输入类型</span>
+                        <div className="flex flex-wrap gap-2">
+                          {(["文本", "图片", "视频", "PDF"] as const).map(kind => {
+                            const locked = kind === "文本";
+                            const checked = locked || adv.inputTypes.includes(kind);
+                            return (
+                              <button
+                                key={kind}
+                                type="button"
+                                disabled={locked}
+                                aria-pressed={checked}
+                                onClick={() => setAdv(current => ({
+                                  ...current,
+                                  inputTypes: checked && !locked
+                                    ? current.inputTypes.filter(item => item !== kind)
+                                    : [...new Set([...current.inputTypes, kind])],
+                                }))}
+                                className={`flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] transition-colors ${
+                                  checked
+                                    ? "border-primary bg-primary-container/30 text-on-surface"
+                                    : "border-surface-container-highest text-on-surface-variant hover:bg-surface-container-low"
+                                } ${locked ? "cursor-default opacity-70" : "cursor-pointer"}`}
+                              >
+                                {checked ? "✓" : ""} {kind}
+                                {locked ? <span className="text-[11px] text-outline">锁</span> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <span className={clsFieldLabel}>模型能力</span>
+                        <div className="flex flex-wrap gap-2">
+                          {(["结构化输出", "原生联网搜索", "对话中系统消息"] as const).map(kind => {
+                            const checked = adv.capabilities.includes(kind);
+                            return (
+                              <button
+                                key={kind}
+                                type="button"
+                                aria-pressed={checked}
+                                onClick={() => setAdv(current => ({
+                                  ...current,
+                                  capabilities: checked
+                                    ? current.capabilities.filter(item => item !== kind)
+                                    : [...current.capabilities, kind],
+                                }))}
+                                className={`flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-[13px] transition-colors ${
+                                  checked
+                                    ? "border-primary bg-primary-container/30 text-on-surface"
+                                    : "border-surface-container-highest text-on-surface-variant hover:bg-surface-container-low"
+                                }`}
+                              >
+                                {checked ? "✓" : ""} {kind}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <span className={clsFieldLabel}>推理等级（从低到高）</span>
+                        <input
+                          className={clsInput}
+                          type="text"
+                          value={adv.reasoningLevels}
+                          placeholder="如 minimal, medium, high"
+                          aria-label="推理等级"
+                          onChange={event => setAdv(current => ({ ...current, reasoningLevels: event.target.value }))}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <span className={clsFieldLabel}>推理参数映射</span>
+                        <textarea
+                          className={`${clsInput} h-20 resize-none py-2`}
+                          value={adv.reasoningMapping}
+                          placeholder={'JSON 映射，如 {"medium": {"reasoning_effort": "medium"}}'}
+                          aria-label="推理参数映射"
+                          onChange={event => setAdv(current => ({ ...current, reasoningMapping: event.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+          </div>
+          {failure === undefined ? null : <p className={clsError}>{failure}</p>}
+        </div>
+        <div className="flex items-center justify-between px-5 py-3.5">
+          <button
+            type="button"
+            className="cursor-pointer border-b border-outline text-[13px] text-on-surface-variant transition-colors hover:text-on-surface"
+            onClick={reset}
+          >
+            重置表单
+          </button>
+          <div className="flex gap-2">
+            <button type="button" className={clsSecondaryButton} onClick={props.onCancel}>取消</button>
+            <button type="button" className={clsPrimaryButton} onClick={submit}>保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 提供方详情面板（图一右栏）：Base URL / API 格式 / API Key / 模型列表，保存语义与 ProviderEditorCard 相同。 */
+export function ProviderDetailPanel(props: {
+  provider: string;
+  displayName: string;
+  namespace: SettingsNamespaceView;
+  settingsPath: readonly string[];
+  declared?: boolean;
+  readOnly: boolean;
+  onSaved: () => void;
+}): ReactNode {
+  const { namespace: view, settingsPath, provider, readOnly } = props;
+  const [draft, setDraft] = useState<JsonMap>(() => draftAt(view, settingsPath));
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyState, setKeyState] = useState<CredentialInfo | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | undefined>(undefined);
+  const [committedOriginal, setCommittedOriginal] = useState<unknown>(() => jsonGetPath(view.user, settingsPath));
+  const [expectedRevision, setExpectedRevision] = useState(() => view.revision);
+  const [keyVisible, setKeyVisible] = useState(false);
+  // 模型弹窗：undefined=关；index=编辑第 index 行；-1=新增
+  const [modalIndex, setModalIndex] = useState<number | undefined>(undefined);
+  const [disabledModels, setDisabledModels] = useState<ReadonlySet<string>>(readDisabledModels);
+
+  const layout = layoutOf(view.ns);
+  const fallback = jsonGetPath(view.value, settingsPath);
+  const disabled = readOnly || busy;
+  const keyRef = refFor(view, settingsPath, provider);
+  const protocols = useMemo(() => (layout === "pi-ai" ? protocolChoices(view) : []), [layout, view]);
+
+  useEffect(() => {
+    let stale = false;
+    setKeyState(undefined);
+    credentialsDescribe([keyRef])
+      .then(value => { if (!stale) setKeyState(value[keyRef]); })
+      .catch(() => { if (!stale) setKeyState(undefined); });
+    return () => { stale = true; };
+  }, [keyRef]);
+
+  const stringAt = (source: unknown, key: string): string | undefined => {
+    const value = jsonGetPath(source, [key]);
+    return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  };
+  const setField = (key: string, next: string | undefined): void => {
+    const value = next === undefined || next.trim().length === 0 ? undefined : next;
+    setDraft(current => (value === undefined ? jsonDeletePath(current, [key]) : jsonSetPath(current, [key], value)));
+  };
+
+  const modelFailure = modelFailureOf(jsonGetPath(draft, ["models"]));
+  const keyFailure = apiKeyFailure(keyDraft);
+  const keyValue = keyDraft.trim();
+
+  const probeApi = stringAt(draft, "api") ?? stringAt(fallback, "api");
+  const probeBaseURL = stringAt(draft, "baseURL") ?? stringAt(fallback, "baseURL");
+  const fetchModels = async (): Promise<LlmDiscoveredModel[]> =>
+    llmDiscoverModels(view.ns, {
+      provider,
+      ...(probeBaseURL === undefined ? {} : { baseURL: probeBaseURL }),
+      ...(probeApi === undefined ? {} : { api: probeApi }),
+      ...(keyValue.length === 0 ? {} : { apiKey: keyValue }),
+    });
+
+  const modelsOverridden = jsonHasPath(draft, ["models"]);
+  const catalogModels: readonly ModelDraft[] = modelsOverridden
+    ? (Array.isArray(jsonGetPath(draft, ["models"])) ? (jsonGetPath(draft, ["models"]) as ModelDraft[]) : [])
+    : inheritedModels(view, settingsPath);
+  const keyLocked = keyState?.writable === false;
+  const keyPlaceholder = keyLocked
+    ? "由启动环境提供（只读）"
+    : keyState?.configured === true
+      ? "已配置——输入新值可替换"
+      : layout === "pi-ai" ? "输入 API 密钥，或留空使用环境认证" : "输入 API 密钥";
+
+  const apply = async (): Promise<void> => {
+    setBusy(true);
+    setFailure(undefined);
+    try {
+      const next = layout === "pi-ai" && stringAt(draft, "apiKeyEnv") === undefined
+        && stringAt(fallback, "apiKeyEnv") === undefined && keyValue.length > 0
+        ? jsonSetPath(draft, ["apiKeyEnv"], keyRef)
+        : draft;
+      const failureCheck = modelFailureOf(jsonGetPath(next, ["models"]));
+      if (failureCheck !== undefined) {
+        setFailure(`模型 ${failureCheck.index + 1}：${MODEL_FAILURE_TEXT[`${failureCheck.key}`]}`);
+        return;
+      }
+      const ops = pathOps(settingsPath, committedOriginal, next);
+      let changed = false;
+      if (ops.length > 0) {
+        try {
+          const written = await settingsMutate(view.ns, ops, expectedRevision);
+          setCommittedOriginal(jsonGetPath(written.user, settingsPath));
+          setExpectedRevision(written.revision);
+          setDraft(next);
+          changed = true;
+          // 同上（2026-09-19 模型目录不刷新修复）：详情面板保存路径同样广播。
+          window.dispatchEvent(new Event("magic:model-catalog-changed"));
+        } catch (cause: unknown) {
+          const message = cause instanceof Error ? cause.message : String(cause);
+          setFailure(message.includes("conflict")
+            ? "这些设置已被其他地方改动，请重试保存。"
+            : message);
+          return;
+        }
+      }
+      if (keyValue.length > 0) {
+        try {
+          await credentialsSet(keyRef, keyValue);
+          changed = true;
+        } catch (cause: unknown) {
+          setFailure(cause instanceof Error ? cause.message : String(cause));
+          return;
+        }
+      }
+      setKeyDraft("");
+      if (changed) props.onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commitModels = (models: readonly ModelDraft[]): void => {
+    setDraft(current => jsonSetPath(current, ["models"], models as JsonValue));
+  };
+  const saveModel = (model: ModelDraft): void => {
+    if (modalIndex === undefined || modalIndex < 0) {
+      commitModels([...catalogModels, model]);
+    } else {
+      commitModels(catalogModels.map((item, at) => (at === modalIndex ? model : item)));
+    }
+    setModalIndex(undefined);
+  };
+
+  const toggleDisabledModel = (key: string, next: boolean): void => {
+    setDisabledModels(previous => {
+      const nextSet = new Set(previous);
+      if (next) nextSet.delete(key);
+      else nextSet.add(key);
+      writeDisabledModels(nextSet);
+      return nextSet;
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {layout === "pi-ai" && props.declared === true ? (
+        <div className="flex flex-col gap-1.5">
+          <span className={clsFieldLabel}>Base URL</span>
+          <input
+            className={clsInput}
+            type="text"
+            value={stringAt(draft, "baseURL") ?? ""}
+            placeholder={stringAt(fallback, "baseURL") ?? "https://api.example.com/v1"}
+            aria-label="Base URL"
+            disabled={disabled}
+            onChange={event => setField("baseURL", event.target.value === "" ? undefined : event.target.value)}
+          />
+        </div>
+      ) : null}
+      {layout === "pi-ai" && props.declared === true ? (
+        <div className="flex flex-col gap-1.5">
+          <span className={clsFieldLabel}>API 格式</span>
+          <select
+            className={`${clsInput} cursor-pointer appearance-none bg-no-repeat pr-8 bg-[length:12px_12px] bg-[right_12px_center] bg-[url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='12'%20viewBox='0%200%2012%2012'%20fill='none'%3E%3Cpath%20d='M3%204.5L6%207.5L9%204.5'%20stroke='%2381858C'%20stroke-width='1.5'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E")]`}
+            value={probeApi ?? ""}
+            aria-label="API 格式"
+            disabled={disabled}
+            onChange={event => setField("api", event.target.value)}
+          >
+            {probeApi === undefined ? <option value="">未选择</option> : null}
+            {protocols.map(choice => <option key={choice} value={choice}>{protocolLabel(choice)}</option>)}
+          </select>
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-1.5">
+        <span className={clsFieldLabel}>API Key</span>
+        <div className="relative">
+          <input
+            className={`${clsInput} pr-9`}
+            type={keyVisible ? "text" : "password"}
+            autoComplete="off"
+            value={keyDraft}
+            placeholder={keyPlaceholder}
+            aria-label="API Key"
+            aria-invalid={keyFailure !== undefined}
+            disabled={disabled || keyLocked}
+            onChange={event => setKeyDraft(event.target.value)}
+          />
+          <button
+            type="button"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-outline transition-colors hover:text-on-surface"
+            title={keyVisible ? "隐藏" : "显示新输入的值（已存密钥不可读）"}
+            aria-label={keyVisible ? "隐藏 API Key" : "显示 API Key"}
+            onClick={() => setKeyVisible(value => !value)}
+          >
+            <span className="material-symbols-outlined text-[16px]">{keyVisible ? "visibility_off" : "visibility"}</span>
+          </button>
+        </div>
+        {keyFailure === undefined ? null : <p className={clsError}>{keyFailure}</p>}
+      </div>
+
+      {/* 模型列表（图一） */}
+      <div className="flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className={clsFieldLabel}>模型列表</span>
+          <div className="flex items-center gap-1">
+            {modelsOverridden === true ? (
+              <button
+                type="button"
+                className={clsLinkButton}
+                disabled={disabled}
+                onClick={() => setDraft(current => jsonDeletePath(current, ["models"]))}
+              >
+                恢复默认模型
+              </button>
+            ) : null}
+            {layout === "pi-ai" ? (
+              <button
+                type="button"
+                className={clsLinkButton}
+                disabled={disabled || !fetchModels}
+                title="向提供方询问可用模型列表"
+                onClick={() => {
+                  void fetchModels().then(found => {
+                    if (found.length === 0) {
+                      setFailure("该提供方没有列出任何模型，请手动添加。");
+                      return;
+                    }
+                    const byId = new Map<string, ModelDraft>();
+                    for (const model of catalogModels) {
+                      const id = model["id"];
+                      if (typeof id === "string" && id.length > 0) byId.set(id, model);
+                    }
+                    for (const candidate of found) {
+                      if (!byId.has(candidate.id)) {
+                        byId.set(candidate.id, {
+                          id: candidate.id,
+                          ...(candidate.name === undefined ? {} : { name: candidate.name }),
+                          ...(candidate.contextWindow === undefined ? {} : { contextWindow: candidate.contextWindow }),
+                          ...(candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens }),
+                        });
+                      }
+                    }
+                    commitModels([...byId.values()]);
+                  }).catch((cause: unknown) => {
+                    setFailure(cause instanceof Error ? cause.message : String(cause));
+                  });
+                }}
+              >
+                获取可用模型
+              </button>
+            ) : null}
+            <button
+              type="button"
+              data-model-add=""
+              className="flex h-7 cursor-pointer items-center gap-1 rounded-full border-[0.5px] border-surface-container-highest px-2.5 text-[12px] leading-[18px] text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-40"
+              disabled={disabled}
+              onClick={() => setModalIndex(-1)}
+            >
+              <span aria-hidden className="text-[14px] leading-none">+</span>
+              添加模型
+            </button>
+          </div>
+        </div>
+        {catalogModels.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-surface-container-highest px-4 py-4 text-center text-[12.5px] leading-relaxed text-outline">
+            当前没有配置模型，添加模型后可在聊天中使用。
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border-[0.5px] border-surface-container-high">
+            {catalogModels.map((model, index) => {
+              const id = typeof model["id"] === "string" ? model["id"] : "";
+              const disableKey = `${provider}:${id}`;
+              const ctx = typeof model["contextWindow"] === "number" ? formatCapacity(model["contextWindow"] as number) : undefined;
+              return (
+                <div
+                  key={`${id}-${index}`}
+                  className={`flex items-center gap-2.5 border-surface-container-high/50 px-3 py-2 ${
+                    index < catalogModels.length - 1 ? "border-b" : ""
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-on-surface">
+                    {id.length > 0 ? id : "（未命名模型）"}
+                  </span>
+                  {ctx === undefined ? null : (
+                    <span className="shrink-0 rounded border-[0.5px] border-surface-container-highest px-1.5 py-px text-[10.5px] leading-4 text-on-surface-variant">
+                      {ctx}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className={clsIconButton}
+                    aria-label={`编辑模型 ${id}`}
+                    title="编辑"
+                    disabled={disabled}
+                    onClick={() => setModalIndex(index)}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${clsIconButton} hover:!text-error`}
+                    aria-label={`删除模型 ${id}`}
+                    title="删除"
+                    disabled={disabled}
+                    onClick={() => commitModels(catalogModels.filter((_item, at) => at !== index))}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">delete</span>
+                  </button>
+                  <ToggleSwitch
+                    checked={!disabledModels.has(disableKey)}
+                    title={disabledModels.has(disableKey) ? `已停用 ${id}（客户端偏好）` : `启用中 ${id}`}
+                    onChange={next => toggleDisabledModel(disableKey, next)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {modelsOverridden === false && catalogModels.length > 0 ? (
+          <p className={clsHint}>正在使用适配器默认模型——改动并保存后将整体接管模型列表。</p>
+        ) : null}
+      </div>
+
+      {failure !== undefined ? <p className={clsError}>{failure}</p> : null}
+      {layout !== "unknown" && modelFailure !== undefined ? (
+        <p className={clsHint}>{`模型 ${modelFailure.index + 1}：${MODEL_FAILURE_TEXT[`${modelFailure.key}`]}`}</p>
+      ) : null}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          className={clsSecondaryButton}
+          disabled={busy}
+          onClick={() => {
+            setDraft(draftAt(view, settingsPath));
+            setKeyDraft("");
+          }}
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          className={clsPrimaryButton}
+          disabled={disabled || layout === "unknown" || modelFailure !== undefined || keyFailure !== undefined}
+          onClick={() => { void apply(); }}
+        >
+          {busy ? "保存中…" : "保存"}
+        </button>
+      </div>
+      {modalIndex === undefined ? null : (
+        <ModelEditModal
+          provider={provider}
+          initial={modalIndex >= 0 ? catalogModels[modalIndex] : undefined}
+          onCancel={() => setModalIndex(undefined)}
+          onSave={saveModel}
+        />
+      )}
     </div>
   );
 }

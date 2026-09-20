@@ -63,6 +63,9 @@ export function RightDock({
     <aside
       data-right-dock
       className={
+        // 窗口控制（— □ ×）与坞头 tab 行【同排】（2026-09-19 用户裁定：相辅相成，
+        // 非两层）——面板不再整体下移，tab 行右侧经全局 CSS 为窗口控制让位
+        // （见 index.css 的 [data-sidebar-right-open] [data-dockkit-strip] 规则）。
         "vendor-bs min-h-0 bg-surface-container-lowest border-l border-surface-container-highest flex flex-col overflow-hidden shrink-0 " +
         (effectiveFullscreen ? "flex-1 min-w-0" : "")
       }

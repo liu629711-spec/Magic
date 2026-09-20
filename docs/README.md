@@ -2,9 +2,27 @@
 
 `main` 是 DSH 插件工作区：Magic 产品能力以 Cordis 插件叠加在 DeepSeek Harness 上，不重写它的 session / tool / agent-loop。
 
+**术语（先对齐叫法）**：**DSH 网页版 / Magic DSH 网页版 = 3099 实例**（DSH web + Magic 插件全挂载，窗口标题「Magic 智能体」，运行态 `.magic-dsh-live/`），是体验/需求/验收的唯一基准；**官方裸端** = reference-project 源码的官方 UI，仅作机制溯源；详见 [AGENTS.md 术语表](../AGENTS.md)。
+
 **产品交付形态（2026-09-16 裁定）**：自有 Tauri 桌面客户端（对标 Codex）+ DSH 后台 runtime；`dsh web` 降级为调试通道。见 [PRD-01 §2.1](01-产品/PRD-01-Magic产品总览.md) 与 [09-自有客户端架构](02-实现/09-自有客户端架构.md)。
 
 当前实现对齐的官方底座是 **DSH 0.1.5-rc.2**（git `origin/master` `c291e7961a`）。先读 [当前基线](02-实现/00-当前基线-DSH-0.1.5.md)，再读 PRD 或其它实现文档。
+
+## 仓库目录地图（2026-09-20）
+
+| 目录 | 用途 | git 跟踪 |
+|---|---|---|
+| `apps/magic-desktop/` | 自有桌面客户端（Vite+React+TS 壳，M 起步经 dsh web 通道驱动 runtime） | 是 |
+| `plugins/` | Magic 产品插件 + vendored 官方插件；**已退役**的 magic-browser / dsh-any-background / dsh-ego-browser 保留现状（恢复方法见 web.patch.yml 注释，复盘见 02-实现/08） | 是 |
+| `patches/` | web.patch.yml（3099 调试/Magic DSH 网页版 overlay）、sdk.patch.yml（自有客户端 runtime overlay） | 是 |
+| `docs/` | 产品 PRD（01-产品）与技术实现文档（02-实现） | 是 |
+| `scripts/` | start-web.mjs 启动器 + contract-smoke / sdk-smoke 冒烟测试 | 是 |
+| `stitch_codex_ui_clone/` | 自有客户端设计基准（stitch 稿） | 是 |
+| `profiles/web/` | 历史 profile 安装树（浏览器技能桥时代遗留，现仅注释引用） | 部分 |
+| `tools/`（已并入 `scripts/`） | — | — |
+| `reference-project/` | 第三方源码镜像；**仅 deepseek-harness 为运行时依赖**（启动器与 web.patch.yml 按相对路径引用），其余仅供离线研究，禁止采样为需求来源 | 否（gitignored） |
+| `.magic-dsh-live/` | **3099 实例运行态**（会话/存储），勿删 | 否（gitignored） |
+| `target/`、`spikes/`、旧 `.db`、`.magic-dsh/`、`.magic-dsh-validation/` | 已清理（2026-09-20） | — |
 
 ## 文档地图
 
@@ -71,7 +89,7 @@
 
 **有意不挂**
 
-- `tools/contract-smoke` —— 升级体检（静态契约核查）。
+- `scripts/contract-smoke` —— 升级体检（静态契约核查）。
 
 2026-09-11 接线状态：成员工作区已迁入官方右侧栏；CEO 派活已完成**半改道**（官方名册/信箱/打断优先 + subagents 降级回退，容量对策 `maxMembers: 32`），映射与门禁见 [05 文档](02-实现/05-CEO派活改道映射.md)。
 

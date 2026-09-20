@@ -107,9 +107,9 @@ export function SettingsPage({ onBack, onOpenSkills, backendReady }: {
         </nav>
       </aside>
 
-      {/* 右：内容区 */}
+      {/* 右：内容区（模型设置为主从布局，放宽到 920px，2026-09-19） */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-[680px] mx-auto px-8 py-8">
+        <div className="mx-auto max-w-[920px] px-8 pt-[60px] pb-8">
           {!backendReady ? (
             <div className="text-[13px] text-outline">
               未连接运行时：设置项来自 DSH runtime，请用 /?backend=web 打开并完成授权。
